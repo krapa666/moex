@@ -21,6 +21,7 @@ from .services import refresh_all_prices, refresh_row_price
 
 app = FastAPI(title="MOEX Fair Price", version="1.0.0")
 price_refresh_task: asyncio.Task | None = None
+BACKGROUND_REFRESH_SECONDS = 10 * 60
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,7 +56,7 @@ async def periodic_price_refresh() -> None:
             await refresh_all_prices(db, force=True)
         finally:
             db.close()
-        await asyncio.sleep(60)
+        await asyncio.sleep(BACKGROUND_REFRESH_SECONDS)
 
 
 def ensure_default_table(db: Session) -> None:

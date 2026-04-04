@@ -540,7 +540,7 @@ setInterval(async () => {
   } catch (err) {
     console.error('Не удалось обновить цены:', err);
   }
-}, 60 * 1000);
+}, 10 * 60 * 1000);
 
 sortButtons.forEach((button) => {
   button.addEventListener('click', () => {

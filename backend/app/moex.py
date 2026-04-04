@@ -62,6 +62,7 @@ async def fetch_current_price(ticker: str) -> tuple[float | None, str | None]:
         return None, message
 
     price = None
+    used_fallback_price = False
     columns = marketdata.get("columns", [])
     if data:
         row = data[0]
@@ -81,6 +82,7 @@ async def fetch_current_price(ticker: str) -> tuple[float | None, str | None]:
                 candidate = sec_row[sec_columns.index(price_column)]
                 if candidate is not None:
                     price = candidate
+                    used_fallback_price = True
                     break
 
     if price is None:
@@ -88,6 +90,7 @@ async def fetch_current_price(ticker: str) -> tuple[float | None, str | None]:
         _price_cache[normalized] = (None, message, time.time())
         return None, message
 
-    result = (float(price), None)
+    status_message = "Использована последняя доступная цена (PREVPRICE)" if used_fallback_price else None
+    result = (float(price), status_message)
     _price_cache[normalized] = (result[0], result[1], time.time())
     return result

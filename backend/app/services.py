@@ -7,7 +7,7 @@ from .calculations import recalculate_fields
 from .models import StockRow
 from .moex import fetch_current_price
 
-PRICE_REFRESH_INTERVAL = timedelta(minutes=1)
+PRICE_REFRESH_INTERVAL = timedelta(minutes=10)
 
 
 async def refresh_row_price(row: StockRow, force: bool = False) -> None:
