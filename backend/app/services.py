@@ -1,0 +1,41 @@
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from .calculations import recalculate_fields
+from .models import StockRow
+from .moex import fetch_current_price
+
+PRICE_REFRESH_INTERVAL = timedelta(minutes=1)
+
+
+async def refresh_row_price(row: StockRow, force: bool = False) -> None:
+    if not row.ticker:
+        row.current_price = None
+        row.status_message = "Введите тикер"
+        row.price_updated_at = None
+        recalculate_fields(row)
+        return
+
+    if (
+        not force
+        and row.price_updated_at is not None
+        and row.price_updated_at >= datetime.now(timezone.utc) - PRICE_REFRESH_INTERVAL
+    ):
+        recalculate_fields(row)
+        return
+
+    row.current_price, row.status_message = await fetch_current_price(row.ticker)
+    row.price_updated_at = datetime.now(timezone.utc)
+    recalculate_fields(row)
+
+
+async def refresh_all_prices(db: Session, force: bool = False) -> list[StockRow]:
+    rows = db.scalars(select(StockRow).order_by(StockRow.id.asc())).all()
+    for row in rows:
+        await refresh_row_price(row, force=force)
+    db.commit()
+    for row in rows:
+        db.refresh(row)
+    return rows
