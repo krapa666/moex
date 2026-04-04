@@ -220,12 +220,6 @@ function upsideClass(value) {
   return 'upside-flat';
 }
 
-function tickerBadge(ticker) {
-  const clean = String(ticker || '').trim().toUpperCase();
-  if (!clean) return '•';
-  return clean.slice(0, 2);
-}
-
 async function api(path, options = {}) {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -290,7 +284,6 @@ function rowToPayload(row) {
     forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
     forecast_profit_year3_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(2)]),
     net_profit_year_map: profitMap,
-    net_profit_source_comment: row.net_profit_source_comment || null,
   };
 }
 
@@ -389,12 +382,7 @@ function renderRows(rows) {
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td>
-        <div class="ticker-cell">
-          <span class="ticker-badge">${tickerBadge(row.ticker)}</span>
-          <input data-field="ticker" value="${row.ticker ?? ''}" />
-        </div>
-      </td>
+      <td><input data-field="ticker" value="${row.ticker ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="current_price">${formatCurrency(row.current_price, priceDecimals)}</span></td>
       <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
@@ -408,7 +396,6 @@ function renderRows(rows) {
       <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
-      <td><input data-field="net_profit_source_comment" value="${row.net_profit_source_comment ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
         <button data-action="delete" class="btn-danger">Удалить</button>
@@ -516,7 +503,7 @@ addTableBtn?.addEventListener('click', async () => {
   if (!desiredName) return;
   await api('/api/tables', {
     method: 'POST',
-    body: JSON.stringify({ analyst_name: desiredName }),
+    body: JSON.stringify({ analyst_name: desiredName, source_table_id: appState.activeTableId }),
   });
   await loadTables();
   appState.activeTableId = appState.tables.at(-1)?.id ?? appState.activeTableId;
@@ -558,7 +545,6 @@ addRowBtn.addEventListener('click', async () => {
         forecast_profit_year1_billion_rub: null,
         forecast_profit_year2_billion_rub: null,
         forecast_profit_year3_billion_rub: null,
-        net_profit_source_comment: null,
       }),
     });
     await loadRows();

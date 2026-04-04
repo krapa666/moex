@@ -109,10 +109,38 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
     total = db.query(AnalystTable).count()
     if total >= 10:
         raise HTTPException(status_code=400, detail="Можно создать не более 10 таблиц")
+    source_table = get_table_or_404(db, payload.source_table_id) if payload.source_table_id is not None else None
     table = AnalystTable(analyst_name=payload.analyst_name.strip(), year_offset=0)
     db.add(table)
     db.commit()
     db.refresh(table)
+
+    if source_table is not None:
+        source_rows = db.scalars(select(StockRow).where(StockRow.table_id == source_table.id).order_by(StockRow.id.asc())).all()
+        for src in source_rows:
+            db.add(
+                StockRow(
+                    table_id=table.id,
+                    ticker=src.ticker,
+                    current_price=src.current_price,
+                    shares_billion=src.shares_billion,
+                    market_cap_billion_rub=src.market_cap_billion_rub,
+                    pe_avg_5y=src.pe_avg_5y,
+                    forecast_profit_year1_billion_rub=None,
+                    forecast_profit_year2_billion_rub=None,
+                    forecast_profit_year3_billion_rub=None,
+                    net_profit_year_map={},
+                    forecast_price_year1=None,
+                    forecast_price_year2=None,
+                    forecast_price_year3=None,
+                    upside_percent_year1=None,
+                    upside_percent_year2=None,
+                    upside_percent_year3=None,
+                    status_message=src.status_message,
+                    price_updated_at=src.price_updated_at,
+                )
+            )
+        db.commit()
     return table
 
 

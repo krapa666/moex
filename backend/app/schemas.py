@@ -44,6 +44,7 @@ class StockRowRead(StockRowBase):
 
 class AnalystTableCreate(BaseModel):
     analyst_name: str = Field(min_length=1, max_length=100)
+    source_table_id: int | None = Field(default=None, ge=1)
 
 
 class AnalystTableUpdate(BaseModel):
