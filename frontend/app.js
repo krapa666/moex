@@ -1,5 +1,10 @@
 const tbody = document.getElementById('rows-table-body');
 const addRowBtn = document.getElementById('add-row-btn');
+const addTableBtn = document.getElementById('add-table-btn');
+const tableSelect = document.getElementById('table-select');
+const analystNameInput = document.getElementById('analyst-name-input');
+const saveAnalystBtn = document.getElementById('save-analyst-btn');
+const shiftYearBtn = document.getElementById('shift-year-btn');
 const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
@@ -7,6 +12,12 @@ const sortMarketCap = document.getElementById('sort-market-cap');
 const sortUpsideYear1 = document.getElementById('sort-upside-year1');
 const sortUpsideYear2 = document.getElementById('sort-upside-year2');
 const sortUpsideYear3 = document.getElementById('sort-upside-year3');
+const headerProfitYear1 = document.getElementById('header-profit-year1');
+const headerProfitYear2 = document.getElementById('header-profit-year2');
+const headerProfitYear3 = document.getElementById('header-profit-year3');
+const headerPriceYear1 = document.getElementById('header-price-year1');
+const headerPriceYear2 = document.getElementById('header-price-year2');
+const headerPriceYear3 = document.getElementById('header-price-year3');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -16,7 +27,12 @@ const saveTimers = new Map();
 const rowDrafts = new Map();
 const dirtyRows = new Set();
 const sortState = { key: null, direction: 'asc' };
+const appState = {
+  tables: [],
+  activeTableId: null,
+};
 const AUTOSAVE_DELAY_MS = 1800;
+const BASE_FORECAST_YEAR = 2026;
 const RU_TO_EN_LAYOUT_MAP = {
   й: 'q',
   ц: 'w',
@@ -144,6 +160,41 @@ function setGlobalStatus(text) {
   }
 }
 
+function activeTable() {
+  return appState.tables.find((table) => table.id === appState.activeTableId) || null;
+}
+
+function activeYears() {
+  const offset = activeTable()?.year_offset ?? 0;
+  return [BASE_FORECAST_YEAR + offset, BASE_FORECAST_YEAR + offset + 1, BASE_FORECAST_YEAR + offset + 2];
+}
+
+function applyYearHeaders() {
+  const [y1, y2, y3] = activeYears();
+  if (headerProfitYear1) headerProfitYear1.textContent = `Прогнозная ЧП (${y1}), млрд ₽`;
+  if (headerProfitYear2) headerProfitYear2.textContent = `Прогнозная ЧП (${y2}), млрд ₽`;
+  if (headerProfitYear3) headerProfitYear3.textContent = `Прогнозная ЧП (${y3}), млрд ₽`;
+  if (headerPriceYear1) headerPriceYear1.textContent = `Прогнозная цена (${y1}), ₽`;
+  if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
+  if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
+}
+
+function renderTableSelector() {
+  if (!tableSelect) return;
+  tableSelect.innerHTML = '';
+  appState.tables.forEach((table) => {
+    const option = document.createElement('option');
+    option.value = String(table.id);
+    option.textContent = table.analyst_name;
+    if (table.id === appState.activeTableId) option.selected = true;
+    tableSelect.appendChild(option);
+  });
+  const current = activeTable();
+  if (analystNameInput && current) analystNameInput.value = current.analyst_name;
+  applyYearHeaders();
+  updateSortIndicators();
+}
+
 function isEditingInput() {
   const activeElement = document.activeElement;
   return Boolean(activeElement && activeElement.tagName === 'INPUT' && tbody.contains(activeElement));
@@ -155,6 +206,12 @@ function upsideClass(value) {
   if (num > 0) return 'upside-up';
   if (num < 0) return 'upside-down';
   return 'upside-flat';
+}
+
+function tickerBadge(ticker) {
+  const clean = String(ticker || '').trim().toUpperCase();
+  if (!clean) return '•';
+  return clean.slice(0, 2);
 }
 
 async function api(path, options = {}) {
@@ -175,14 +232,29 @@ async function api(path, options = {}) {
   return res.json();
 }
 
+async function loadTables() {
+  const tables = await api('/api/tables');
+  appState.tables = tables;
+  if (!tables.length) {
+    throw new Error('Нет доступных таблиц аналитиков');
+  }
+  if (!appState.activeTableId || !tables.find((table) => table.id === appState.activeTableId)) {
+    appState.activeTableId = tables[0].id;
+  }
+  renderTableSelector();
+}
+
 async function loadRows() {
+  if (!appState.activeTableId) {
+    await loadTables();
+  }
   setGlobalStatus('Загрузка данных...');
   const maxAttempts = 5;
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const rows = await api('/api/rows');
+      const rows = await api(`/api/rows?table_id=${appState.activeTableId}`);
       renderRows(rows);
       setGlobalStatus(`Обновлено: ${new Date().toLocaleTimeString('ru-RU')}`);
       return;
@@ -197,6 +269,7 @@ async function loadRows() {
 
 function rowToPayload(row) {
   return {
+    table_id: appState.activeTableId,
     ticker: row.ticker || '',
     shares_billion: parseInputNumber(row.shares_billion),
     pe_avg_5y: parseInputNumber(row.pe_avg_5y),
@@ -274,12 +347,13 @@ function sortRows(rows) {
 }
 
 function updateSortIndicators() {
+  const [year1, year2, year3] = activeYears();
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
-    { element: sortUpsideYear1, key: 'upside_percent_year1', label: 'Upside (2026), %' },
-    { element: sortUpsideYear2, key: 'upside_percent_year2', label: 'Upside (2027), %' },
-    { element: sortUpsideYear3, key: 'upside_percent_year3', label: 'Upside (2028), %' },
+    { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Upside (${year1}), %` },
+    { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Upside (${year2}), %` },
+    { element: sortUpsideYear3, key: 'upside_percent_year3', label: `Upside (${year3}), %` },
   ];
 
   sortableHeaders.forEach(({ element, key, label }) => {
@@ -301,7 +375,12 @@ function renderRows(rows) {
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td><input data-field="ticker" value="${row.ticker ?? ''}" /></td>
+      <td>
+        <div class="ticker-cell">
+          <span class="ticker-badge">${tickerBadge(row.ticker)}</span>
+          <input data-field="ticker" value="${row.ticker ?? ''}" />
+        </div>
+      </td>
       <td class="readonly-cell"><span data-cell="current_price">${formatCurrency(row.current_price, priceDecimals)}</span></td>
       <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
@@ -386,11 +465,55 @@ tbody.addEventListener('focusout', () => {
   }, 0);
 });
 
+tableSelect?.addEventListener('change', async () => {
+  appState.activeTableId = Number(tableSelect.value);
+  renderTableSelector();
+  await loadRows();
+});
+
+saveAnalystBtn?.addEventListener('click', async () => {
+  const current = activeTable();
+  if (!current) return;
+  const analystName = (analystNameInput?.value || '').trim();
+  if (!analystName) return;
+  await api(`/api/tables/${current.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ analyst_name: analystName }),
+  });
+  await loadTables();
+  await loadRows();
+});
+
+addTableBtn?.addEventListener('click', async () => {
+  const desiredName = prompt('Введите имя аналитика для новой таблицы');
+  if (!desiredName) return;
+  await api('/api/tables', {
+    method: 'POST',
+    body: JSON.stringify({ analyst_name: desiredName }),
+  });
+  await loadTables();
+  appState.activeTableId = appState.tables.at(-1)?.id ?? appState.activeTableId;
+  renderTableSelector();
+  await loadRows();
+});
+
+shiftYearBtn?.addEventListener('click', async () => {
+  const current = activeTable();
+  if (!current) return;
+  await api(`/api/tables/${current.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ year_offset: (current.year_offset ?? 0) + 1 }),
+  });
+  await loadTables();
+  await loadRows();
+});
+
 addRowBtn.addEventListener('click', async () => {
   try {
     await api('/api/rows', {
       method: 'POST',
       body: JSON.stringify({
+        table_id: appState.activeTableId,
         ticker: '',
         shares_billion: null,
         pe_avg_5y: null,
@@ -408,7 +531,7 @@ addRowBtn.addEventListener('click', async () => {
 
 setInterval(async () => {
   try {
-    await api('/api/rows/refresh', { method: 'POST' });
+    await api(`/api/rows/refresh?table_id=${appState.activeTableId}`, { method: 'POST' });
     if (!isEditingInput()) {
       await loadRows();
     } else {
@@ -436,10 +559,16 @@ sortButtons.forEach((button) => {
   });
 });
 
-updateSortIndicators();
+async function initApp() {
+  try {
+    await loadTables();
+    updateSortIndicators();
+    await loadRows();
+  } catch (err) {
+    console.error(err);
+    setGlobalStatus('Ошибка загрузки');
+    alert(`Не удалось загрузить данные. Проверьте, что backend поднят и доступен: ${err.message}`);
+  }
+}
 
-loadRows().catch((err) => {
-  console.error(err);
-  setGlobalStatus('Ошибка загрузки');
-  alert(`Не удалось загрузить данные. Проверьте, что backend поднят и доступен: ${err.message}`);
-});
+initApp();

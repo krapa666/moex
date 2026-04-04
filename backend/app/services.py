@@ -31,8 +31,11 @@ async def refresh_row_price(row: StockRow, force: bool = False) -> None:
     recalculate_fields(row)
 
 
-async def refresh_all_prices(db: Session, force: bool = False) -> list[StockRow]:
-    rows = db.scalars(select(StockRow).order_by(StockRow.id.asc())).all()
+async def refresh_all_prices(db: Session, force: bool = False, table_id: int | None = None) -> list[StockRow]:
+    query = select(StockRow)
+    if table_id is not None:
+        query = query.where(StockRow.table_id == table_id)
+    rows = db.scalars(query.order_by(StockRow.id.asc())).all()
     for row in rows:
         await refresh_row_price(row, force=force)
     db.commit()

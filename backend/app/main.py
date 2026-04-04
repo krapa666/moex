@@ -8,8 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal, get_db
-from .models import StockRow
-from .schemas import StockRowCreate, StockRowRead, StockRowUpdate
+from .models import AnalystTable, StockRow
+from .schemas import (
+    AnalystTableCreate,
+    AnalystTableRead,
+    AnalystTableUpdate,
+    StockRowCreate,
+    StockRowRead,
+    StockRowUpdate,
+)
 from .services import refresh_all_prices, refresh_row_price
 
 app = FastAPI(title="MOEX Fair Price", version="1.0.0")
@@ -51,20 +58,67 @@ async def periodic_price_refresh() -> None:
         await asyncio.sleep(60)
 
 
+def ensure_default_table(db: Session) -> None:
+    first_table = db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc()).limit(1)).first()
+    if first_table is None:
+        db.add(AnalystTable(analyst_name="Аналитик 1", year_offset=0))
+        db.commit()
+
+
+def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
+    table = db.get(AnalystTable, table_id)
+    if table is None:
+        raise HTTPException(status_code=404, detail="Таблица аналитика не найдена")
+    return table
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/tables", response_model=list[AnalystTableRead])
+def get_tables(db: Session = Depends(get_db)):
+    ensure_default_table(db)
+    return db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc())).all()
+
+
+@app.post("/api/tables", response_model=AnalystTableRead)
+def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
+    total = db.query(AnalystTable).count()
+    if total >= 10:
+        raise HTTPException(status_code=400, detail="Можно создать не более 10 таблиц")
+    table = AnalystTable(analyst_name=payload.analyst_name.strip(), year_offset=0)
+    db.add(table)
+    db.commit()
+    db.refresh(table)
+    return table
+
+
+@app.patch("/api/tables/{table_id}", response_model=AnalystTableRead)
+def update_table(table_id: int, payload: AnalystTableUpdate, db: Session = Depends(get_db)):
+    table = get_table_or_404(db, table_id)
+    if payload.analyst_name is not None:
+        table.analyst_name = payload.analyst_name.strip()
+    if payload.year_offset is not None:
+        table.year_offset = payload.year_offset
+    db.commit()
+    db.refresh(table)
+    return table
+
+
 @app.get("/api/rows", response_model=list[StockRowRead])
-def get_rows(db: Session = Depends(get_db)):
-    rows = db.scalars(select(StockRow).order_by(StockRow.id.asc())).all()
+def get_rows(table_id: int, db: Session = Depends(get_db)):
+    get_table_or_404(db, table_id)
+    rows = db.scalars(select(StockRow).where(StockRow.table_id == table_id).order_by(StockRow.id.asc())).all()
     return rows
 
 
 @app.post("/api/rows", response_model=StockRowRead)
 async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
+    get_table_or_404(db, payload.table_id)
     row = StockRow(
+        table_id=payload.table_id,
         ticker=payload.ticker.strip().upper(),
         shares_billion=payload.shares_billion,
         pe_avg_5y=payload.pe_avg_5y,
@@ -87,6 +141,8 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
     if row is None:
         raise HTTPException(status_code=404, detail="Строка не найдена")
 
+    get_table_or_404(db, payload.table_id)
+    row.table_id = payload.table_id
     row.ticker = payload.ticker.strip().upper()
     row.shares_billion = payload.shares_billion
     row.pe_avg_5y = payload.pe_avg_5y
@@ -114,5 +170,6 @@ def delete_row(row_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/rows/refresh", response_model=list[StockRowRead])
-async def refresh_prices(db: Session = Depends(get_db)):
-    return await refresh_all_prices(db, force=True)
+async def refresh_prices(table_id: int, db: Session = Depends(get_db)):
+    get_table_or_404(db, table_id)
+    return await refresh_all_prices(db, force=True, table_id=table_id)

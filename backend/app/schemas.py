@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class StockRowBase(BaseModel):
+    table_id: int
     ticker: str = Field(default="", max_length=32)
     shares_billion: float | None = Field(default=None, ge=0)
     pe_avg_5y: float | None = Field(default=None, ge=0)
@@ -35,6 +36,25 @@ class StockRowRead(StockRowBase):
     price_updated_at: datetime | None
     created_at: datetime
     updated_at: datetime | None
+
+    class Config:
+        from_attributes = True
+
+
+class AnalystTableCreate(BaseModel):
+    analyst_name: str = Field(min_length=1, max_length=100)
+
+
+class AnalystTableUpdate(BaseModel):
+    analyst_name: str | None = Field(default=None, min_length=1, max_length=100)
+    year_offset: int | None = Field(default=None, ge=0, le=20)
+
+
+class AnalystTableRead(BaseModel):
+    id: int
+    analyst_name: str
+    year_offset: int
+    created_at: datetime
 
     class Config:
         from_attributes = True
