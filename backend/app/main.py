@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .database import SessionLocal, get_db
 from .models import AnalystTable, StockRow
+from .calculations import recalculate_fields
 from .schemas import (
     AnalystTableCreate,
     AnalystTableRead,
@@ -22,6 +23,7 @@ from .services import refresh_all_prices, refresh_row_price
 app = FastAPI(title="MOEX Fair Price", version="1.0.0")
 price_refresh_task: asyncio.Task | None = None
 BACKGROUND_REFRESH_SECONDS = 10 * 60
+BASE_FORECAST_YEAR = 2026
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,6 +75,24 @@ def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
     return table
 
 
+def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
+    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(3)]
+    profit_map = row.net_profit_year_map or {}
+    row.forecast_profit_year1_billion_rub = profit_map.get(str(years[0]))
+    row.forecast_profit_year2_billion_rub = profit_map.get(str(years[1]))
+    row.forecast_profit_year3_billion_rub = profit_map.get(str(years[2]))
+    recalculate_fields(row)
+
+
+def merge_payload_profit_map(payload: StockRowCreate | StockRowUpdate, year_offset: int) -> dict[str, float | None]:
+    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(3)]
+    merged = dict(payload.net_profit_year_map or {})
+    merged[str(years[0])] = payload.forecast_profit_year1_billion_rub
+    merged[str(years[1])] = payload.forecast_profit_year2_billion_rub
+    merged[str(years[2])] = payload.forecast_profit_year3_billion_rub
+    return merged
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -104,30 +124,36 @@ def update_table(table_id: int, payload: AnalystTableUpdate, db: Session = Depen
     if payload.year_offset is not None:
         table.year_offset = payload.year_offset
     db.commit()
+    rows = db.scalars(select(StockRow).where(StockRow.table_id == table.id)).all()
+    for row in rows:
+        apply_net_profit_projection(row, table.year_offset)
+    db.commit()
     db.refresh(table)
     return table
 
 
 @app.get("/api/rows", response_model=list[StockRowRead])
 def get_rows(table_id: int, db: Session = Depends(get_db)):
-    get_table_or_404(db, table_id)
+    table = get_table_or_404(db, table_id)
     rows = db.scalars(select(StockRow).where(StockRow.table_id == table_id).order_by(StockRow.id.asc())).all()
+    for row in rows:
+        apply_net_profit_projection(row, table.year_offset)
+    db.commit()
     return rows
 
 
 @app.post("/api/rows", response_model=StockRowRead)
 async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
-    get_table_or_404(db, payload.table_id)
+    table = get_table_or_404(db, payload.table_id)
     row = StockRow(
         table_id=payload.table_id,
         ticker=payload.ticker.strip().upper(),
         shares_billion=payload.shares_billion,
         pe_avg_5y=payload.pe_avg_5y,
-        forecast_profit_year1_billion_rub=payload.forecast_profit_year1_billion_rub,
-        forecast_profit_year2_billion_rub=payload.forecast_profit_year2_billion_rub,
-        forecast_profit_year3_billion_rub=payload.forecast_profit_year3_billion_rub,
+        net_profit_year_map=merge_payload_profit_map(payload, table.year_offset),
         net_profit_source_comment=payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None,
     )
+    apply_net_profit_projection(row, table.year_offset)
 
     await refresh_row_price(row, force=True)
     db.add(row)
@@ -142,14 +168,13 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
     if row is None:
         raise HTTPException(status_code=404, detail="Строка не найдена")
 
-    get_table_or_404(db, payload.table_id)
+    table = get_table_or_404(db, payload.table_id)
     row.table_id = payload.table_id
     row.ticker = payload.ticker.strip().upper()
     row.shares_billion = payload.shares_billion
     row.pe_avg_5y = payload.pe_avg_5y
-    row.forecast_profit_year1_billion_rub = payload.forecast_profit_year1_billion_rub
-    row.forecast_profit_year2_billion_rub = payload.forecast_profit_year2_billion_rub
-    row.forecast_profit_year3_billion_rub = payload.forecast_profit_year3_billion_rub
+    row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
+    apply_net_profit_projection(row, table.year_offset)
     row.net_profit_source_comment = (
         payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None
     )

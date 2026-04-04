@@ -11,6 +11,7 @@ class StockRowBase(BaseModel):
     forecast_profit_year1_billion_rub: float | None = Field(default=None)
     forecast_profit_year2_billion_rub: float | None = Field(default=None)
     forecast_profit_year3_billion_rub: float | None = Field(default=None)
+    net_profit_year_map: dict[str, float | None] | None = Field(default=None)
     net_profit_source_comment: str | None = Field(default=None, max_length=512)
 
 
@@ -47,7 +48,7 @@ class AnalystTableCreate(BaseModel):
 
 class AnalystTableUpdate(BaseModel):
     analyst_name: str | None = Field(default=None, min_length=1, max_length=100)
-    year_offset: int | None = Field(default=None, ge=0, le=20)
+    year_offset: int | None = Field(default=None, ge=-20, le=20)
 
 
 class AnalystTableRead(BaseModel):

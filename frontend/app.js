@@ -4,6 +4,7 @@ const addTableBtn = document.getElementById('add-table-btn');
 const tableSelect = document.getElementById('table-select');
 const analystNameInput = document.getElementById('analyst-name-input');
 const saveAnalystBtn = document.getElementById('save-analyst-btn');
+const shiftYearBackBtn = document.getElementById('shift-year-back-btn');
 const shiftYearBtn = document.getElementById('shift-year-btn');
 const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
@@ -179,6 +180,17 @@ function applyYearHeaders() {
   if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
 }
 
+function yearKeyByIndex(index) {
+  const years = activeYears();
+  return String(years[index]);
+}
+
+function mapProfitByYear(row, index) {
+  const key = yearKeyByIndex(index);
+  const map = row.net_profit_year_map || {};
+  return map[key] ?? null;
+}
+
 function renderTableSelector() {
   if (!tableSelect) return;
   tableSelect.innerHTML = '';
@@ -268,14 +280,16 @@ async function loadRows() {
 }
 
 function rowToPayload(row) {
+  const profitMap = row.net_profit_year_map || {};
   return {
     table_id: appState.activeTableId,
     ticker: row.ticker || '',
     shares_billion: parseInputNumber(row.shares_billion),
     pe_avg_5y: parseInputNumber(row.pe_avg_5y),
-    forecast_profit_year1_billion_rub: parseInputNumber(row.forecast_profit_year1_billion_rub),
-    forecast_profit_year2_billion_rub: parseInputNumber(row.forecast_profit_year2_billion_rub),
-    forecast_profit_year3_billion_rub: parseInputNumber(row.forecast_profit_year3_billion_rub),
+    forecast_profit_year1_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(0)]),
+    forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
+    forecast_profit_year3_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(2)]),
+    net_profit_year_map: profitMap,
     net_profit_source_comment: row.net_profit_source_comment || null,
   };
 }
@@ -385,13 +399,13 @@ function renderRows(rows) {
       <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
       <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" /></td>
-      <td><input data-field="forecast_profit_year1_billion_rub" value="${row.forecast_profit_year1_billion_rub ?? ''}" /></td>
+      <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
-      <td><input data-field="forecast_profit_year2_billion_rub" value="${row.forecast_profit_year2_billion_rub ?? ''}" /></td>
+      <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
-      <td><input data-field="forecast_profit_year3_billion_rub" value="${row.forecast_profit_year3_billion_rub ?? ''}" /></td>
+      <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
       <td><input data-field="net_profit_source_comment" value="${row.net_profit_source_comment ?? ''}" /></td>
@@ -413,6 +427,19 @@ function renderRows(rows) {
           ...(rowDrafts.get(row.id) || row),
           [input.dataset.field]: normalizedValue,
         };
+        if (input.dataset.field.startsWith('forecast_profit_year')) {
+          const map = { ...(updated.net_profit_year_map || {}) };
+          const yearIndexMap = {
+            forecast_profit_year1_billion_rub: 0,
+            forecast_profit_year2_billion_rub: 1,
+            forecast_profit_year3_billion_rub: 2,
+          };
+          const yearIndex = yearIndexMap[input.dataset.field];
+          if (yearIndex !== undefined) {
+            map[yearKeyByIndex(yearIndex)] = parseInputNumber(normalizedValue);
+            updated.net_profit_year_map = map;
+          }
+        }
         rowDrafts.set(row.id, updated);
         dirtyRows.add(row.id);
 
@@ -503,6 +530,17 @@ shiftYearBtn?.addEventListener('click', async () => {
   await api(`/api/tables/${current.id}`, {
     method: 'PATCH',
     body: JSON.stringify({ year_offset: (current.year_offset ?? 0) + 1 }),
+  });
+  await loadTables();
+  await loadRows();
+});
+
+shiftYearBackBtn?.addEventListener('click', async () => {
+  const current = activeTable();
+  if (!current) return;
+  await api(`/api/tables/${current.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ year_offset: (current.year_offset ?? 0) - 1 }),
   });
   await loadTables();
   await loadRows();
