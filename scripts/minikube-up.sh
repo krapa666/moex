@@ -70,8 +70,11 @@ kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
 
 echo "[minikube-up] done"
-echo "[minikube-up] frontend URL (NodePort helper):"
-minikube service -n "${NAMESPACE}" frontend --url
+echo "[minikube-up] frontend URL (NodePort):"
+if ! minikube service -n "${NAMESPACE}" frontend --url; then
+  echo "[minikube-up] warning: failed to resolve service URL via minikube helper" >&2
+fi
+echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
 
 echo "[minikube-up] ingress host: http://junibox/"
 echo "[minikube-up] if junibox does not resolve to minikube ingress, use deploy/nginx/home-server-k8s.conf"

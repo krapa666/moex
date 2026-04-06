@@ -102,6 +102,13 @@ kubectl -n moex get pods,svc,ingress,pvc
 ```
 
 ### 4) Доступ к приложению
+Прямой доступ через NodePort (работает даже если ingress/host proxy ещё не настроен):
+```bash
+minikube service -n moex frontend --url
+# или
+echo "http://$(minikube ip):30080/"
+```
+
 Доступ через Ingress (`http://junibox/`):
 ```bash
 curl -I http://junibox/
