@@ -598,7 +598,10 @@ function renderRows(rows) {
     });
     tickerInput?.addEventListener('mouseleave', () => {
       comparisonHoverHideTimer = setTimeout(() => {
-        if (tickerInput.matches(':hover')) {
+        const isAnchorHovered = tr.matches(':hover');
+        const isTickerHovered = tickerInput.matches(':hover');
+        const isComparisonHovered = Boolean(tbody.querySelector('tr.comparison-inline-row:hover'));
+        if (isAnchorHovered || isTickerHovered || isComparisonHovered) {
           return;
         }
         clearInlineComparisonRows();
