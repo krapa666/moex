@@ -379,12 +379,25 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
 
   anchorTr.classList.add('ticker-compare-highlight');
   activeComparisonRowId = rowId;
-  let insertAfter = anchorTr;
-  otherTables.forEach((item) => {
-    const row = createInlineComparisonRow(item);
-    insertAfter.insertAdjacentElement('afterend', row);
-    insertAfter = row;
-  });
+  const baseRows = Array.from(tbody.querySelectorAll('tr:not(.comparison-inline-row)'));
+  const anchorIndex = baseRows.indexOf(anchorTr);
+  const isTopHalf = anchorIndex < 0 || anchorIndex < baseRows.length / 2;
+
+  if (isTopHalf) {
+    let insertAfter = anchorTr;
+    otherTables.forEach((item) => {
+      const row = createInlineComparisonRow(item);
+      insertAfter.insertAdjacentElement('afterend', row);
+      insertAfter = row;
+    });
+  } else {
+    let insertBefore = anchorTr;
+    otherTables.forEach((item) => {
+      const row = createInlineComparisonRow(item);
+      insertBefore.insertAdjacentElement('beforebegin', row);
+      insertBefore = row;
+    });
+  }
 }
 
 function rowToPayload(row) {
