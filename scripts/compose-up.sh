@@ -23,3 +23,15 @@ docker compose up -d --build "$@"
 
 echo "[compose-up] done"
 echo "[compose-up] frontend: http://junibox/"
+
+if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
+  echo "[compose-up] switching nginx reverse-proxy to compose mode..."
+  if [[ -w "/etc/nginx/conf.d" ]]; then
+    ./scripts/configure-nginx-compose-proxy.sh --reload || true
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ./scripts/configure-nginx-compose-proxy.sh --reload || true
+  else
+    echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
+    echo "  sudo ./scripts/configure-nginx-compose-proxy.sh --reload" >&2
+  fi
+fi

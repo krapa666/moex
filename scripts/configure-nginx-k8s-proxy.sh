@@ -2,7 +2,8 @@
 set -euo pipefail
 
 TEMPLATE_PATH="deploy/nginx/home-server-k8s.conf"
-OUTPUT_PATH="/etc/nginx/conf.d/moex-k8s.conf"
+# Unified output path so home-network URL stays stable regardless of deployment mode.
+OUTPUT_PATH="/etc/nginx/conf.d/moex.conf"
 RELOAD=false
 
 while [[ $# -gt 0 ]]; do
@@ -49,6 +50,9 @@ mkdir -p "$(dirname "$OUTPUT_PATH")"
 awk -v ip="$MINIKUBE_IP" '{gsub(/MINIKUBE_IP/, ip); print}' "$TEMPLATE_PATH" > "$OUTPUT_PATH"
 
 echo "[nginx-k8s-proxy] generated: $OUTPUT_PATH"
+if [[ "$OUTPUT_PATH" == "/etc/nginx/conf.d/moex.conf" && -f "/etc/nginx/conf.d/moex-k8s.conf" ]]; then
+  rm -f /etc/nginx/conf.d/moex-k8s.conf
+fi
 
 if [[ "$RELOAD" == "true" ]]; then
   require_cmd nginx

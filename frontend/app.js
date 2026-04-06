@@ -602,13 +602,6 @@ tbody.addEventListener('focusout', () => {
 });
 
 document.addEventListener('click', clearInlineComparisonRows, true);
-document.addEventListener('mousemove', (event) => {
-  const target = event.target;
-  if (target instanceof Element && target.matches('input[data-field="ticker"]')) {
-    return;
-  }
-  clearInlineComparisonRows();
-});
 window.addEventListener('blur', clearInlineComparisonRows);
 
 tableSelect?.addEventListener('change', async () => {

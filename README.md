@@ -134,6 +134,8 @@
 ```bash
 ./scripts/compose-up.sh
 ```
+Скрипт также автоматически переключает хостовый Nginx reverse-proxy в compose-режим
+(`scripts/configure-nginx-compose-proxy.sh --reload`), чтобы URL в домашней сети оставался тем же: `http://junibox/`.
 
 ## 6.2 Остановка
 ```bash
@@ -156,6 +158,8 @@
 ```bash
 ./scripts/minikube-up.sh
 ```
+Скрипт автоматически переключает тот же хостовый Nginx reverse-proxy в Minikube-режим
+(`scripts/configure-nginx-k8s-proxy.sh --reload`), сохраняя единый внешний URL `http://junibox/`.
 
 Опции:
 ```bash
@@ -287,6 +291,17 @@ curl http://localhost:8000/api/health
 
 ## 13.3 После Minikube restart `502 Bad Gateway` через `junibox`
 Перегенерируйте proxy-конфиг:
+```bash
+sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
+```
+
+## 13.4 Принудительно переключить reverse-proxy между режимами
+Compose-режим:
+```bash
+sudo ./scripts/configure-nginx-compose-proxy.sh --reload
+```
+
+Minikube-режим:
 ```bash
 sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 ```
