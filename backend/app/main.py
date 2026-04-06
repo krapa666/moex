@@ -181,6 +181,27 @@ def sync_row_to_other_tables(
             apply_net_profit_projection(target, table.year_offset)
 
 
+def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
+    if row.table_id != 1:
+        return
+    ticker = row.ticker.strip().upper()
+    if not ticker:
+        return
+
+    tables = get_tables_ordered(db)
+    for table in tables:
+        if table.id == row.table_id:
+            continue
+        target = db.scalars(
+            select(StockRow).where(StockRow.table_id == table.id, StockRow.ticker == ticker).limit(1)
+        ).first()
+        if target is None:
+            continue
+        target.shares_billion = row.shares_billion
+        target.pe_avg_5y = row.pe_avg_5y
+        apply_net_profit_projection(target, table.year_offset)
+
+
 def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_number: int) -> TickerComparisonItem:
     years = [BASE_FORECAST_YEAR + table.year_offset + i for i in range(4)]
     values = [
@@ -369,6 +390,7 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
 
     await refresh_row_price(row, force=bool(row.ticker))
     sync_row_to_other_tables(db, row, old_ticker=old_ticker if old_ticker != row.ticker else None)
+    sync_primary_table_multipliers(db, row)
     db.commit()
     db.refresh(row)
     return row

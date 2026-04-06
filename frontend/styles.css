@@ -254,9 +254,10 @@ input:focus {
 }
 
 .ticker-compare-highlight td {
-  background: #fffbeb;
+  background: #fde68a;
   border-top-color: #f59e0b;
   border-bottom-color: #f59e0b;
+  box-shadow: inset 0 0 0 1px #f59e0b;
 }
 
 .comparison-source {
