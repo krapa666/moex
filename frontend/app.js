@@ -318,6 +318,8 @@ function clearInlineComparisonRows({ invalidatePending = true } = {}) {
   tbody.querySelectorAll('tr.comparison-inline-row').forEach((row) => row.remove());
   tbody.querySelectorAll('tr.ticker-compare-highlight').forEach((row) => row.classList.remove('ticker-compare-highlight'));
   tbody.querySelectorAll('tr.comparison-anchor-row').forEach((row) => row.classList.remove('comparison-anchor-row'));
+  tbody.querySelectorAll('.comparison-anchor-label').forEach((label) => label.remove());
+  tbody.querySelectorAll('.row-delete-btn.hidden').forEach((btn) => btn.classList.remove('hidden'));
   activeComparisonRowId = null;
 }
 
@@ -410,9 +412,17 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
   const currentTableName = current
     ? `№${current.table_number} — ${escapeHtml(current.analyst_name)}`
     : 'Текущая таблица';
-  const anchorTableName = anchorTr.querySelector('.row-table-name');
-  if (anchorTableName) {
-    anchorTableName.textContent = currentTableName;
+  const actionCell = anchorTr.lastElementChild;
+  const deleteBtn = actionCell?.querySelector('.row-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.classList.add('hidden');
+  }
+  actionCell?.querySelector('.comparison-anchor-label')?.remove();
+  if (actionCell) {
+    const label = document.createElement('span');
+    label.className = 'comparison-source comparison-anchor-label';
+    label.textContent = currentTableName;
+    actionCell.prepend(label);
   }
 
   anchorTr.classList.add('ticker-compare-highlight');
@@ -540,10 +550,6 @@ function updateSortIndicators() {
 function renderRows(rows) {
   const sortedRows = sortRows(rows);
   tbody.innerHTML = '';
-  const current = activeTable();
-  const currentTableName = current
-    ? `№${current.table_number} — ${escapeHtml(current.analyst_name)}`
-    : 'Текущая таблица';
 
   sortedRows.forEach((row) => {
     const priceDecimals = detectDecimals(row.current_price);
@@ -571,7 +577,6 @@ function renderRows(rows) {
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
         <button data-action="delete" class="btn-danger row-delete-btn">Удалить</button>
-        <span class="comparison-source row-table-name hidden">${currentTableName}</span>
         ${row.status_message ? `<div class="status-error">${row.status_message}</div>` : ''}
       </td>
     `;
