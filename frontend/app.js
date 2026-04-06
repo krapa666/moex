@@ -1,6 +1,7 @@
 const tbody = document.getElementById('rows-table-body');
 const addRowBtn = document.getElementById('add-row-btn');
 const addTableBtn = document.getElementById('add-table-btn');
+const makePrimaryTableBtn = document.getElementById('make-primary-table-btn');
 const deleteTableBtn = document.getElementById('delete-table-btn');
 const tableSelect = document.getElementById('table-select');
 const analystNameInput = document.getElementById('analyst-name-input');
@@ -227,6 +228,10 @@ function renderTableSelector() {
   if (deleteTableBtn) {
     deleteTableBtn.disabled = !current || current.table_number === 1;
     deleteTableBtn.title = current?.table_number === 1 ? 'Таблица №1 защищена от удаления' : '';
+  }
+  if (makePrimaryTableBtn) {
+    makePrimaryTableBtn.disabled = !current || current.table_number === 1;
+    makePrimaryTableBtn.title = current?.table_number === 1 ? 'Эта таблица уже основная' : '';
   }
   applyYearHeaders();
   updateSortIndicators();
@@ -477,14 +482,15 @@ function renderRows(rows) {
 
   sortedRows.forEach((row) => {
     const priceDecimals = detectDecimals(row.current_price);
+    const primaryEditable = activeTable()?.table_number === 1;
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
       <td><input data-field="ticker" value="${row.ticker ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="current_price">${formatCurrency(row.current_price, priceDecimals)}</span></td>
-      <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" /></td>
+      <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" ${primaryEditable ? '' : 'readonly'} /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
-      <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" /></td>
+      <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${primaryEditable ? '' : 'readonly'} /></td>
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
@@ -620,6 +626,16 @@ addTableBtn?.addEventListener('click', async () => {
   });
   await loadTables();
   appState.activeTableId = appState.tables.at(-1)?.id ?? appState.activeTableId;
+  renderTableSelector();
+  await loadRows();
+});
+
+makePrimaryTableBtn?.addEventListener('click', async () => {
+  const current = activeTable();
+  if (!current || current.table_number === 1) return;
+  await api(`/api/tables/${current.id}/make-primary`, { method: 'POST' });
+  await loadTables();
+  appState.activeTableId = current.id;
   renderTableSelector();
   await loadRows();
 });

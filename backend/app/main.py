@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal, get_db
@@ -65,9 +65,9 @@ async def periodic_price_refresh() -> None:
 
 
 def ensure_default_table(db: Session) -> None:
-    first_table = db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc()).limit(1)).first()
+    first_table = db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc()).limit(1)).first()
     if first_table is None:
-        db.add(AnalystTable(analyst_name="Аналитик 1", year_offset=0))
+        db.add(AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1))
         db.commit()
 
 
@@ -79,7 +79,11 @@ def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
 
 
 def get_tables_ordered(db: Session) -> list[AnalystTable]:
-    return db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc())).all()
+    return db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc())).all()
+
+
+def get_primary_table(db: Session) -> AnalystTable | None:
+    return db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc()).limit(1)).first()
 
 
 def serialize_table(table: AnalystTable, table_number: int) -> dict:
@@ -182,7 +186,8 @@ def sync_row_to_other_tables(
 
 
 def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
-    if row.table_id != 1:
+    primary = get_primary_table(db)
+    if primary is None or row.table_id != primary.id:
         return
     ticker = row.ticker.strip().upper()
     if not ticker:
@@ -267,8 +272,9 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
     total = db.query(AnalystTable).count()
     if total >= 10:
         raise HTTPException(status_code=400, detail="Можно создать не более 10 таблиц")
-    source_table = db.get(AnalystTable, 1) or db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc()).limit(1)).first()
-    table = AnalystTable(analyst_name=payload.analyst_name.strip(), year_offset=0)
+    source_table = get_primary_table(db)
+    next_sort_order = (db.query(func.max(AnalystTable.sort_order)).scalar() or 0) + 1
+    table = AnalystTable(analyst_name=payload.analyst_name.strip(), year_offset=0, sort_order=next_sort_order)
     db.add(table)
     db.commit()
     db.refresh(table)
@@ -327,9 +333,10 @@ def update_table(table_id: int, payload: AnalystTableUpdate, db: Session = Depen
 
 @app.delete("/api/tables/{table_id}")
 def delete_table(table_id: int, db: Session = Depends(get_db)):
-    if table_id == 1:
-        raise HTTPException(status_code=400, detail="Основную таблицу №1 удалять нельзя")
     table = get_table_or_404(db, table_id)
+    primary = get_primary_table(db)
+    if primary is not None and primary.id == table.id:
+        raise HTTPException(status_code=400, detail="Текущую основную таблицу удалять нельзя")
     rows = db.scalars(select(StockRow).where(StockRow.table_id == table.id)).all()
     for row in rows:
         db.delete(row)
@@ -410,6 +417,27 @@ def delete_row(row_id: int, db: Session = Depends(get_db)):
 async def refresh_prices(table_id: int, db: Session = Depends(get_db)):
     get_table_or_404(db, table_id)
     return await refresh_all_prices(db, force=True, table_id=table_id)
+
+
+@app.post("/api/tables/{table_id}/make-primary", response_model=list[AnalystTableRead])
+def make_table_primary(table_id: int, db: Session = Depends(get_db)):
+    table = get_table_or_404(db, table_id)
+    ordered = get_tables_ordered(db)
+    if not ordered:
+        raise HTTPException(status_code=400, detail="Нет таблиц для переупорядочивания")
+    if ordered[0].id == table.id:
+        return serialize_tables(ordered)
+
+    table.sort_order = 1
+    order_value = 2
+    for item in ordered:
+        if item.id == table.id:
+            continue
+        item.sort_order = order_value
+        order_value += 1
+
+    db.commit()
+    return serialize_tables(get_tables_ordered(db))
 
 
 @app.get("/api/ticker-comparison", response_model=list[TickerComparisonItem])
