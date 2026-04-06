@@ -242,8 +242,9 @@ function renderTableSelector() {
   }
   if (addRowBtn) {
     const isPrimary = current?.table_number === 1;
+    addRowBtn.style.display = isPrimary ? '' : 'none';
     addRowBtn.disabled = !isPrimary;
-    addRowBtn.title = isPrimary ? '' : 'Добавлять строки можно только в таблице №1';
+    addRowBtn.title = isPrimary ? '' : 'Кнопка доступна только в таблице №1';
   }
   applyYearHeaders();
   updateSortIndicators();
