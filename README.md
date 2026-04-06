@@ -1,6 +1,6 @@
 # Приложение оценки справедливой цены акций MOEX
 
-**Версия приложения:** `v5.0.0`
+**Версия приложения:** `v6.0.0`
 
 Приложение запускается как стек сервисов:
 - `db` — PostgreSQL 16;
@@ -29,7 +29,7 @@
 - Интерфейс на русском с форматированием чисел до 2 знаков.
 - Динамический сдвиг горизонта прогноза на год вперёд и назад с сохранением ЧП за календарным годом.
 - Обновлённый UI: премиальный лаконичный стиль, sticky-header, визуальное выделение upside.
-- Сортировка таблицы по тикеру и upside за 2026/2027/2028 по клику на заголовки столбцов (индикаторы `⇅/↑/↓`).
+- Сортировка таблицы по тикеру и upside для каждого из 4 прогнозных лет по клику на заголовки столбцов (индикаторы `⇅/↑/↓`).
 - Upside отображается целым числом процентов, а прогнозная цена — с точностью исходной текущей цены (до 10 знаков после запятой).
 - Изменения в полях применяются на лету (в т.ч. при переходе в другое поле), при этом активный фокус ввода не сбрасывается.
 - Подготовка к мониторингу: backend экспортирует `/metrics` в формате Prometheus.
@@ -52,16 +52,65 @@ docker compose up --build
 
 ## Kubernetes (Minikube)
 
-В репозитории есть манифесты в `k8s/` для запуска приложения в локальном Minikube:
+В репозитории есть полный набор манифестов в `k8s/`:
+- namespace, secret и PVC для PostgreSQL;
+- deployment/service для `postgres`, `backend`, `frontend`;
+- ingress и `kustomization.yaml`.
 
+### 1) Подготовка Minikube
 ```bash
 minikube start
+minikube addons enable ingress
+kubectl version --client
+kubectl get nodes
+```
+
+### 2) Сборка образов внутри Docker Minikube
+```bash
 eval $(minikube docker-env)
 docker build -t krapa666/moex-backend:latest backend
 docker build -t krapa666/moex-frontend:latest frontend
+```
+
+### 3) Применение манифестов
+```bash
 kubectl apply -k k8s
-kubectl -n moex get pods
+kubectl -n moex get pods,svc,ingress,pvc
+```
+
+### 4) Доступ к приложению
+Быстрый доступ через NodePort:
+```bash
 minikube service -n moex frontend --url
+```
+
+Доступ через Ingress (`moex.local`):
+```bash
+echo "$(minikube ip) moex.local" | sudo tee -a /etc/hosts
+curl -I http://moex.local/
+```
+
+### 5) Проверка backend
+```bash
+kubectl -n moex get pods
+kubectl -n moex logs deploy/backend --tail=100
+kubectl -n moex port-forward svc/backend 8000:8000
+curl http://127.0.0.1:8000/api/health
+```
+
+### 6) Обновление в Minikube
+```bash
+eval $(minikube docker-env)
+docker build -t krapa666/moex-backend:latest backend
+docker build -t krapa666/moex-frontend:latest frontend
+kubectl -n moex rollout restart deploy/backend deploy/frontend
+kubectl -n moex rollout status deploy/backend
+kubectl -n moex rollout status deploy/frontend
+```
+
+### 7) Удаление
+```bash
+kubectl delete -k k8s
 ```
 
 ## Автовыгрузка после коммита (GitHub + GitLab)
@@ -132,7 +181,7 @@ sudo systemctl restart gitlab-runner
 4. Если на сервере несколько runner'ов — выставь `request_concurrency` в диапазон `2..4` у каждого, чтобы избежать bottleneck при long polling.
 
 ## Версионирование
-- Текущая версия: `v5.0.0`
+- Текущая версия: `v6.0.0`
 - Формат версий: `MAJOR.MINOR.PATCH`
   - `MAJOR` — несовместимые изменения API/модели данных,
   - `MINOR` — новые функции без поломки совместимости,
