@@ -159,6 +159,7 @@ kubectl delete -k k8s
 ```bash
 eval $(minikube docker-env -u)
 ./scripts/compose-up.sh
+./scripts/compose-down.sh
 ```
 
 ## Автовыгрузка после коммита (GitHub + GitLab)
@@ -264,7 +265,7 @@ cd /opt/moex
 
 ### 3) Запуск сервисов проекта (приложение + мониторинг одной командой)
 ```bash
-docker compose up -d --build
+./scripts/compose-up.sh
 ```
 
 Проверка контейнеров:
@@ -320,7 +321,7 @@ curl -I http://junibox/torrent/
 ```bash
 cd /opt/moex
 git pull
-docker compose up -d --build
+./scripts/compose-up.sh
 ```
 
 ### 8) Полезные команды эксплуатации
@@ -329,11 +330,11 @@ docker compose logs -f backend
 docker compose logs -f frontend
 docker compose logs -f prometheus
 docker compose logs -f grafana
-docker compose down
+./scripts/compose-down.sh
 ```
 
 ### 9) Сохранность данных при перезапусках и потере контейнеров
-- Данные PostgreSQL сохраняются в Docker volume `postgres_data`, поэтому при обычном `docker compose down/up` данные не теряются.
+- Данные PostgreSQL сохраняются в Docker volume `postgres_data`, поэтому при обычном `./scripts/compose-down.sh` / `./scripts/compose-up.sh` данные не теряются.
 - Добавлен сервис `pgbackup`, который делает автоматические бэкапы БД по расписанию в папку `./backups`.
 
 Проверка наличия бэкапов:
