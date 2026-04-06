@@ -79,15 +79,19 @@ kubectl -n moex get pods,svc,ingress,pvc
 ```
 
 ### 4) Доступ к приложению
-Быстрый доступ через NodePort:
+Доступ через Ingress (`http://junibox/`):
 ```bash
-minikube service -n moex frontend --url
+curl -I http://junibox/
 ```
 
-Доступ через Ingress (`moex.local`):
+Если Minikube запущен в отдельной VM/контейнере, чтобы `http://junibox/` работал так же как раньше
+через системный Nginx, используй подготовленный конфиг:
+
 ```bash
-echo "$(minikube ip) moex.local" | sudo tee -a /etc/hosts
-curl -I http://moex.local/
+minikube ip
+# подставь IP в deploy/nginx/home-server-k8s.conf вместо MINIKUBE_IP
+sudo cp deploy/nginx/home-server-k8s.conf /etc/nginx/conf.d/moex-k8s.conf
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### 5) Проверка backend

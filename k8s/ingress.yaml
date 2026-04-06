@@ -3,12 +3,10 @@ kind: Ingress
 metadata:
   name: moex-ingress
   namespace: moex
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
-    - host: moex.local
+    - host: junibox
       http:
         paths:
           - path: /
