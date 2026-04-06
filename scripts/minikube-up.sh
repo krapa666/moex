@@ -90,7 +90,7 @@ if ! minikube service -n "${NAMESPACE}" frontend --url; then
 fi
 echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
 
-echo "[minikube-up] ingress host: http://junibox/"
+echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://junibox/"
 
 if [[ "${SKIP_NGINX}" == "true" ]]; then
   echo "[minikube-up] --skip-nginx set, reverse-proxy regeneration skipped"
