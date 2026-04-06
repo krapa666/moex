@@ -141,6 +141,8 @@
 ```bash
 ./scripts/compose-down.sh
 ```
+При остановке автоматически сохраняется актуальный snapshot БД в
+`backups/mode-sync/latest.sql.gz` для последующего переноса между режимами.
 
 ## 6.3 Доступ после старта
 - Frontend: http://localhost:8080
@@ -149,6 +151,14 @@
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000
 - Loki readiness: http://localhost:3100/ready
+
+## 6.4 Непрерывность данных между Compose и Minikube
+- При `compose-down` и `minikube-down` выполняется экспорт snapshot БД.
+- При `compose-up` и `minikube-up` выполняется импорт последнего snapshot (если он есть).
+- Общий путь snapshot:
+  - `backups/mode-sync/latest.sql.gz`
+  - `backups/mode-sync/latest.meta`
+- Это позволяет не терять актуальные данные при переключении способа развёртывания.
 
 ---
 
@@ -160,6 +170,10 @@
 ```
 Скрипт автоматически переключает тот же хостовый Nginx reverse-proxy в Minikube-режим
 (`scripts/configure-nginx-k8s-proxy.sh --reload`), сохраняя единый внешний URL `http://junibox/`.
+Также скрипт поднимает `kubectl port-forward` для frontend на `127.0.0.1:30080`
+и пишет PID/лог в:
+- `/tmp/moex-k8s-port-forward.pid`
+- `/tmp/moex-k8s-port-forward.log`
 
 Опции:
 ```bash
@@ -204,6 +218,13 @@ cd /opt/moex
 
 ## 8.3 Nginx-конфиг
 ```bash
+# Compose-режим:
+sudo ./scripts/configure-nginx-compose-proxy.sh --reload
+
+# Minikube-режим:
+sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
+
+# Ручная установка шаблона (fallback):
 sudo cp deploy/nginx/home-server.conf /etc/nginx/conf.d/moex.conf
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
@@ -294,6 +315,8 @@ curl http://localhost:8000/api/health
 ```bash
 sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 ```
+Если Minikube-профиль временно не поднят, но `127.0.0.1:30080` доступен,
+`configure-nginx-k8s-proxy.sh` всё равно сгенерирует рабочий конфиг.
 
 ## 13.4 Принудительно переключить reverse-proxy между режимами
 Compose-режим:
