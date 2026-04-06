@@ -248,7 +248,10 @@ input:focus {
   width: min(520px, 92vw);
   max-height: 65vh;
   overflow: auto;
-  background: #ffffff;
+  background-color: #ffffff;
+  opacity: 1;
+  mix-blend-mode: normal;
+  isolation: isolate;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   box-shadow: 0 16px 38px rgba(15, 23, 42, 0.25);
@@ -275,10 +278,12 @@ input:focus {
 .tooltip-table {
   width: 100%;
   border-collapse: collapse;
+  background-color: #ffffff;
 }
 
 .tooltip-table th,
 .tooltip-table td {
+  background-color: #ffffff;
   border: 1px solid #e2e8f0;
   padding: 4px 6px;
   font-size: 12px;
