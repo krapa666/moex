@@ -31,7 +31,6 @@ require_cmd() {
   fi
 }
 
-require_cmd minikube
 require_cmd awk
 require_cmd curl
 
@@ -40,20 +39,23 @@ if [[ ! -f "$TEMPLATE_PATH" ]]; then
   exit 1
 fi
 
-MINIKUBE_IP="$(minikube ip | tr -d '[:space:]')"
-if [[ -z "$MINIKUBE_IP" ]]; then
-  echo "[nginx-k8s-proxy] error: unable to detect minikube ip" >&2
-  exit 1
-fi
-
-FRONTEND_ENDPOINT="${MINIKUBE_IP}:30080"
-if curl -fsS --max-time 2 "http://127.0.0.1:30080/" >/dev/null 2>&1; then
-  FRONTEND_ENDPOINT="127.0.0.1:30080"
+FRONTEND_ENDPOINT="127.0.0.1:30080"
+if curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
   echo "[nginx-k8s-proxy] using localhost frontend endpoint: ${FRONTEND_ENDPOINT}"
-elif curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
-  echo "[nginx-k8s-proxy] localhost endpoint unavailable; using minikube ip endpoint: ${FRONTEND_ENDPOINT}"
 else
-  echo "[nginx-k8s-proxy] warning: frontend endpoint is not reachable yet; generating config with ${FRONTEND_ENDPOINT}" >&2
+  require_cmd minikube
+  MINIKUBE_IP="$(minikube ip 2>/dev/null | tr -d '[:space:]')"
+  if [[ -z "$MINIKUBE_IP" ]]; then
+    echo "[nginx-k8s-proxy] error: localhost endpoint is unavailable and minikube profile is not running" >&2
+    echo "[nginx-k8s-proxy] hint: run ./scripts/minikube-up.sh (or start your local frontend on 127.0.0.1:30080)" >&2
+    exit 1
+  fi
+  FRONTEND_ENDPOINT="${MINIKUBE_IP}:30080"
+  if curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
+    echo "[nginx-k8s-proxy] localhost endpoint unavailable; using minikube ip endpoint: ${FRONTEND_ENDPOINT}"
+  else
+    echo "[nginx-k8s-proxy] warning: frontend endpoint is not reachable yet; generating config with ${FRONTEND_ENDPOINT}" >&2
+  fi
 fi
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
