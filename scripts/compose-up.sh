@@ -11,6 +11,27 @@ require_cmd() {
 
 require_cmd docker
 
+SYNC_BACKUP_DIR="./backups/mode-sync"
+SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+
+import_snapshot_into_compose_db() {
+  if [[ ! -s "${SYNC_BACKUP_FILE}" ]]; then
+    echo "[compose-up] no shared snapshot found, import skipped"
+    return
+  fi
+  if ! docker compose ps db --status running >/dev/null 2>&1; then
+    echo "[compose-up] db container is not running, import skipped" >&2
+    return
+  fi
+
+  echo "[compose-up] importing shared snapshot from ${SYNC_BACKUP_FILE}..."
+  if gunzip -c "${SYNC_BACKUP_FILE}" | docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d fair_price >/dev/null; then
+    echo "[compose-up] snapshot import completed"
+  else
+    echo "[compose-up] warning: failed to import shared snapshot" >&2
+  fi
+}
+
 if command -v minikube >/dev/null 2>&1; then
   echo "[compose-up] restoring host docker context (if minikube docker-env was enabled)..."
   # shellcheck disable=SC2046
@@ -20,6 +41,7 @@ fi
 
 echo "[compose-up] starting docker compose stack..."
 docker compose up -d --build "$@"
+import_snapshot_into_compose_db
 
 echo "[compose-up] done"
 echo "[compose-up] frontend: http://junibox/"

@@ -7,6 +7,8 @@ FRONTEND_IMAGE="krapa666/moex-frontend:latest"
 SKIP_NGINX=false
 PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
 PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-port-forward.log"
+SYNC_BACKUP_DIR="./backups/mode-sync"
+SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -61,6 +63,27 @@ start_frontend_port_forward() {
   echo "[minikube-up] warning: port-forward did not become ready in time; see ${PORT_FORWARD_LOG_FILE}" >&2
 }
 
+import_snapshot_into_k8s_db() {
+  if [[ ! -s "${SYNC_BACKUP_FILE}" ]]; then
+    echo "[minikube-up] no shared snapshot found, import skipped"
+    return
+  fi
+
+  local pg_pod=""
+  pg_pod="$(kubectl -n "${NAMESPACE}" get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -z "${pg_pod}" ]]; then
+    echo "[minikube-up] postgres pod not found, import skipped" >&2
+    return
+  fi
+
+  echo "[minikube-up] importing shared snapshot into k8s postgres (${pg_pod})..."
+  if gunzip -c "${SYNC_BACKUP_FILE}" | kubectl -n "${NAMESPACE}" exec -i "${pg_pod}" -- psql -v ON_ERROR_STOP=1 -U postgres -d fair_price >/dev/null; then
+    echo "[minikube-up] snapshot import completed"
+  else
+    echo "[minikube-up] warning: failed to import shared snapshot into k8s postgres" >&2
+  fi
+}
+
 wait_for_ingress_admission() {
   echo "[minikube-up] waiting for ingress-nginx controller rollout..."
   kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=240s
@@ -110,6 +133,7 @@ kubectl apply -f k8s/ingress.yaml
 
 echo "[minikube-up] waiting for deployments..."
 kubectl -n "${NAMESPACE}" rollout status deploy/postgres --timeout=180s
+import_snapshot_into_k8s_db
 kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
 start_frontend_port_forward

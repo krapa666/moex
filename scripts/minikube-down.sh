@@ -4,6 +4,8 @@ set -euo pipefail
 NAMESPACE="moex"
 KEEP_MINIKUBE=false
 PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
+SYNC_BACKUP_DIR="./backups/mode-sync"
+SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 
 if [[ "${1:-}" == "--keep-minikube" ]]; then
   KEEP_MINIKUBE=true
@@ -20,6 +22,31 @@ require_cmd() {
 require_cmd kubectl
 require_cmd minikube
 
+export_k8s_db_snapshot() {
+  if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+    echo "[minikube-down] namespace ${NAMESPACE} not found, snapshot export skipped"
+    return
+  fi
+
+  local pg_pod=""
+  pg_pod="$(kubectl -n "${NAMESPACE}" get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -z "${pg_pod}" ]]; then
+    echo "[minikube-down] postgres pod not found, snapshot export skipped"
+    return
+  fi
+
+  mkdir -p "${SYNC_BACKUP_DIR}"
+  echo "[minikube-down] exporting DB snapshot from k8s pod ${pg_pod} to ${SYNC_BACKUP_FILE}..."
+  if kubectl -n "${NAMESPACE}" exec -i "${pg_pod}" -- pg_dump --clean --if-exists --no-owner --no-privileges -U postgres -d fair_price | gzip -c > "${SYNC_BACKUP_FILE}.tmp"; then
+    mv "${SYNC_BACKUP_FILE}.tmp" "${SYNC_BACKUP_FILE}"
+    echo "source=minikube generated_at=$(date -Iseconds)" > "${SYNC_BACKUP_DIR}/latest.meta"
+    echo "[minikube-down] snapshot export completed"
+  else
+    rm -f "${SYNC_BACKUP_FILE}.tmp"
+    echo "[minikube-down] warning: failed to export DB snapshot from k8s" >&2
+  fi
+}
+
 if [[ -f "${PORT_FORWARD_PID_FILE}" ]]; then
   pf_pid="$(cat "${PORT_FORWARD_PID_FILE}" 2>/dev/null || true)"
   if [[ -n "${pf_pid}" ]] && kill -0 "${pf_pid}" >/dev/null 2>&1; then
@@ -30,6 +57,7 @@ if [[ -f "${PORT_FORWARD_PID_FILE}" ]]; then
 fi
 
 echo "[minikube-down] deleting Kubernetes resources..."
+export_k8s_db_snapshot
 kubectl delete -k k8s --ignore-not-found=true
 
 echo "[minikube-down] waiting namespace/${NAMESPACE} deletion (if exists)..."
