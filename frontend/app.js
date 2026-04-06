@@ -356,6 +356,21 @@ function createInlineComparisonRow(item) {
   return tr;
 }
 
+function scheduleInlineComparisonHide(anchorTr, tickerInput, delayMs = 120) {
+  if (comparisonHoverHideTimer) {
+    clearTimeout(comparisonHoverHideTimer);
+  }
+  comparisonHoverHideTimer = setTimeout(() => {
+    const isAnchorHovered = anchorTr?.matches(':hover');
+    const isTickerHovered = tickerInput?.matches(':hover');
+    const isComparisonHovered = Boolean(tbody.querySelector('tr.comparison-inline-row:hover'));
+    if (isAnchorHovered || isTickerHovered || isComparisonHovered) {
+      return;
+    }
+    clearInlineComparisonRows();
+  }, delayMs);
+}
+
 async function showInlineComparisonRows(anchorTr, ticker, rowId) {
   const requestSeq = comparisonRequestSeq + 1;
   comparisonRequestSeq = requestSeq;
@@ -400,6 +415,13 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
     let insertAfter = anchorTr;
     otherTables.forEach((item) => {
       const row = createInlineComparisonRow(item);
+      row.addEventListener('mouseenter', () => {
+        if (comparisonHoverHideTimer) {
+          clearTimeout(comparisonHoverHideTimer);
+          comparisonHoverHideTimer = null;
+        }
+      });
+      row.addEventListener('mouseleave', () => scheduleInlineComparisonHide(anchorTr, null, 250));
       insertAfter.insertAdjacentElement('afterend', row);
       insertAfter = row;
     });
@@ -407,6 +429,13 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
     let insertBefore = anchorTr;
     otherTables.forEach((item) => {
       const row = createInlineComparisonRow(item);
+      row.addEventListener('mouseenter', () => {
+        if (comparisonHoverHideTimer) {
+          clearTimeout(comparisonHoverHideTimer);
+          comparisonHoverHideTimer = null;
+        }
+      });
+      row.addEventListener('mouseleave', () => scheduleInlineComparisonHide(anchorTr, null, 250));
       insertBefore.insertAdjacentElement('beforebegin', row);
       insertBefore = row;
     });
@@ -610,15 +639,7 @@ function renderRows(rows) {
       showInlineComparisonRows(tr, draft.ticker, row.id);
     });
     tickerInput?.addEventListener('mouseleave', () => {
-      comparisonHoverHideTimer = setTimeout(() => {
-        const isAnchorHovered = tr.matches(':hover');
-        const isTickerHovered = tickerInput.matches(':hover');
-        const isComparisonHovered = Boolean(tbody.querySelector('tr.comparison-inline-row:hover'));
-        if (isAnchorHovered || isTickerHovered || isComparisonHovered) {
-          return;
-        }
-        clearInlineComparisonRows();
-      }, 120);
+      scheduleInlineComparisonHide(tr, tickerInput, 120);
     });
     tickerInput?.addEventListener('blur', clearInlineComparisonRows);
 
