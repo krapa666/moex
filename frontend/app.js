@@ -121,29 +121,6 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-function ensureComparisonTooltip() {
-  let tooltip = document.getElementById('ticker-comparison-tooltip');
-  if (tooltip) return tooltip;
-  tooltip = document.createElement('div');
-  tooltip.id = 'ticker-comparison-tooltip';
-  tooltip.className = 'ticker-comparison-tooltip hidden';
-  tooltip.style.position = 'fixed';
-  tooltip.style.left = '0px';
-  tooltip.style.top = '0px';
-  document.body.appendChild(tooltip);
-  return tooltip;
-}
-
-function ensureComparisonBackdrop() {
-  let backdrop = document.getElementById('ticker-comparison-backdrop');
-  if (backdrop) return backdrop;
-  backdrop = document.createElement('div');
-  backdrop.id = 'ticker-comparison-backdrop';
-  backdrop.className = 'ticker-comparison-backdrop hidden';
-  document.body.appendChild(backdrop);
-  return backdrop;
-}
-
 function parseInputNumber(value) {
   if (value === '' || value === null || value === undefined) {
     return null;
@@ -322,104 +299,45 @@ async function loadRows() {
   throw lastError || new Error('Не удалось загрузить данные');
 }
 
-function renderTickerComparisonTooltip(items, ticker) {
-  const tooltip = ensureComparisonTooltip();
-  if (!items.length) {
-    tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(ticker)}</div><div>Нет данных для сравнения.</div>`;
-    return;
-  }
-
-  const blocks = items
-    .map((item) => {
-      const nearestYears = (item.years || []).slice(0, 2);
-      const rows = nearestYears
-        .map(
-          (yearItem) => `
-            <tr>
-              <td>${yearItem.year}</td>
-              <td>${formatCurrency(yearItem.forecast_price)}</td>
-              <td>${formatPercent(yearItem.upside_percent)}</td>
-            </tr>
-          `,
-        )
-        .join('');
-      return `
-        <div class="tooltip-block">
-          <div class="tooltip-block-title">№${item.table_number} — ${escapeHtml(item.analyst_name)}</div>
-          <table class="tooltip-table">
-            <thead>
-              <tr>
-                <th>Год</th>
-                <th>Прогнозная цена</th>
-                <th>Upside</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      `;
-    })
-    .join('');
-
-  tooltip.innerHTML = `<div class="tooltip-title">Сравнение по ${escapeHtml(ticker)} (2 ближайших года)</div>${blocks}`;
+function clearInlineComparisonRows() {
+  tbody.querySelectorAll('tr.comparison-inline-row').forEach((row) => row.remove());
 }
 
-function moveTooltip(event, anchorRect = null) {
-  const tooltip = ensureComparisonTooltip();
-  const margin = 8;
-  const cursorOffset = 18;
-  const maxLeft = Math.max(window.innerWidth - tooltip.offsetWidth - margin, margin);
-  const maxTop = Math.max(window.innerHeight - tooltip.offsetHeight - margin, margin);
+function buildInlineComparisonText(item) {
+  const years = (item.years || []).slice(0, 2);
+  const text = years
+    .map((yearItem) => `${yearItem.year}: цена ${formatCurrency(yearItem.forecast_price)}, upside ${formatPercent(yearItem.upside_percent)}`)
+    .join(' | ');
+  return `№${item.table_number} — ${item.analyst_name}: ${text || 'нет данных'}`;
+}
 
-  let desiredLeft = event.clientX + cursorOffset;
-  let desiredTop = event.clientY + cursorOffset;
+async function showInlineComparisonRows(anchorTr, ticker) {
+  const normalizedTicker = normalizeTickerInput(ticker).trim();
+  clearInlineComparisonRows();
+  if (!normalizedTicker) return;
 
-  if (anchorRect) {
-    const rightSpace = window.innerWidth - anchorRect.right;
-    const leftSpace = anchorRect.left;
-    if (rightSpace >= tooltip.offsetWidth + margin * 2) {
-      desiredLeft = anchorRect.right + 12;
-      desiredTop = anchorRect.top;
-    } else if (leftSpace >= tooltip.offsetWidth + margin * 2) {
-      desiredLeft = anchorRect.left - tooltip.offsetWidth - 12;
-      desiredTop = anchorRect.top;
+  let items = comparisonCache.get(normalizedTicker);
+  if (!items) {
+    try {
+      items = await api(`/api/ticker-comparison?ticker=${encodeURIComponent(normalizedTicker)}`);
+      comparisonCache.set(normalizedTicker, items);
+    } catch (_err) {
+      return;
     }
   }
 
-  tooltip.style.left = `${Math.min(desiredLeft, maxLeft)}px`;
-  tooltip.style.top = `${Math.min(desiredTop, maxTop)}px`;
-}
+  const otherTables = (items || []).filter((item) => item.table_id !== appState.activeTableId);
+  if (!otherTables.length) return;
 
-function hideTickerTooltip() {
-  ensureComparisonTooltip().classList.add('hidden');
-  ensureComparisonBackdrop().classList.add('hidden');
-}
-
-async function showTickerTooltip(event, ticker, anchorRect = null) {
-  const normalizedTicker = normalizeTickerInput(ticker).trim();
-  if (!normalizedTicker) {
-    hideTickerTooltip();
-    return;
-  }
-  const tooltip = ensureComparisonTooltip();
-  const backdrop = ensureComparisonBackdrop();
-  moveTooltip(event, anchorRect);
-  backdrop.classList.remove('hidden');
-  tooltip.classList.remove('hidden');
-  tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(normalizedTicker)}</div><div>Загрузка сравнения...</div>`;
-
-  if (comparisonCache.has(normalizedTicker)) {
-    renderTickerComparisonTooltip(comparisonCache.get(normalizedTicker), normalizedTicker);
-    return;
-  }
-
-  try {
-    const items = await api(`/api/ticker-comparison?ticker=${encodeURIComponent(normalizedTicker)}`);
-    comparisonCache.set(normalizedTicker, items);
-    renderTickerComparisonTooltip(items, normalizedTicker);
-  } catch (_err) {
-    tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(normalizedTicker)}</div><div>Не удалось загрузить сравнение.</div>`;
-  }
+  const colSpan = anchorTr.children.length || 1;
+  let insertAfter = anchorTr;
+  otherTables.forEach((item) => {
+    const row = document.createElement('tr');
+    row.className = 'comparison-inline-row';
+    row.innerHTML = `<td colspan="${colSpan}">${escapeHtml(buildInlineComparisonText(item))}</td>`;
+    insertAfter.insertAdjacentElement('afterend', row);
+    insertAfter = row;
+  });
 }
 
 function rowToPayload(row) {
@@ -613,17 +531,12 @@ function renderRows(rows) {
     });
 
     const tickerInput = tr.querySelector('input[data-field="ticker"]');
-    tickerInput?.addEventListener('mouseenter', (event) => {
+    tickerInput?.addEventListener('mouseenter', () => {
       const draft = rowDrafts.get(row.id) || row;
-      showTickerTooltip(event, draft.ticker, tickerInput.getBoundingClientRect());
+      showInlineComparisonRows(tr, draft.ticker);
     });
-    tickerInput?.addEventListener('mousemove', (event) => {
-      if (!ensureComparisonTooltip().classList.contains('hidden')) {
-        moveTooltip(event, tickerInput.getBoundingClientRect());
-      }
-    });
-    tickerInput?.addEventListener('mouseleave', hideTickerTooltip);
-    tickerInput?.addEventListener('blur', hideTickerTooltip);
+    tickerInput?.addEventListener('mouseleave', clearInlineComparisonRows);
+    tickerInput?.addEventListener('blur', clearInlineComparisonRows);
 
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       try {
@@ -649,15 +562,8 @@ tbody.addEventListener('focusout', () => {
   }, 0);
 });
 
-window.addEventListener('scroll', hideTickerTooltip, true);
-document.addEventListener('mousemove', (event) => {
-  const target = event.target;
-  if (target instanceof Element && target.matches('input[data-field="ticker"]')) {
-    return;
-  }
-  hideTickerTooltip();
-});
-document.addEventListener('click', hideTickerTooltip, true);
+window.addEventListener('scroll', clearInlineComparisonRows, true);
+document.addEventListener('click', clearInlineComparisonRows, true);
 
 tableSelect?.addEventListener('change', async () => {
   appState.activeTableId = Number(tableSelect.value);

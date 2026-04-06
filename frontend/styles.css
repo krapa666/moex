@@ -242,57 +242,11 @@ input:focus {
   display: none !important;
 }
 
-.ticker-comparison-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483646;
-  background: rgba(255, 255, 255, 0.92);
-  pointer-events: none;
-}
-
-.ticker-comparison-tooltip {
-  position: fixed;
-  z-index: 2147483647;
-  width: min(520px, 92vw);
-  max-height: 65vh;
-  overflow: auto;
-  background-color: #ffffff;
-  opacity: 1;
-  mix-blend-mode: normal;
-  isolation: isolate;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.25);
-  padding: 10px;
-  pointer-events: none;
-}
-
-.tooltip-title {
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.tooltip-block {
-  margin-top: 8px;
-  border-top: 1px solid #e2e8f0;
-  padding-top: 8px;
-}
-
-.tooltip-block-title {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.tooltip-table {
-  width: 100%;
-  border-collapse: collapse;
-  background-color: #ffffff;
-}
-
-.tooltip-table th,
-.tooltip-table td {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  padding: 4px 6px;
+.comparison-inline-row td {
+  background: #eef2ff;
+  color: #1e293b;
+  border: 1px solid #c7d2fe;
   font-size: 12px;
+  padding: 8px 10px;
+  font-weight: 600;
 }
