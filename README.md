@@ -70,6 +70,16 @@ docker compose up --build
 - дождётся готовности `postgres`, `backend`, `frontend`;
 - покажет URL доступа.
 
+### Корректное завершение Minikube-режима одной командой
+```bash
+./scripts/minikube-down.sh
+```
+
+Если нужно остановить приложение, но оставить кластер поднятым:
+```bash
+./scripts/minikube-down.sh --keep-minikube
+```
+
 ### 1) Подготовка Minikube
 ```bash
 minikube start
@@ -128,6 +138,19 @@ kubectl -n moex rollout status deploy/frontend
 ### 7) Удаление
 ```bash
 kubectl delete -k k8s
+```
+
+## Переключение между режимами запуска
+
+### Перейти на Minikube
+```bash
+./scripts/minikube-up.sh
+```
+
+### Вернуться на Docker Compose
+```bash
+./scripts/minikube-down.sh
+docker compose up -d --build
 ```
 
 ## Автовыгрузка после коммита (GitHub + GitLab)
