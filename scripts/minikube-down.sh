@@ -48,4 +48,4 @@ fi
 
 echo "[minikube-down] done"
 echo "[minikube-down] now you can run docker compose mode:"
-echo "  docker compose up -d --build"
+echo "  ./scripts/compose-up.sh"

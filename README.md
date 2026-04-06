@@ -39,7 +39,7 @@
 
 ## Запуск
 ```bash
-docker compose up --build
+./scripts/compose-up.sh
 ```
 
 После старта:
@@ -150,7 +150,15 @@ kubectl delete -k k8s
 ### Вернуться на Docker Compose
 ```bash
 ./scripts/minikube-down.sh
-docker compose up -d --build
+./scripts/compose-up.sh
+```
+
+### Если видишь ошибку вида `no route to host 192.168.49.2:2376`
+Это значит, что текущий shell всё ещё направляет Docker-клиент в Minikube daemon.
+Используй:
+```bash
+eval $(minikube docker-env -u)
+./scripts/compose-up.sh
 ```
 
 ## Автовыгрузка после коммита (GitHub + GitLab)
