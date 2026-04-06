@@ -4,6 +4,20 @@ set -euo pipefail
 NAMESPACE="moex"
 BACKEND_IMAGE="krapa666/moex-backend:latest"
 FRONTEND_IMAGE="krapa666/moex-frontend:latest"
+SKIP_NGINX=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skip-nginx)
+      SKIP_NGINX=true
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
 
 require_cmd() {
   local cmd="$1"
@@ -77,5 +91,17 @@ fi
 echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
 
 echo "[minikube-up] ingress host: http://junibox/"
-echo "[minikube-up] to refresh reverse-proxy config on junibox run:"
-echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh --reload"
+
+if [[ "${SKIP_NGINX}" == "true" ]]; then
+  echo "[minikube-up] --skip-nginx set, reverse-proxy regeneration skipped"
+elif [[ -x "./scripts/configure-nginx-k8s-proxy.sh" ]]; then
+  echo "[minikube-up] regenerating nginx reverse-proxy config..."
+  if [[ -w "/etc/nginx/conf.d" ]]; then
+    ./scripts/configure-nginx-k8s-proxy.sh --reload || true
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ./scripts/configure-nginx-k8s-proxy.sh --reload || true
+  else
+    echo "[minikube-up] warning: no permissions to reload nginx. Run manually:" >&2
+    echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh --reload" >&2
+  fi
+fi

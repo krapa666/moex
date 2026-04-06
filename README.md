@@ -68,7 +68,13 @@
 - дождётся готовности ingress admission webhook;
 - применит core-манифесты и затем ingress (отдельным шагом);
 - дождётся готовности `postgres`, `backend`, `frontend`;
-- покажет URL доступа.
+- покажет URL доступа;
+- попытается автоматически перегенерировать и перезагрузить Nginx reverse-proxy для `http://junibox/`.
+
+Если нужно пропустить шаг с Nginx (например, локальная машина без Nginx):
+```bash
+./scripts/minikube-up.sh --skip-nginx
+```
 
 ### Корректное завершение Minikube-режима одной командой
 ```bash
