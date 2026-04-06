@@ -11,6 +11,7 @@
   --up: #00a63e;
   --down: #ef1d1d;
   --flat: #6b7280;
+  --comparison-bottom-buffer: 220px;
 }
 
 * {
@@ -94,6 +95,7 @@ h1 {
 
 .table-wrap {
   overflow-x: auto;
+  padding-bottom: var(--comparison-bottom-buffer);
 }
 
 table {
