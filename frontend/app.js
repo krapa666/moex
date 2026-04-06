@@ -33,6 +33,8 @@ const saveTimers = new Map();
 const rowDrafts = new Map();
 const dirtyRows = new Set();
 const comparisonCache = new Map();
+let comparisonHoverHideTimer = null;
+let activeComparisonRowId = null;
 const sortState = { key: null, direction: 'asc' };
 const appState = {
   tables: [],
@@ -305,8 +307,13 @@ async function loadRows() {
 }
 
 function clearInlineComparisonRows() {
+  if (comparisonHoverHideTimer) {
+    clearTimeout(comparisonHoverHideTimer);
+    comparisonHoverHideTimer = null;
+  }
   tbody.querySelectorAll('tr.comparison-inline-row').forEach((row) => row.remove());
   tbody.querySelectorAll('tr.ticker-compare-highlight').forEach((row) => row.classList.remove('ticker-compare-highlight'));
+  activeComparisonRowId = null;
 }
 
 function getComparisonYear(item, index) {
@@ -345,7 +352,14 @@ function createInlineComparisonRow(item) {
   return tr;
 }
 
-async function showInlineComparisonRows(anchorTr, ticker) {
+async function showInlineComparisonRows(anchorTr, ticker, rowId) {
+  if (comparisonHoverHideTimer) {
+    clearTimeout(comparisonHoverHideTimer);
+    comparisonHoverHideTimer = null;
+  }
+  if (activeComparisonRowId === rowId && anchorTr.nextElementSibling?.classList.contains('comparison-inline-row')) {
+    return;
+  }
   const normalizedTicker = normalizeTickerInput(ticker).trim();
   clearInlineComparisonRows();
   if (!normalizedTicker) return;
@@ -364,6 +378,7 @@ async function showInlineComparisonRows(anchorTr, ticker) {
   if (!otherTables.length) return;
 
   anchorTr.classList.add('ticker-compare-highlight');
+  activeComparisonRowId = rowId;
   let insertAfter = anchorTr;
   let lastInsertedRow = null;
   otherTables.forEach((item) => {
@@ -572,9 +587,13 @@ function renderRows(rows) {
     const tickerInput = tr.querySelector('input[data-field="ticker"]');
     tickerInput?.addEventListener('mouseenter', () => {
       const draft = rowDrafts.get(row.id) || row;
-      showInlineComparisonRows(tr, draft.ticker);
+      showInlineComparisonRows(tr, draft.ticker, row.id);
     });
-    tickerInput?.addEventListener('mouseleave', clearInlineComparisonRows);
+    tickerInput?.addEventListener('mouseleave', () => {
+      comparisonHoverHideTimer = setTimeout(() => {
+        clearInlineComparisonRows();
+      }, 120);
+    });
     tickerInput?.addEventListener('blur', clearInlineComparisonRows);
 
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
