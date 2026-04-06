@@ -35,6 +35,7 @@ const dirtyRows = new Set();
 const comparisonCache = new Map();
 let comparisonHoverHideTimer = null;
 let activeComparisonRowId = null;
+let comparisonRequestSeq = 0;
 const sortState = { key: null, direction: 'asc' };
 const appState = {
   tables: [],
@@ -306,10 +307,13 @@ async function loadRows() {
   throw lastError || new Error('Не удалось загрузить данные');
 }
 
-function clearInlineComparisonRows() {
+function clearInlineComparisonRows({ invalidatePending = true } = {}) {
   if (comparisonHoverHideTimer) {
     clearTimeout(comparisonHoverHideTimer);
     comparisonHoverHideTimer = null;
+  }
+  if (invalidatePending) {
+    comparisonRequestSeq += 1;
   }
   tbody.querySelectorAll('tr.comparison-inline-row').forEach((row) => row.remove());
   tbody.querySelectorAll('tr.ticker-compare-highlight').forEach((row) => row.classList.remove('ticker-compare-highlight'));
@@ -353,6 +357,8 @@ function createInlineComparisonRow(item) {
 }
 
 async function showInlineComparisonRows(anchorTr, ticker, rowId) {
+  const requestSeq = comparisonRequestSeq + 1;
+  comparisonRequestSeq = requestSeq;
   if (comparisonHoverHideTimer) {
     clearTimeout(comparisonHoverHideTimer);
     comparisonHoverHideTimer = null;
@@ -361,17 +367,24 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
     return;
   }
   const normalizedTicker = normalizeTickerInput(ticker).trim();
-  clearInlineComparisonRows();
+  clearInlineComparisonRows({ invalidatePending: false });
   if (!normalizedTicker) return;
 
   let items = comparisonCache.get(normalizedTicker);
   if (!items) {
     try {
       items = await api(`/api/ticker-comparison?ticker=${encodeURIComponent(normalizedTicker)}`);
+      if (requestSeq !== comparisonRequestSeq) {
+        return;
+      }
       comparisonCache.set(normalizedTicker, items);
     } catch (_err) {
       return;
     }
+  }
+
+  if (requestSeq !== comparisonRequestSeq) {
+    return;
   }
 
   const otherTables = (items || []).filter((item) => item.table_id !== appState.activeTableId);
