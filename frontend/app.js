@@ -261,6 +261,7 @@ function isEditingInput() {
 function upsideClass(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return 'upside-flat';
+  if (num > 30) return 'upside-up-strong';
   if (num > 0) return 'upside-up';
   if (num < 0) return 'upside-down';
   return 'upside-flat';
@@ -485,7 +486,7 @@ function updateCalculatedCells(tr, row) {
     const cell = tr.querySelector(`[data-cell="${cellName}"]`);
     if (!cell) return;
     cell.textContent = formatPercent(value);
-    cell.classList.remove('upside-up', 'upside-down', 'upside-flat');
+    cell.classList.remove('upside-up-strong', 'upside-up', 'upside-down', 'upside-flat');
     cell.classList.add(upsideClass(value));
   };
 
