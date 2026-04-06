@@ -650,6 +650,14 @@ tbody.addEventListener('focusout', () => {
 });
 
 window.addEventListener('scroll', hideTickerTooltip, true);
+document.addEventListener('mousemove', (event) => {
+  const target = event.target;
+  if (target instanceof Element && target.matches('input[data-field="ticker"]')) {
+    return;
+  }
+  hideTickerTooltip();
+});
+document.addEventListener('click', hideTickerTooltip, true);
 
 tableSelect?.addEventListener('change', async () => {
   appState.activeTableId = Number(tableSelect.value);

@@ -245,14 +245,14 @@ input:focus {
 .ticker-comparison-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1190;
-  background: rgba(255, 255, 255, 0.78);
+  z-index: 2147483646;
+  background: rgba(255, 255, 255, 0.92);
   pointer-events: none;
 }
 
 .ticker-comparison-tooltip {
   position: fixed;
-  z-index: 1200;
+  z-index: 2147483647;
   width: min(520px, 92vw);
   max-height: 65vh;
   overflow: auto;
