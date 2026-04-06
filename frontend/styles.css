@@ -272,11 +272,3 @@ input[readonly] {
   font-weight: 700;
   color: #92400e;
 }
-
-tbody.comparison-mode .row-delete-btn {
-  display: none;
-}
-
-tbody.comparison-mode .row-table-name {
-  display: inline-block !important;
-}
