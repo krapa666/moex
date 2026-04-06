@@ -7,7 +7,7 @@ def recalculate_fields(row: StockRow) -> None:
     else:
         row.market_cap_billion_rub = None
 
-    for year in (1, 2, 3):
+    for year in (1, 2, 3, 4):
         profit = getattr(row, f"forecast_profit_year{year}_billion_rub")
         price_field = f"forecast_price_year{year}"
         upside_field = f"upside_percent_year{year}"

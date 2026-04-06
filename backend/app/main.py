@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,7 @@ from .services import refresh_all_prices, refresh_row_price
 app = FastAPI(title="MOEX Fair Price", version="1.0.0")
 price_refresh_task: asyncio.Task | None = None
 BACKGROUND_REFRESH_SECONDS = 10 * 60
-BASE_FORECAST_YEAR = 2026
+BASE_FORECAST_YEAR = datetime.now(timezone.utc).year
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,20 +95,22 @@ def serialize_tables(tables: list[AnalystTable]) -> list[dict]:
 
 
 def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
-    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(3)]
+    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(4)]
     profit_map = row.net_profit_year_map or {}
     row.forecast_profit_year1_billion_rub = profit_map.get(str(years[0]))
     row.forecast_profit_year2_billion_rub = profit_map.get(str(years[1]))
     row.forecast_profit_year3_billion_rub = profit_map.get(str(years[2]))
+    row.forecast_profit_year4_billion_rub = profit_map.get(str(years[3]))
     recalculate_fields(row)
 
 
 def merge_payload_profit_map(payload: StockRowCreate | StockRowUpdate, year_offset: int) -> dict[str, float | None]:
-    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(3)]
+    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(4)]
     merged = dict(payload.net_profit_year_map or {})
     merged[str(years[0])] = payload.forecast_profit_year1_billion_rub
     merged[str(years[1])] = payload.forecast_profit_year2_billion_rub
     merged[str(years[2])] = payload.forecast_profit_year3_billion_rub
+    merged[str(years[3])] = payload.forecast_profit_year4_billion_rub
     return merged
 
 
@@ -148,13 +151,16 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
                     forecast_profit_year1_billion_rub=None,
                     forecast_profit_year2_billion_rub=None,
                     forecast_profit_year3_billion_rub=None,
+                    forecast_profit_year4_billion_rub=None,
                     net_profit_year_map={},
                     forecast_price_year1=None,
                     forecast_price_year2=None,
                     forecast_price_year3=None,
+                    forecast_price_year4=None,
                     upside_percent_year1=None,
                     upside_percent_year2=None,
                     upside_percent_year3=None,
+                    upside_percent_year4=None,
                     status_message=src.status_message,
                     price_updated_at=src.price_updated_at,
                 )

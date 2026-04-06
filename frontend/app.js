@@ -14,12 +14,15 @@ const sortMarketCap = document.getElementById('sort-market-cap');
 const sortUpsideYear1 = document.getElementById('sort-upside-year1');
 const sortUpsideYear2 = document.getElementById('sort-upside-year2');
 const sortUpsideYear3 = document.getElementById('sort-upside-year3');
+const sortUpsideYear4 = document.getElementById('sort-upside-year4');
 const headerProfitYear1 = document.getElementById('header-profit-year1');
 const headerProfitYear2 = document.getElementById('header-profit-year2');
 const headerProfitYear3 = document.getElementById('header-profit-year3');
+const headerProfitYear4 = document.getElementById('header-profit-year4');
 const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
 const headerPriceYear3 = document.getElementById('header-price-year3');
+const headerPriceYear4 = document.getElementById('header-price-year4');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -34,7 +37,7 @@ const appState = {
   activeTableId: null,
 };
 const AUTOSAVE_DELAY_MS = 1800;
-const BASE_FORECAST_YEAR = 2026;
+const BASE_FORECAST_YEAR = new Date().getFullYear();
 const RU_TO_EN_LAYOUT_MAP = {
   й: 'q',
   ц: 'w',
@@ -168,17 +171,24 @@ function activeTable() {
 
 function activeYears() {
   const offset = activeTable()?.year_offset ?? 0;
-  return [BASE_FORECAST_YEAR + offset, BASE_FORECAST_YEAR + offset + 1, BASE_FORECAST_YEAR + offset + 2];
+  return [
+    BASE_FORECAST_YEAR + offset,
+    BASE_FORECAST_YEAR + offset + 1,
+    BASE_FORECAST_YEAR + offset + 2,
+    BASE_FORECAST_YEAR + offset + 3,
+  ];
 }
 
 function applyYearHeaders() {
-  const [y1, y2, y3] = activeYears();
+  const [y1, y2, y3, y4] = activeYears();
   if (headerProfitYear1) headerProfitYear1.textContent = `Прогнозная ЧП (${y1}), млрд ₽`;
   if (headerProfitYear2) headerProfitYear2.textContent = `Прогнозная ЧП (${y2}), млрд ₽`;
   if (headerProfitYear3) headerProfitYear3.textContent = `Прогнозная ЧП (${y3}), млрд ₽`;
+  if (headerProfitYear4) headerProfitYear4.textContent = `Прогнозная ЧП (${y4}), млрд ₽`;
   if (headerPriceYear1) headerPriceYear1.textContent = `Прогнозная цена (${y1}), ₽`;
   if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
   if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
+  if (headerPriceYear4) headerPriceYear4.textContent = `Прогнозная цена (${y4}), ₽`;
 }
 
 function yearKeyByIndex(index) {
@@ -288,6 +298,7 @@ function rowToPayload(row) {
     forecast_profit_year1_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(0)]),
     forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
     forecast_profit_year3_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(2)]),
+    forecast_profit_year4_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(3)]),
     net_profit_year_map: profitMap,
   };
 }
@@ -311,9 +322,11 @@ function updateCalculatedCells(tr, row) {
   setCellText('forecast_price_year1', formatCurrency(row.forecast_price_year1, priceDecimals));
   setCellText('forecast_price_year2', formatCurrency(row.forecast_price_year2, priceDecimals));
   setCellText('forecast_price_year3', formatCurrency(row.forecast_price_year3, priceDecimals));
+  setCellText('forecast_price_year4', formatCurrency(row.forecast_price_year4, priceDecimals));
   setUpsideCell('upside_year1', row.upside_percent_year1);
   setUpsideCell('upside_year2', row.upside_percent_year2);
   setUpsideCell('upside_year3', row.upside_percent_year3);
+  setUpsideCell('upside_year4', row.upside_percent_year4);
   setCellText('price_updated_at', formatDate(row.price_updated_at));
 }
 
@@ -359,13 +372,14 @@ function sortRows(rows) {
 }
 
 function updateSortIndicators() {
-  const [year1, year2, year3] = activeYears();
+  const [year1, year2, year3, year4] = activeYears();
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
     { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Upside (${year1}), %` },
     { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Upside (${year2}), %` },
     { element: sortUpsideYear3, key: 'upside_percent_year3', label: `Upside (${year3}), %` },
+    { element: sortUpsideYear4, key: 'upside_percent_year4', label: `Upside (${year4}), %` },
   ];
 
   sortableHeaders.forEach(({ element, key, label }) => {
@@ -401,6 +415,9 @@ function renderRows(rows) {
       <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
+      <td><input data-field="forecast_profit_year4_billion_rub" value="${mapProfitByYear(row, 3) ?? ''}" /></td>
+      <td class="readonly-cell"><span data-cell="forecast_price_year4">${formatCurrency(row.forecast_price_year4, priceDecimals)}</span></td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
         <button data-action="delete" class="btn-danger">Удалить</button>
@@ -425,6 +442,7 @@ function renderRows(rows) {
             forecast_profit_year1_billion_rub: 0,
             forecast_profit_year2_billion_rub: 1,
             forecast_profit_year3_billion_rub: 2,
+            forecast_profit_year4_billion_rub: 3,
           };
           const yearIndex = yearIndexMap[input.dataset.field];
           if (yearIndex !== undefined) {
@@ -566,6 +584,7 @@ addRowBtn.addEventListener('click', async () => {
         forecast_profit_year1_billion_rub: null,
         forecast_profit_year2_billion_rub: null,
         forecast_profit_year3_billion_rub: null,
+        forecast_profit_year4_billion_rub: null,
       }),
     });
     await loadRows();
@@ -575,17 +594,13 @@ addRowBtn.addEventListener('click', async () => {
 });
 
 setInterval(async () => {
+  if (isEditingInput()) return;
   try {
-    await api(`/api/rows/refresh?table_id=${appState.activeTableId}`, { method: 'POST' });
-    if (!isEditingInput()) {
-      await loadRows();
-    } else {
-      setGlobalStatus('Фоновое обновление выполнено (применится после выхода из поля)');
-    }
+    await loadRows();
   } catch (err) {
-    console.error('Не удалось обновить цены:', err);
+    console.error('Не удалось обновить таблицу:', err);
   }
-}, 10 * 60 * 1000);
+}, 60 * 1000);
 
 sortButtons.forEach((button) => {
   button.addEventListener('click', () => {

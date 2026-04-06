@@ -11,6 +11,7 @@ class StockRowBase(BaseModel):
     forecast_profit_year1_billion_rub: float | None = Field(default=None)
     forecast_profit_year2_billion_rub: float | None = Field(default=None)
     forecast_profit_year3_billion_rub: float | None = Field(default=None)
+    forecast_profit_year4_billion_rub: float | None = Field(default=None)
     net_profit_year_map: dict[str, float | None] | None = Field(default=None)
     net_profit_source_comment: str | None = Field(default=None, max_length=512)
 
@@ -30,9 +31,11 @@ class StockRowRead(StockRowBase):
     forecast_price_year1: float | None
     forecast_price_year2: float | None
     forecast_price_year3: float | None
+    forecast_price_year4: float | None
     upside_percent_year1: float | None
     upside_percent_year2: float | None
     upside_percent_year3: float | None
+    upside_percent_year4: float | None
     status_message: str | None
     price_updated_at: datetime | None
     created_at: datetime

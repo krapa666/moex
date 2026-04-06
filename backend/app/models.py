@@ -21,16 +21,19 @@ class StockRow(Base):
     forecast_profit_year1_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_profit_year2_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_profit_year3_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_profit_year4_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
     net_profit_year_map: Mapped[dict[str, float | None] | None] = mapped_column(JSON, nullable=True)
     net_profit_source_comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     forecast_price_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_price_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_price_year3: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_price_year4: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     upside_percent_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
     upside_percent_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
     upside_percent_year3: Mapped[float | None] = mapped_column(Float, nullable=True)
+    upside_percent_year4: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     status_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
     price_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
