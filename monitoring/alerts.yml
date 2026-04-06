@@ -1,0 +1,20 @@
+groups:
+  - name: moex-backend-alerts
+    rules:
+      - alert: BackendDown
+        expr: up{job="moex-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MOEX backend недоступен"
+          description: "Prometheus не может получить /metrics у backend более 2 минут"
+
+      - alert: BackendHighErrorRate
+        expr: rate(http_requests_total{job="moex-backend",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Повышенная доля 5xx ошибок backend"
+          description: "Проверь логи backend и доступность MOEX"

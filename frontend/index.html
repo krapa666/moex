@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Справедливая цена акций MOEX</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <div>
+          <h1>Оценка справедливой цены акций (MOEX)</h1>
+          <p class="subtitle">Динамическая таблица оценки с прогнозом на 3 года.</p>
+        </div>
+        <div class="toolbar">
+          <span class="status-pill" id="global-status">Инициализация...</span>
+          <label class="toolbar-label" for="table-select">Таблица аналитика:</label>
+          <select id="table-select"></select>
+          <input id="analyst-name-input" placeholder="Имя аналитика" />
+          <button class="btn" id="save-analyst-btn">Сохранить имя</button>
+          <button class="btn" id="add-table-btn">+ Таблица</button>
+          <button class="btn" id="shift-year-back-btn">Сдвиг -1 год</button>
+          <button class="btn" id="shift-year-btn">Сдвиг +1 год</button>
+          <button class="btn btn-primary" id="add-row-btn">Добавить строку</button>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th><button class="th-sort" id="sort-ticker" data-sort="ticker">Тикер ⇅</button></th>
+                <th>Текущая цена, ₽</th>
+                <th>Кол-во акций, млрд шт</th>
+                <th><button class="th-sort" id="sort-market-cap" data-sort="market_cap_billion_rub">Капитализация, млрд ₽ ⇅</button></th>
+                <th>Средний P/E (5 лет)</th>
+                <th id="header-profit-year1">Прогнозная ЧП (2026), млрд ₽</th>
+                <th id="header-price-year1">Прогнозная цена (2026), ₽</th>
+                <th><button class="th-sort" id="sort-upside-year1" data-sort="upside_percent_year1">Upside (2026), % ⇅</button></th>
+                <th id="header-profit-year2">Прогнозная ЧП (2027), млрд ₽</th>
+                <th id="header-price-year2">Прогнозная цена (2027), ₽</th>
+                <th><button class="th-sort" id="sort-upside-year2" data-sort="upside_percent_year2">Upside (2027), % ⇅</button></th>
+                <th id="header-profit-year3">Прогнозная ЧП (2028), млрд ₽</th>
+                <th id="header-price-year3">Прогнозная цена (2028), ₽</th>
+                <th><button class="th-sort" id="sort-upside-year3" data-sort="upside_percent_year3">Upside (2028), % ⇅</button></th>
+                <th>Обновлено</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="rows-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
