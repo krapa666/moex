@@ -87,3 +87,15 @@ class TickerComparisonItem(BaseModel):
     status_message: str | None
     price_updated_at: datetime | None
     years: list[TickerComparisonYear]
+
+
+class DataTransferPath(BaseModel):
+    file_path: str = Field(min_length=1, max_length=1024)
+
+
+class DataTransferResult(BaseModel):
+    ok: bool = True
+    file_path: str
+    tables_count: int
+    rows_count: int
+    detail: str | None = None

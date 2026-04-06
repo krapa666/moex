@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +17,8 @@ from .schemas import (
     AnalystTableCreate,
     AnalystTableRead,
     AnalystTableUpdate,
+    DataTransferPath,
+    DataTransferResult,
     StockRowCreate,
     StockRowRead,
     StockRowUpdate,
@@ -199,6 +203,143 @@ def serialize_tables(tables: list[AnalystTable]) -> list[dict]:
     return [serialize_table(table, index + 1) for index, table in enumerate(tables)]
 
 
+def resolve_data_file_path(file_path: str) -> Path:
+    candidate = Path(file_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    return candidate.resolve()
+
+
+def export_database_to_path(db: Session, file_path: str) -> dict:
+    path = resolve_data_file_path(file_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    tables = get_tables_ordered(db)
+    rows = db.scalars(select(StockRow).order_by(StockRow.table_id.asc(), StockRow.id.asc())).all()
+    payload = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "tables": [
+            {
+                "id": table.id,
+                "analyst_name": table.analyst_name,
+                "year_offset": table.year_offset,
+                "sort_order": table.sort_order,
+            }
+            for table in tables
+        ],
+        "rows": [
+            {
+                "table_id": row.table_id,
+                "ticker": row.ticker,
+                "current_price": row.current_price,
+                "shares_billion": row.shares_billion,
+                "market_cap_billion_rub": row.market_cap_billion_rub,
+                "pe_avg_5y": row.pe_avg_5y,
+                "forecast_profit_year1_billion_rub": row.forecast_profit_year1_billion_rub,
+                "forecast_profit_year2_billion_rub": row.forecast_profit_year2_billion_rub,
+                "forecast_profit_year3_billion_rub": row.forecast_profit_year3_billion_rub,
+                "forecast_profit_year4_billion_rub": row.forecast_profit_year4_billion_rub,
+                "net_profit_year_map": row.net_profit_year_map,
+                "net_profit_source_comment": row.net_profit_source_comment,
+                "forecast_price_year1": row.forecast_price_year1,
+                "forecast_price_year2": row.forecast_price_year2,
+                "forecast_price_year3": row.forecast_price_year3,
+                "forecast_price_year4": row.forecast_price_year4,
+                "upside_percent_year1": row.upside_percent_year1,
+                "upside_percent_year2": row.upside_percent_year2,
+                "upside_percent_year3": row.upside_percent_year3,
+                "upside_percent_year4": row.upside_percent_year4,
+                "status_message": row.status_message,
+                "price_updated_at": row.price_updated_at.isoformat() if row.price_updated_at else None,
+            }
+            for row in rows
+        ],
+    }
+
+    with path.open("w", encoding="utf-8") as fp:
+        json.dump(payload, fp, ensure_ascii=False, indent=2)
+    return {"file_path": str(path), "tables_count": len(tables), "rows_count": len(rows)}
+
+
+def import_database_from_path(db: Session, file_path: str) -> dict:
+    path = resolve_data_file_path(file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Файл не найден: {path}")
+
+    with path.open("r", encoding="utf-8") as fp:
+        payload = json.load(fp)
+
+    tables_data = payload.get("tables")
+    rows_data = payload.get("rows")
+    if not isinstance(tables_data, list) or not isinstance(rows_data, list):
+        raise HTTPException(status_code=400, detail="Некорректный формат файла выгрузки")
+
+    existing_rows = db.scalars(select(StockRow)).all()
+    for row in existing_rows:
+        db.delete(row)
+    existing_tables = db.scalars(select(AnalystTable)).all()
+    for table in existing_tables:
+        db.delete(table)
+    db.flush()
+
+    table_id_map: dict[int, int] = {}
+    for table_data in tables_data:
+        new_table = AnalystTable(
+            analyst_name=str(table_data.get("analyst_name") or "Аналитик"),
+            year_offset=int(table_data.get("year_offset") or 0),
+            sort_order=int(table_data.get("sort_order") or 0),
+        )
+        db.add(new_table)
+        db.flush()
+        source_id = int(table_data.get("id") or 0)
+        if source_id:
+            table_id_map[source_id] = new_table.id
+
+    imported_rows = 0
+    for row_data in rows_data:
+        source_table_id = int(row_data.get("table_id") or 0)
+        mapped_table_id = table_id_map.get(source_table_id)
+        if mapped_table_id is None:
+            continue
+        price_updated_raw = row_data.get("price_updated_at")
+        price_updated = None
+        if isinstance(price_updated_raw, str) and price_updated_raw:
+            try:
+                price_updated = datetime.fromisoformat(price_updated_raw)
+            except ValueError:
+                price_updated = None
+
+        row = StockRow(
+            table_id=mapped_table_id,
+            ticker=str(row_data.get("ticker") or "").strip().upper(),
+            current_price=row_data.get("current_price"),
+            shares_billion=row_data.get("shares_billion"),
+            market_cap_billion_rub=row_data.get("market_cap_billion_rub"),
+            pe_avg_5y=row_data.get("pe_avg_5y"),
+            forecast_profit_year1_billion_rub=row_data.get("forecast_profit_year1_billion_rub"),
+            forecast_profit_year2_billion_rub=row_data.get("forecast_profit_year2_billion_rub"),
+            forecast_profit_year3_billion_rub=row_data.get("forecast_profit_year3_billion_rub"),
+            forecast_profit_year4_billion_rub=row_data.get("forecast_profit_year4_billion_rub"),
+            net_profit_year_map=row_data.get("net_profit_year_map"),
+            net_profit_source_comment=row_data.get("net_profit_source_comment"),
+            forecast_price_year1=row_data.get("forecast_price_year1"),
+            forecast_price_year2=row_data.get("forecast_price_year2"),
+            forecast_price_year3=row_data.get("forecast_price_year3"),
+            forecast_price_year4=row_data.get("forecast_price_year4"),
+            upside_percent_year1=row_data.get("upside_percent_year1"),
+            upside_percent_year2=row_data.get("upside_percent_year2"),
+            upside_percent_year3=row_data.get("upside_percent_year3"),
+            upside_percent_year4=row_data.get("upside_percent_year4"),
+            status_message=row_data.get("status_message"),
+            price_updated_at=price_updated,
+        )
+        db.add(row)
+        imported_rows += 1
+
+    db.commit()
+    return {"file_path": str(path), "tables_count": len(tables_data), "rows_count": imported_rows}
+
+
 def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
     years = [BASE_FORECAST_YEAR + year_offset + i for i in range(4)]
     profit_map = row.net_profit_year_map or {}
@@ -357,6 +498,18 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/data/export", response_model=DataTransferResult)
+def export_data(payload: DataTransferPath, db: Session = Depends(get_db)):
+    result = export_database_to_path(db, payload.file_path)
+    return {**result, "ok": True, "detail": "Выгрузка выполнена"}
+
+
+@app.post("/api/data/import", response_model=DataTransferResult)
+def import_data(payload: DataTransferPath, db: Session = Depends(get_db)):
+    result = import_database_from_path(db, payload.file_path)
+    return {**result, "ok": True, "detail": "Загрузка выполнена"}
 
 
 @app.get("/api/tables", response_model=list[AnalystTableRead])

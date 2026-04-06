@@ -8,6 +8,9 @@ const analystNameInput = document.getElementById('analyst-name-input');
 const saveAnalystBtn = document.getElementById('save-analyst-btn');
 const shiftYearBackBtn = document.getElementById('shift-year-back-btn');
 const shiftYearBtn = document.getElementById('shift-year-btn');
+const dataFilePathInput = document.getElementById('data-file-path-input');
+const exportDataBtn = document.getElementById('export-data-btn');
+const importDataBtn = document.getElementById('import-data-btn');
 const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
@@ -43,6 +46,7 @@ const appState = {
 };
 const AUTOSAVE_DELAY_MS = 1800;
 const BASE_FORECAST_YEAR = new Date().getFullYear();
+const DEFAULT_DATA_FILE_PATH = './backups/manual/moex-data.json';
 const RU_TO_EN_LAYOUT_MAP = {
   й: 'q',
   ц: 'w',
@@ -177,6 +181,11 @@ function setGlobalStatus(text) {
   if (globalStatus) {
     globalStatus.textContent = text;
   }
+}
+
+function getDataFilePath() {
+  const value = (dataFilePathInput?.value || '').trim();
+  return value || DEFAULT_DATA_FILE_PATH;
 }
 
 function activeTable() {
@@ -796,6 +805,46 @@ addRowBtn.addEventListener('click', async () => {
   }
 });
 
+exportDataBtn?.addEventListener('click', async () => {
+  const path = getDataFilePath();
+  if (!path) {
+    alert('Укажите путь для выгрузки.');
+    return;
+  }
+  try {
+    const result = await api('/api/data/export', {
+      method: 'POST',
+      body: JSON.stringify({ file_path: path }),
+    });
+    alert(`Выгрузка завершена:\n${result.file_path}\nТаблиц: ${result.tables_count}, строк: ${result.rows_count}`);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+importDataBtn?.addEventListener('click', async () => {
+  const path = getDataFilePath();
+  if (!path) {
+    alert('Укажите путь для загрузки.');
+    return;
+  }
+  const approved = confirm(`Загрузить данные из файла?\n${path}\n\nТекущие данные в БД будут заменены.`);
+  if (!approved) return;
+  try {
+    const result = await api('/api/data/import', {
+      method: 'POST',
+      body: JSON.stringify({ file_path: path }),
+    });
+    await loadTables();
+    appState.activeTableId = appState.tables[0]?.id ?? null;
+    renderTableSelector();
+    await loadRows();
+    alert(`Загрузка завершена:\n${result.file_path}\nТаблиц: ${result.tables_count}, строк: ${result.rows_count}`);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
 setInterval(async () => {
   if (isEditingInput()) return;
   try {
@@ -824,6 +873,9 @@ sortButtons.forEach((button) => {
 
 async function initApp() {
   try {
+    if (dataFilePathInput && !dataFilePathInput.value) {
+      dataFilePathInput.value = DEFAULT_DATA_FILE_PATH;
+    }
     await loadTables();
     updateSortIndicators();
     await loadRows();
