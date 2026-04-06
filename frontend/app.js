@@ -134,6 +134,16 @@ function ensureComparisonTooltip() {
   return tooltip;
 }
 
+function ensureComparisonBackdrop() {
+  let backdrop = document.getElementById('ticker-comparison-backdrop');
+  if (backdrop) return backdrop;
+  backdrop = document.createElement('div');
+  backdrop.id = 'ticker-comparison-backdrop';
+  backdrop.className = 'ticker-comparison-backdrop hidden';
+  document.body.appendChild(backdrop);
+  return backdrop;
+}
+
 function parseInputNumber(value) {
   if (value === '' || value === null || value === undefined) {
     return null;
@@ -382,6 +392,7 @@ function moveTooltip(event, anchorRect = null) {
 
 function hideTickerTooltip() {
   ensureComparisonTooltip().classList.add('hidden');
+  ensureComparisonBackdrop().classList.add('hidden');
 }
 
 async function showTickerTooltip(event, ticker, anchorRect = null) {
@@ -391,7 +402,9 @@ async function showTickerTooltip(event, ticker, anchorRect = null) {
     return;
   }
   const tooltip = ensureComparisonTooltip();
+  const backdrop = ensureComparisonBackdrop();
   moveTooltip(event, anchorRect);
+  backdrop.classList.remove('hidden');
   tooltip.classList.remove('hidden');
   tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(normalizedTicker)}</div><div>Загрузка сравнения...</div>`;
 
