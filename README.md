@@ -50,6 +50,18 @@ docker compose up --build
 - Grafana UI: [http://localhost:3000](http://localhost:3000)
 - Loki readiness: [http://localhost:3100/ready](http://localhost:3100/ready)
 
+## Автовыгрузка после коммита (GitHub + GitLab)
+
+В репозитории настроен локальный git-hook `.githooks/post-commit`, который после каждого `git commit` автоматически пытается выполнить:
+
+- `git push github <текущая_ветка>`
+- `git push gitlab <текущая_ветка>`
+
+Используемые remote:
+
+- `github` → `https://github.com/krapa666/project.git`
+- `gitlab` → `https://gitlab.com/krapa/moex.git`
+
 Ссылки на остальные микросервисы (внутри docker-сети):
 - Promtail metrics: `http://promtail:9080/metrics`
 - Node Exporter metrics: `http://node-exporter:9100/metrics`
