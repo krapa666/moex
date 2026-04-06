@@ -1,399 +1,324 @@
-# Приложение оценки справедливой цены акций MOEX
+# MOEX Fair Price — полное руководство
 
-**Версия приложения:** `v6.0.0`
+> Полнофункциональное приложение для оценки справедливой цены акций MOEX с поддержкой нескольких таблиц аналитиков, автоматическим обновлением цен, мониторингом и развёртыванием через Docker Compose / Minikube.
 
-Приложение запускается как стек сервисов:
-- `db` — PostgreSQL 16;
-- `backend` — FastAPI + SQLAlchemy;
-- `frontend` — статический UI на Nginx;
-- `pgbackup` — автоматические бэкапы PostgreSQL;
-- `prometheus` — сбор метрик;
-- `grafana` — дашборды и визуализация;
-- `loki` + `promtail` — сбор и просмотр логов;
-- `node-exporter` — метрики хоста (CPU/RAM/Disk).
-- Docker-образы backend/frontend собираются через multi-stage Dockerfile для уменьшения итогового размера.
-- Для совместимости в контейнере включены базовые collectors `node-exporter` без `systemd`-collector (чтобы не требовался доступ к DBus на хосте).
+---
 
-## Функции
-- Динамическая таблица: пользователь добавляет/удаляет строки.
-- До 10 независимых копий таблицы по аналитикам (переключение активной таблицы и имя аналитика).
-- Хранение текущего состояния таблицы в PostgreSQL.
-- Автоподгрузка текущих цен по тикерам MOEX через ISS API (обновление раз в 10 минут).
-- Для низколиквидных тикеров используется fallback на `PREVPRICE`, если нет текущей сделки.
-- Фоновое обновление цен выполняется только backend-job каждые 10 минут.
-- Явные сообщения об ошибках для невалидных тикеров.
-- Авторасчёт:
-  - капитализации (в млрд ₽): `цена * количество_акций_в_млрд`;
-  - прогнозной цены (₽) для 4 календарных лет: `прогнозная_прибыль_в_млрд * P/E / количество_акций_в_млрд`;
-  - upside (%) для 4 календарных лет: `(прогнозная_цена - текущая_цена) / текущая_цена * 100`.
-- Интерфейс на русском с форматированием чисел до 2 знаков.
-- Динамический сдвиг горизонта прогноза на год вперёд и назад с сохранением ЧП за календарным годом.
-- Обновлённый UI: премиальный лаконичный стиль, sticky-header, визуальное выделение upside.
-- Сортировка таблицы по тикеру и upside для каждого из 4 прогнозных лет по клику на заголовки столбцов (индикаторы `⇅/↑/↓`).
-- Upside отображается целым числом процентов, а прогнозная цена — с точностью исходной текущей цены (до 10 знаков после запятой).
-- Изменения в полях применяются на лету (в т.ч. при переходе в другое поле), при этом активный фокус ввода не сбрасывается.
-- Подготовка к мониторингу: backend экспортирует `/metrics` в формате Prometheus.
-- Мониторинг (Prometheus + Grafana) запускается вместе с приложением по умолчанию.
-- Сбор и просмотр логов через Loki + Promtail в Grafana.
-- Добавлены базовые alert-правила Prometheus (`monitoring/alerts.yml`).
+## 1. Что умеет система
 
-## Запуск
+### 1.1 Бизнес-функции
+- Ведение **таблиц аналитиков** (до 10 таблиц).
+- Для каждой строки по тикеру:
+  - текущая цена,
+  - количество акций (млрд),
+  - средний P/E,
+  - прогнозная чистая прибыль на 4 года,
+  - расчёт прогнозной цены и Upside на 4 года.
+- Автоматический пересчёт производных полей при изменении входных данных.
+- Автосинхронизация строк с одинаковыми тикерами между таблицами.
+- Поддержка «основной» таблицы:
+  - только в основной таблице редактируются `Кол-во акций` и `P/E`;
+  - можно выбрать любую таблицу как основную.
+
+### 1.2 Работа с ценами MOEX
+- Backend получает цену по ISS API MOEX.
+- При отсутствии сделок применяется fallback на `PREVPRICE`.
+- Фоновое обновление цен раз в 10 минут.
+
+### 1.3 UI-функции
+- Русскоязычный интерфейс.
+- Sticky-header, сортировки по тикеру/капитализации/upside.
+- Автосохранение редактирования.
+- Сравнение по тикеру: при наведении на тикер показываются дополнительные строки из других таблиц (внутри основной таблицы), с визуальным выделением группы.
+
+---
+
+## 2. Архитектура
+
+## 2.1 Компоненты
+- `frontend` (Nginx + static SPA):
+  - отдаёт `index.html`, `app.js`, `styles.css`;
+  - проксирует `/api` и `/metrics` в backend.
+- `backend` (FastAPI + SQLAlchemy + Alembic):
+  - API и бизнес-логика,
+  - фоновая задача обновления цен,
+  - экспорт метрик Prometheus.
+- `db` (PostgreSQL 16):
+  - хранение таблиц аналитиков и строк тикеров.
+- `monitoring`:
+  - `prometheus`, `grafana`, `loki`, `promtail`, `node-exporter`.
+- `pgbackup`:
+  - периодические бэкапы БД.
+
+## 2.2 Поток данных (кратко)
+1. Пользователь редактирует строку во frontend.
+2. Frontend отправляет `PUT /api/rows/{id}`.
+3. Backend сохраняет данные, пересчитывает производные поля, при необходимости синхронизирует данные в других таблицах.
+4. Frontend обновляет отображение.
+
+## 2.3 Структура проекта
+- `backend/app/` — API, модели, сервисы.
+- `backend/alembic/` — миграции.
+- `backend/tests/` — unit-тесты.
+- `frontend/` — статический клиент.
+- `k8s/` — манифесты Kubernetes.
+- `scripts/` — сценарии запуска/остановки.
+- `monitoring/` — конфиги Prometheus/Grafana/Loki.
+- `deploy/nginx/` — шаблоны reverse-proxy.
+
+---
+
+## 3. Модель данных
+
+## 3.1 Основные сущности
+- `analyst_tables`
+  - `id`, `analyst_name`, `year_offset`, `sort_order`, `created_at`.
+- `stock_rows`
+  - `table_id`, `ticker`, `current_price`, `shares_billion`, `pe_avg_5y`,
+  - `forecast_profit_year1..4_billion_rub`,
+  - `forecast_price_year1..4`,
+  - `upside_percent_year1..4`,
+  - `net_profit_year_map`, `status_message`, timestamps.
+
+## 3.2 Миграции
+- Используется Alembic, миграции в `backend/alembic/versions`.
+- Важно: revision-id в Alembic должен помещаться в `alembic_version.version_num` (`VARCHAR(32)`).
+
+---
+
+## 4. API (основное)
+
+## 4.1 Таблицы аналитиков
+- `GET /api/tables` — список таблиц в текущем порядке (основная = №1).
+- `POST /api/tables` — создать таблицу.
+- `PATCH /api/tables/{table_id}` — изменить имя/сдвиг лет.
+- `DELETE /api/tables/{table_id}` — удалить таблицу (нельзя удалить текущую основную).
+- `POST /api/tables/{table_id}/make-primary` — сделать таблицу основной.
+
+## 4.2 Строки
+- `GET /api/rows?table_id=...`
+- `POST /api/rows`
+- `PUT /api/rows/{row_id}`
+- `DELETE /api/rows/{row_id}`
+- `POST /api/rows/refresh?table_id=...`
+
+## 4.3 Сервисные endpoints
+- `GET /api/health`
+- `GET /metrics`
+- `GET /api/ticker-comparison?ticker=...`
+
+---
+
+## 5. Правила редактирования и синхронизации
+
+## 5.1 Ограничения по полям
+- Поля `shares_billion` и `pe_avg_5y`:
+  - редактируются **только в основной таблице (№1)**;
+  - в остальных таблицах — readonly.
+
+## 5.2 Автосинхронизация
+- При создании/изменении строки тикер синхронизируется между таблицами.
+- Изменения `shares_billion` и `pe_avg_5y` в основной таблице автоматически распространяются в остальные таблицы для того же тикера.
+
+## 5.3 Сравнительные строки в UI
+- При наведении на тикер:
+  - в таблицу временно вставляются строки из других таблиц по этому же тикеру;
+  - группа строк выделяется цветом.
+- При уходе курсора/blur — таблица возвращается в исходный вид.
+
+---
+
+## 6. Быстрый старт (Docker Compose)
+
+## 6.1 Запуск
 ```bash
 ./scripts/compose-up.sh
 ```
 
-После старта:
-- Frontend: [http://localhost:8080](http://localhost:8080)
-- Backend health: [http://localhost:8000/api/health](http://localhost:8000/api/health)
-- Backend metrics (через frontend proxy): [http://localhost:8080/metrics](http://localhost:8080/metrics)
-- Prometheus UI: [http://localhost:9090](http://localhost:9090)
-- Grafana UI: [http://localhost:3000](http://localhost:3000)
-- Loki readiness: [http://localhost:3100/ready](http://localhost:3100/ready)
+## 6.2 Остановка
+```bash
+./scripts/compose-down.sh
+```
 
-## Kubernetes (Minikube)
+## 6.3 Доступ после старта
+- Frontend: http://localhost:8080
+- Backend health: http://localhost:8000/api/health
+- Metrics (через proxy): http://localhost:8080/metrics
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+- Loki readiness: http://localhost:3100/ready
 
-В репозитории есть полный набор манифестов в `k8s/`:
-- namespace, secret и PVC для PostgreSQL;
-- deployment/service для `postgres`, `backend`, `frontend`;
-- ingress и `kustomization.yaml`.
+---
 
-### Быстрый запуск одной командой
+## 7. Развёртывание в Minikube
+
+## 7.1 One-step запуск
 ```bash
 ./scripts/minikube-up.sh
 ```
 
-Скрипт сам:
-- поднимет Minikube и включит ingress addon;
-- соберёт образы backend/frontend внутри Docker Minikube;
-- дождётся готовности ingress admission webhook;
-- применит core-манифесты и затем ingress (отдельным шагом);
-- дождётся готовности `postgres`, `backend`, `frontend`;
-- покажет URL доступа;
-- попытается автоматически перегенерировать и перезагрузить Nginx reverse-proxy для `http://junibox/`.
-
-Если нужно пропустить шаг с Nginx (например, локальная машина без Nginx):
+Опции:
 ```bash
 ./scripts/minikube-up.sh --skip-nginx
 ```
 
-### Корректное завершение Minikube-режима одной командой
+## 7.2 One-step остановка
 ```bash
 ./scripts/minikube-down.sh
-```
-
-Если нужно остановить приложение, но оставить кластер поднятым:
-```bash
+# или оставить кластер:
 ./scripts/minikube-down.sh --keep-minikube
 ```
 
-### 1) Подготовка Minikube
+## 7.3 Ручной контур (если нужно)
 ```bash
 minikube start
 minikube addons enable ingress
-kubectl version --client
-kubectl get nodes
-```
-
-### 2) Сборка образов внутри Docker Minikube
-```bash
-eval $(minikube docker-env)
+eval "$(minikube docker-env)"
 docker build -t krapa666/moex-backend:latest backend
 docker build -t krapa666/moex-frontend:latest frontend
-```
-
-### 3) Применение манифестов
-```bash
 kubectl apply -k k8s
-kubectl -n moex get pods,svc,ingress,pvc
 ```
 
-### 4) Доступ к приложению
-Прямой доступ через NodePort (работает даже если ingress/host proxy ещё не настроен):
-```bash
-minikube service -n moex frontend --url
-# или
-echo "http://$(minikube ip):30080/"
-```
+---
 
-Доступ через Ingress (`http://junibox/`):
-```bash
-curl -I http://junibox/
-```
+## 8. Развёртывание на домашнем сервере (junibox)
 
-Если Minikube запущен в отдельной VM/контейнере, чтобы `http://junibox/` работал так же как раньше
-через системный Nginx, используй подготовленный конфиг:
-
-```bash
-sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
-```
-
-Важно: после `minikube stop/start` IP Minikube может измениться, и прокси-конфиг нужно
-перегенерировать этой же командой, иначе возможен `502 Bad Gateway`.
-
-### 5) Проверка backend
-```bash
-kubectl -n moex get pods
-kubectl -n moex logs deploy/backend --tail=100
-kubectl -n moex port-forward svc/backend 8000:8000
-curl http://127.0.0.1:8000/api/health
-```
-
-### 6) Обновление в Minikube
-```bash
-eval $(minikube docker-env)
-docker build -t krapa666/moex-backend:latest backend
-docker build -t krapa666/moex-frontend:latest frontend
-kubectl -n moex rollout restart deploy/backend deploy/frontend
-kubectl -n moex rollout status deploy/backend
-kubectl -n moex rollout status deploy/frontend
-```
-
-### 7) Удаление
-```bash
-kubectl delete -k k8s
-```
-
-## Переключение между режимами запуска
-
-### Перейти на Minikube
-```bash
-./scripts/minikube-up.sh
-```
-
-### Вернуться на Docker Compose
-```bash
-./scripts/minikube-down.sh
-./scripts/compose-up.sh
-```
-
-### Если видишь ошибку вида `no route to host 192.168.49.2:2376`
-Это значит, что текущий shell всё ещё направляет Docker-клиент в Minikube daemon.
-Используй:
-```bash
-eval $(minikube docker-env -u)
-./scripts/compose-up.sh
-./scripts/compose-down.sh
-```
-
-## Автовыгрузка после коммита (GitHub + GitLab)
-
-В репозитории настроен локальный git-hook `.githooks/post-commit`, который после каждого `git commit` автоматически пытается выполнить:
-
-- `git push github HEAD:main`
-- `git push gitlab HEAD:main`
-
-Используемые remote:
-
-- `github` → `https://github.com/krapa666/moex.git`
-- `gitlab` → `https://gitlab.com/krapa/moex.git`
-
-Для token-based пуша хук поддерживает переменные окружения:
-
-- `GITHUB_TOKEN`
-- `GITLAB_TOKEN`
-
-Ссылки на остальные микросервисы (внутри docker-сети):
-- Promtail metrics: `http://promtail:9080/metrics`
-- Node Exporter metrics: `http://node-exporter:9100/metrics`
-- PgBackup health endpoint: `http://pgbackup:8080/`
-
-## Примечания по мониторингу
-Мониторинг запускается автоматически при обычном старте:
-```bash
-docker compose up --build
-```
-
-После запуска:
-- Prometheus: [http://localhost:9090](http://localhost:9090)
-- Grafana: [http://localhost:3000](http://localhost:3000)
-- Loki readiness: [http://localhost:3100/ready](http://localhost:3100/ready)
-
-## Миграции БД (Alembic)
-- В контейнере backend миграции применяются автоматически при старте (`alembic upgrade head`).
-- Локальный ручной запуск:
-```bash
-cd backend
-alembic upgrade head
-```
-
-## GitLab CI/CD
-- В корне добавлен `.gitlab-ci.yml` с этапами:
-  - `lint`: запуск `ruff` для backend;
-  - `test`: запуск `pytest` для backend;
-  - `build`: сборка Docker-образов backend/frontend.
-- Pipeline настроен под локальный GitLab Runner с **Docker executor** (tag: `home-docker`) и Docker-in-Docker для build job'ов.
-
-### Настройка GitLab Runner (Docker executor) для этого проекта
-1. Зарегистрируй runner на проект и укажи тег `home-docker`.
-2. В `/etc/gitlab-runner/config.toml` для раннера проверь:
-```toml
-[[runners]]
-  executor = "docker"
-  request_concurrency = 4
-  [runners.docker]
-    privileged = true
-    image = "docker:27.1.2"
-    volumes = ["/cache"]
-  environment = ["FF_USE_ADAPTIVE_REQUEST_CONCURRENCY=true"]
-```
-3. Перезапусти runner:
-```bash
-sudo systemctl restart gitlab-runner
-```
-4. Если на сервере несколько runner'ов — выставь `request_concurrency` в диапазон `2..4` у каждого, чтобы избежать bottleneck при long polling.
-
-## Версионирование
-- Текущая версия: `v6.0.0`
-- Формат версий: `MAJOR.MINOR.PATCH`
-  - `MAJOR` — несовместимые изменения API/модели данных,
-  - `MINOR` — новые функции без поломки совместимости,
-  - `PATCH` — исправления ошибок и мелкие улучшения.
-
-## Разворачивание на домашнем сервере (junibox)
-
-Ниже последовательность действий «с нуля» для Linux-сервера с уже установленным Nginx.
-
-### 1) Установка зависимостей на сервере
+## 8.1 Базовые зависимости
 ```bash
 sudo apt update
 sudo apt install -y git docker.io docker-compose-plugin nginx
-sudo usermod -aG docker $USER
-newgrp docker
 ```
 
-Проверь:
-```bash
-docker --version
-docker compose version
-nginx -v
-```
-
-### 2) Клонирование проекта
+## 8.2 Клонирование и запуск
 ```bash
 cd /opt
 sudo git clone https://gitlab.com/krapa/moex.git
 sudo chown -R $USER:$USER /opt/moex
 cd /opt/moex
-```
-
-### 3) Запуск сервисов проекта (приложение + мониторинг одной командой)
-```bash
 ./scripts/compose-up.sh
 ```
 
-Проверка контейнеров:
+## 8.3 Nginx-конфиг
 ```bash
-docker compose ps
-```
-
-### 4) Установка Nginx-конфига reverse proxy
-
-В репозитории уже подготовлен конфиг:
-- `deploy/nginx/home-server.conf`
-
-Скопируй его в системный Nginx:
-```bash
-sudo cp /opt/moex/deploy/nginx/home-server.conf /etc/nginx/conf.d/moex.conf
-```
-
-Удалить дефолтный сайт (если мешает):
-```bash
+sudo cp deploy/nginx/home-server.conf /etc/nginx/conf.d/moex.conf
 sudo rm -f /etc/nginx/sites-enabled/default
-```
-
-Проверить и перезапустить Nginx:
-```bash
 sudo nginx -t
 sudo systemctl restart nginx
-sudo systemctl enable nginx
 ```
 
-### 5) Доступ к сервисам через веб
+---
 
-После запуска и настройки Nginx используй:
-- Приложение (frontend): [http://junibox/](http://junibox/)
-- Backend напрямую: [http://junibox/backend/api/health](http://junibox/backend/api/health)
-- Prometheus: [http://junibox/prometheus/](http://junibox/prometheus/)
-- Grafana: [http://junibox/grafana/](http://junibox/grafana/)
-- Loki readiness: [http://junibox/loki/ready](http://junibox/loki/ready)
-- Внутренние URL (доступны из docker-сети): `http://promtail:9080/metrics`, `http://node-exporter:9100/metrics`, `http://pgbackup:8080/`
-- Сервис на домашнем сервере (порт 9091): [http://junibox/torrent/](http://junibox/torrent/)
-  - Редирект вида `/transmission/web/` автоматически переписывается в `/torrent/transmission/web/`.
+## 9. Мониторинг и логи
 
-### 6) Базовая проверка после развёртывания
+- Prometheus собирает метрики backend + инфраструктуры.
+- Grafana datasource provisioning настраивается автоматически.
+- Loki + Promtail собирают логи контейнеров.
+- Готовые dashboard/alerts находятся в `monitoring/`.
+
+Полезные проверки:
 ```bash
-curl -I http://junibox/
-curl http://junibox/backend/api/health
-curl -I http://junibox/prometheus/
-curl -I http://junibox/grafana/
-curl -I http://junibox/loki/ready
-curl -I http://junibox/torrent/
+curl -s http://localhost:3100/ready
+curl -s http://localhost:8000/api/health
+curl -s http://localhost:8080/metrics | head
 ```
 
-### 7) Обновление проекта
+---
+
+## 10. Бэкапы и восстановление
+
+## 10.1 Где хранятся
+- Бэкапы в `./backups`.
+- Данные PostgreSQL в volume `postgres_data`.
+
+## 10.2 Ручной бэкап
 ```bash
-cd /opt/moex
-git pull
-./scripts/compose-up.sh
+docker compose exec db pg_dump -U postgres -d fair_price > ./backups/manual_$(date +%F_%H-%M-%S).sql
 ```
 
-### 8) Полезные команды эксплуатации
+## 10.3 Восстановление
 ```bash
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f prometheus
-docker compose logs -f grafana
-./scripts/compose-down.sh
+cat ./backups/<backup_file>.sql | docker compose exec -T db psql -U postgres -d fair_price
 ```
 
-### 9) Сохранность данных при перезапусках и потере контейнеров
-- Данные PostgreSQL сохраняются в Docker volume `postgres_data`, поэтому при обычном `./scripts/compose-down.sh` / `./scripts/compose-up.sh` данные не теряются.
-- Добавлен сервис `pgbackup`, который делает автоматические бэкапы БД по расписанию в папку `./backups`.
+---
 
-Проверка наличия бэкапов:
+## 11. Разработка
+
+## 11.1 Локальные проверки
 ```bash
-ls -lah /opt/moex/backups
+ruff check backend
+PYTHONPATH=backend pytest -q backend/tests
 ```
 
-Ручной бэкап:
+## 11.2 Миграции
 ```bash
-docker compose exec db pg_dump -U postgres -d fair_price > /opt/moex/backups/manual_$(date +%F_%H-%M-%S).sql
+cd backend
+alembic upgrade head
 ```
 
-Восстановление из бэкапа:
-```bash
-cat /opt/moex/backups/<backup_file>.sql | docker compose exec -T db psql -U postgres -d fair_price
-```
+## 11.3 Важно про совместимость схемы
+- При старте backend выполняется defensive-проверка `sort_order` для legacy БД.
+- Рекомендуется всё равно поддерживать БД в актуальном состоянии через Alembic.
 
-### 10) Если браузер показывает "не удалось загрузить данные"
-Это обычно означает, что frontend уже открылся, а backend ещё стартует (миграции БД/инициализация).
+---
 
-Порядок проверки:
+## 12. CI/CD
+
+Файл `.gitlab-ci.yml`:
+- `lint` — `ruff check backend`
+- `test` — `pytest -q backend/tests`
+- `build` — docker build backend/frontend
+
+---
+
+## 13. Troubleshooting
+
+## 13.1 `Ошибка API 502`
+Проверить backend:
 ```bash
 docker compose ps
 docker compose logs -f backend
-curl http://junibox/backend/api/health
+curl http://localhost:8000/api/health
 ```
 
-Если backend в статусе `healthy` и `{"status":"ok"}`, просто обнови страницу через 10-20 секунд.
+## 13.2 Ошибка Alembic `value too long for type character varying(32)`
+Причина: слишком длинный `revision` ID.
+Решение: использовать сокращённый revision (в проекте уже исправлено для миграции `0007`).
 
-### 11) Логи в Grafana через Loki
-Loki и Promtail запускаются вместе с приложением. Datasource'ы Prometheus и Loki подключаются в Grafana автоматически через provisioning.
-Также автоматически создаётся дашборд **MOEX Home Server & App Overview** (папка `MOEX`) с:
-- метриками домашнего сервера (CPU/RAM/Disk через Node Exporter),
-- состоянием компонентов (`backend`, `prometheus`, `loki`, `promtail`, `node-exporter`),
-- RPS/5xx backend,
-- панелью логов Loki с фильтром только важных событий (`error/warn/critical/fatal/exception/failed/timeout`).
-
-Проверка Loki:
+## 13.3 После Minikube restart `502 Bad Gateway` через `junibox`
+Перегенерируйте proxy-конфиг:
 ```bash
-curl -s http://junibox/loki/ready
+sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 ```
 
-Далее в Grafana:
-1. Открой [http://junibox/grafana/](http://junibox/grafana/)
-2. Explore → datasource `Loki`
-3. Пример запросов:
-   - `{container=\\\\"moex-backend\\\\"}`
-   - `{container=~\\\\"moex-.*\\\\"}`
-   - `{container=~\\\\"moex-(backend|db|frontend|prometheus|grafana|loki|promtail|pgbackup|node-exporter)\\\\"} |~ \\\\"(?i)(error|warn|critical|fatal|panic|exception|failed|timeout)\\\\"`
+---
+
+## 14. Безопасность и эксплуатационные замечания
+
+- Не храните токены (`GITHUB_TOKEN`, `GITLAB_TOKEN`) в репозитории.
+- Для production ограничьте CORS и доступ к служебным endpoint.
+- Регулярно проверяйте алерты Prometheus и ротацию бэкапов.
+
+---
+
+## 15. Версионирование
+
+- Формат: `MAJOR.MINOR.PATCH`.
+- `MAJOR` — несовместимые изменения API/данных.
+- `MINOR` — новый функционал без поломки обратной совместимости.
+- `PATCH` — исправления.
+
+---
+
+## 16. Краткий чеклист первого запуска
+
+1. `./scripts/compose-up.sh`
+2. Открыть `http://localhost:8080`
+3. Проверить `http://localhost:8000/api/health`
+4. Проверить Grafana/Prometheus
+5. Выполнить пробное добавление тикера и проверить авторасчёты
+6. Проверить сравнение между таблицами
+
+---
+
+Если хотите, следующим шагом могу сделать отдельные разделы в README с примерами API-запросов (`curl`) для каждого endpoint и отдельный runbook для production-аварий (что проверять в каком порядке). 
