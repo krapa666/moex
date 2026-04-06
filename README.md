@@ -65,7 +65,8 @@ docker compose up --build
 Скрипт сам:
 - поднимет Minikube и включит ingress addon;
 - соберёт образы backend/frontend внутри Docker Minikube;
-- применит `kubectl apply -k k8s`;
+- дождётся готовности ingress admission webhook;
+- применит core-манифесты и затем ingress (отдельным шагом);
 - дождётся готовности `postgres`, `backend`, `frontend`;
 - покажет URL доступа.
 
