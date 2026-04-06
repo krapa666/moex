@@ -1,6 +1,7 @@
 const tbody = document.getElementById('rows-table-body');
 const addRowBtn = document.getElementById('add-row-btn');
 const addTableBtn = document.getElementById('add-table-btn');
+const deleteTableBtn = document.getElementById('delete-table-btn');
 const tableSelect = document.getElementById('table-select');
 const analystNameInput = document.getElementById('analyst-name-input');
 const saveAnalystBtn = document.getElementById('save-analyst-btn');
@@ -197,12 +198,16 @@ function renderTableSelector() {
   appState.tables.forEach((table) => {
     const option = document.createElement('option');
     option.value = String(table.id);
-    option.textContent = table.analyst_name;
+    option.textContent = `№${table.table_number} — ${table.analyst_name}`;
     if (table.id === appState.activeTableId) option.selected = true;
     tableSelect.appendChild(option);
   });
   const current = activeTable();
   if (analystNameInput && current) analystNameInput.value = current.analyst_name;
+  if (deleteTableBtn) {
+    deleteTableBtn.disabled = !current || current.table_number === 1;
+    deleteTableBtn.title = current?.table_number === 1 ? 'Таблица №1 защищена от удаления' : '';
+  }
   applyYearHeaders();
   updateSortIndicators();
 }
@@ -503,10 +508,26 @@ addTableBtn?.addEventListener('click', async () => {
   if (!desiredName) return;
   await api('/api/tables', {
     method: 'POST',
-    body: JSON.stringify({ analyst_name: desiredName, source_table_id: appState.activeTableId }),
+    body: JSON.stringify({ analyst_name: desiredName }),
   });
   await loadTables();
   appState.activeTableId = appState.tables.at(-1)?.id ?? appState.activeTableId;
+  renderTableSelector();
+  await loadRows();
+});
+
+deleteTableBtn?.addEventListener('click', async () => {
+  const current = activeTable();
+  if (!current) return;
+  if (current.table_number === 1) {
+    alert('Таблица №1 является основной и не может быть удалена.');
+    return;
+  }
+  const approved = confirm(`Удалить таблицу №${current.table_number} «${current.analyst_name}»?`);
+  if (!approved) return;
+  await api(`/api/tables/${current.id}`, { method: 'DELETE' });
+  await loadTables();
+  appState.activeTableId = appState.tables[0]?.id ?? null;
   renderTableSelector();
   await loadRows();
 });

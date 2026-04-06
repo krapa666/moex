@@ -54,6 +54,7 @@ class AnalystTableUpdate(BaseModel):
 
 class AnalystTableRead(BaseModel):
     id: int
+    table_number: int
     analyst_name: str
     year_offset: int
     created_at: datetime

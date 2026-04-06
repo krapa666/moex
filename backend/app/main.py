@@ -75,6 +75,24 @@ def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
     return table
 
 
+def get_tables_ordered(db: Session) -> list[AnalystTable]:
+    return db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc())).all()
+
+
+def serialize_table(table: AnalystTable, table_number: int) -> dict:
+    return {
+        "id": table.id,
+        "table_number": table_number,
+        "analyst_name": table.analyst_name,
+        "year_offset": table.year_offset,
+        "created_at": table.created_at,
+    }
+
+
+def serialize_tables(tables: list[AnalystTable]) -> list[dict]:
+    return [serialize_table(table, index + 1) for index, table in enumerate(tables)]
+
+
 def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
     years = [BASE_FORECAST_YEAR + year_offset + i for i in range(3)]
     profit_map = row.net_profit_year_map or {}
@@ -101,15 +119,16 @@ def health() -> dict[str, str]:
 @app.get("/api/tables", response_model=list[AnalystTableRead])
 def get_tables(db: Session = Depends(get_db)):
     ensure_default_table(db)
-    return db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc())).all()
+    return serialize_tables(get_tables_ordered(db))
 
 
 @app.post("/api/tables", response_model=AnalystTableRead)
 def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
+    ensure_default_table(db)
     total = db.query(AnalystTable).count()
     if total >= 10:
         raise HTTPException(status_code=400, detail="Можно создать не более 10 таблиц")
-    source_table = get_table_or_404(db, payload.source_table_id) if payload.source_table_id is not None else None
+    source_table = db.get(AnalystTable, 1) or db.scalars(select(AnalystTable).order_by(AnalystTable.id.asc()).limit(1)).first()
     table = AnalystTable(analyst_name=payload.analyst_name.strip(), year_offset=0)
     db.add(table)
     db.commit()
@@ -141,7 +160,9 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
                 )
             )
         db.commit()
-    return table
+    tables = get_tables_ordered(db)
+    created_index = next((index for index, item in enumerate(tables, start=1) if item.id == table.id), 1)
+    return serialize_table(table, created_index)
 
 
 @app.patch("/api/tables/{table_id}", response_model=AnalystTableRead)
@@ -157,7 +178,22 @@ def update_table(table_id: int, payload: AnalystTableUpdate, db: Session = Depen
         apply_net_profit_projection(row, table.year_offset)
     db.commit()
     db.refresh(table)
-    return table
+    tables = get_tables_ordered(db)
+    table_index = next((index for index, item in enumerate(tables, start=1) if item.id == table.id), 1)
+    return serialize_table(table, table_index)
+
+
+@app.delete("/api/tables/{table_id}")
+def delete_table(table_id: int, db: Session = Depends(get_db)):
+    if table_id == 1:
+        raise HTTPException(status_code=400, detail="Основную таблицу №1 удалять нельзя")
+    table = get_table_or_404(db, table_id)
+    rows = db.scalars(select(StockRow).where(StockRow.table_id == table.id)).all()
+    for row in rows:
+        db.delete(row)
+    db.delete(table)
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/api/rows", response_model=list[StockRowRead])
