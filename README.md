@@ -62,6 +62,11 @@ docker compose up --build
 - `github` → `https://github.com/krapa666/project.git`
 - `gitlab` → `https://gitlab.com/krapa/moex.git`
 
+Для token-based пуша хук поддерживает переменные окружения:
+
+- `GITHUB_TOKEN`
+- `GITLAB_TOKEN`
+
 Ссылки на остальные микросервисы (внутри docker-сети):
 - Promtail metrics: `http://promtail:9080/metrics`
 - Node Exporter metrics: `http://node-exporter:9100/metrics`
