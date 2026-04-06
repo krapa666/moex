@@ -47,11 +47,11 @@ if [[ -z "$MINIKUBE_IP" ]]; then
 fi
 
 FRONTEND_ENDPOINT="${MINIKUBE_IP}:30080"
-if curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
-  echo "[nginx-k8s-proxy] using frontend endpoint via minikube ip: ${FRONTEND_ENDPOINT}"
-elif curl -fsS --max-time 2 "http://127.0.0.1:30080/" >/dev/null 2>&1; then
+if curl -fsS --max-time 2 "http://127.0.0.1:30080/" >/dev/null 2>&1; then
   FRONTEND_ENDPOINT="127.0.0.1:30080"
-  echo "[nginx-k8s-proxy] minikube ip not reachable; falling back to localhost endpoint: ${FRONTEND_ENDPOINT}"
+  echo "[nginx-k8s-proxy] using localhost frontend endpoint: ${FRONTEND_ENDPOINT}"
+elif curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
+  echo "[nginx-k8s-proxy] localhost endpoint unavailable; using minikube ip endpoint: ${FRONTEND_ENDPOINT}"
 else
   echo "[nginx-k8s-proxy] warning: frontend endpoint is not reachable yet; generating config with ${FRONTEND_ENDPOINT}" >&2
 fi

@@ -5,6 +5,8 @@ NAMESPACE="moex"
 BACKEND_IMAGE="krapa666/moex-backend:latest"
 FRONTEND_IMAGE="krapa666/moex-frontend:latest"
 SKIP_NGINX=false
+PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
+PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-port-forward.log"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +32,34 @@ require_cmd() {
 require_cmd minikube
 require_cmd kubectl
 require_cmd docker
+require_cmd curl
+
+start_frontend_port_forward() {
+  if [[ -f "${PORT_FORWARD_PID_FILE}" ]]; then
+    local existing_pid
+    existing_pid="$(cat "${PORT_FORWARD_PID_FILE}" 2>/dev/null || true)"
+    if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" >/dev/null 2>&1; then
+      echo "[minikube-up] frontend port-forward already running (pid: ${existing_pid})"
+      return
+    fi
+    rm -f "${PORT_FORWARD_PID_FILE}"
+  fi
+
+  echo "[minikube-up] starting frontend port-forward on 127.0.0.1:30080..."
+  nohup kubectl -n "${NAMESPACE}" port-forward svc/frontend 30080:80 --address 127.0.0.1 >"${PORT_FORWARD_LOG_FILE}" 2>&1 &
+  local pf_pid=$!
+  echo "${pf_pid}" > "${PORT_FORWARD_PID_FILE}"
+
+  for _ in $(seq 1 30); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:30080/" >/dev/null 2>&1; then
+      echo "[minikube-up] frontend port-forward is ready (pid: ${pf_pid})"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "[minikube-up] warning: port-forward did not become ready in time; see ${PORT_FORWARD_LOG_FILE}" >&2
+}
 
 wait_for_ingress_admission() {
   echo "[minikube-up] waiting for ingress-nginx controller rollout..."
@@ -82,6 +112,7 @@ echo "[minikube-up] waiting for deployments..."
 kubectl -n "${NAMESPACE}" rollout status deploy/postgres --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
+start_frontend_port_forward
 
 echo "[minikube-up] done"
 echo "[minikube-up] frontend URL (NodePort):"
