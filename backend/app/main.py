@@ -154,6 +154,24 @@ def get_primary_table(db: Session) -> AnalystTable | None:
     return tables[0] if tables else None
 
 
+def get_primary_row_by_ticker(db: Session, ticker: str) -> StockRow | None:
+    primary = get_primary_table(db)
+    normalized_ticker = ticker.strip().upper()
+    if primary is None or not normalized_ticker:
+        return None
+    return db.scalars(
+        select(StockRow).where(StockRow.table_id == primary.id, StockRow.ticker == normalized_ticker).limit(1)
+    ).first()
+
+
+def is_shared_fields_editable_for_table(db: Session, table_id: int, ticker: str) -> bool:
+    primary = get_primary_table(db)
+    normalized_ticker = ticker.strip().upper()
+    if primary is None or table_id == primary.id or not normalized_ticker:
+        return True
+    return get_primary_row_by_ticker(db, normalized_ticker) is None
+
+
 def serialize_table(table: AnalystTable, table_number: int) -> dict:
     return {
         "id": table.id,
@@ -419,6 +437,7 @@ def get_rows(table_id: int, db: Session = Depends(get_db)):
     rows = db.scalars(select(StockRow).where(StockRow.table_id == table_id).order_by(StockRow.id.asc())).all()
     for row in rows:
         apply_net_profit_projection(row, table.year_offset)
+        row.shared_fields_editable = is_shared_fields_editable_for_table(db, row.table_id, row.ticker)
     db.commit()
     return rows
 
@@ -426,6 +445,13 @@ def get_rows(table_id: int, db: Session = Depends(get_db)):
 @app.post("/api/rows", response_model=StockRowRead)
 async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
     table = get_table_or_404(db, payload.table_id)
+    shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
+    if not shared_fields_editable:
+        primary_row = get_primary_row_by_ticker(db, payload.ticker)
+        if primary_row is not None:
+            payload.shares_billion = primary_row.shares_billion
+            payload.pe_avg_5y = primary_row.pe_avg_5y
+
     row = StockRow(
         table_id=payload.table_id,
         ticker=payload.ticker.strip().upper(),
@@ -440,8 +466,10 @@ async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
     db.add(row)
     db.commit()
     db.refresh(row)
-    sync_row_to_other_tables(db, row)
+    if shared_fields_editable:
+        sync_row_to_other_tables(db, row)
     db.commit()
+    row.shared_fields_editable = shared_fields_editable
     return row
 
 
@@ -452,11 +480,18 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
         raise HTTPException(status_code=404, detail="Строка не найдена")
 
     table = get_table_or_404(db, payload.table_id)
+    shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
     old_ticker = row.ticker.strip().upper()
     row.table_id = payload.table_id
     row.ticker = payload.ticker.strip().upper()
-    row.shares_billion = payload.shares_billion
-    row.pe_avg_5y = payload.pe_avg_5y
+    if shared_fields_editable:
+        row.shares_billion = payload.shares_billion
+        row.pe_avg_5y = payload.pe_avg_5y
+    else:
+        primary_row = get_primary_row_by_ticker(db, row.ticker)
+        if primary_row is not None:
+            row.shares_billion = primary_row.shares_billion
+            row.pe_avg_5y = primary_row.pe_avg_5y
     row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
     apply_net_profit_projection(row, table.year_offset)
     row.net_profit_source_comment = (
@@ -464,10 +499,12 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
     )
 
     await refresh_row_price(row, force=bool(row.ticker))
-    sync_row_to_other_tables(db, row, old_ticker=old_ticker if old_ticker != row.ticker else None)
+    if shared_fields_editable:
+        sync_row_to_other_tables(db, row, old_ticker=old_ticker if old_ticker != row.ticker else None)
     sync_primary_table_multipliers(db, row)
     db.commit()
     db.refresh(row)
+    row.shared_fields_editable = shared_fields_editable
     return row
 
 

@@ -26,6 +26,7 @@ class StockRowUpdate(StockRowBase):
 
 class StockRowRead(StockRowBase):
     id: int
+    shared_fields_editable: bool = True
     current_price: float | None
     market_cap_billion_rub: float | None
     forecast_price_year1: float | None

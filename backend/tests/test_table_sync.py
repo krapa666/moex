@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.main import sync_row_to_other_tables
+from app.main import is_shared_fields_editable_for_table, sync_row_to_other_tables
 from app.models import AnalystTable, Base, StockRow
 
 
@@ -53,3 +53,22 @@ def test_sync_row_to_other_tables_copies_shared_fields_without_net_profit() -> N
                 assert row.forecast_profit_year1_billion_rub is None
                 assert row.forecast_price_year1 is None
                 assert row.upside_percent_year1 is None
+
+
+def test_shared_fields_are_editable_in_non_primary_only_for_new_ticker() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        table1 = AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1)
+        table2 = AnalystTable(analyst_name="Аналитик 2", year_offset=0, sort_order=2)
+        db.add_all([table1, table2])
+        db.commit()
+        db.refresh(table1)
+        db.refresh(table2)
+
+        db.add(StockRow(table_id=table1.id, ticker="SBER", shares_billion=21.5, pe_avg_5y=5.2))
+        db.commit()
+
+        assert is_shared_fields_editable_for_table(db, table2.id, "SBER") is False
+        assert is_shared_fields_editable_for_table(db, table2.id, "LKOH") is True
