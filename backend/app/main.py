@@ -2,9 +2,8 @@ import asyncio
 import contextlib
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import func, inspect, select, text
@@ -17,7 +16,6 @@ from .schemas import (
     AnalystTableCreate,
     AnalystTableRead,
     AnalystTableUpdate,
-    DataTransferPath,
     DataTransferResult,
     StockRowCreate,
     StockRowRead,
@@ -203,20 +201,10 @@ def serialize_tables(tables: list[AnalystTable]) -> list[dict]:
     return [serialize_table(table, index + 1) for index, table in enumerate(tables)]
 
 
-def resolve_data_file_path(file_path: str) -> Path:
-    candidate = Path(file_path).expanduser()
-    if not candidate.is_absolute():
-        candidate = Path.cwd() / candidate
-    return candidate.resolve()
-
-
-def export_database_to_path(db: Session, file_path: str) -> dict:
-    path = resolve_data_file_path(file_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
+def build_database_snapshot(db: Session) -> dict:
     tables = get_tables_ordered(db)
     rows = db.scalars(select(StockRow).order_by(StockRow.table_id.asc(), StockRow.id.asc())).all()
-    payload = {
+    return {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "tables": [
             {
@@ -256,23 +244,12 @@ def export_database_to_path(db: Session, file_path: str) -> dict:
         ],
     }
 
-    with path.open("w", encoding="utf-8") as fp:
-        json.dump(payload, fp, ensure_ascii=False, indent=2)
-    return {"file_path": str(path), "tables_count": len(tables), "rows_count": len(rows)}
 
-
-def import_database_from_path(db: Session, file_path: str) -> dict:
-    path = resolve_data_file_path(file_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Файл не найден: {path}")
-
-    with path.open("r", encoding="utf-8") as fp:
-        payload = json.load(fp)
-
-    tables_data = payload.get("tables")
-    rows_data = payload.get("rows")
+def import_database_snapshot(db: Session, payload: dict) -> dict:
+    tables_data = payload.get("tables") if isinstance(payload, dict) else None
+    rows_data = payload.get("rows") if isinstance(payload, dict) else None
     if not isinstance(tables_data, list) or not isinstance(rows_data, list):
-        raise HTTPException(status_code=400, detail="Некорректный формат файла выгрузки")
+        raise HTTPException(status_code=400, detail="Некорректный формат JSON-файла")
 
     existing_rows = db.scalars(select(StockRow)).all()
     for row in existing_rows:
@@ -337,7 +314,7 @@ def import_database_from_path(db: Session, file_path: str) -> dict:
         imported_rows += 1
 
     db.commit()
-    return {"file_path": str(path), "tables_count": len(tables_data), "rows_count": imported_rows}
+    return {"tables_count": len(tables_data), "rows_count": imported_rows}
 
 
 def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
@@ -500,16 +477,27 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/api/data/export", response_model=DataTransferResult)
-def export_data(payload: DataTransferPath, db: Session = Depends(get_db)):
-    result = export_database_to_path(db, payload.file_path)
-    return {**result, "ok": True, "detail": "Выгрузка выполнена"}
+@app.get("/api/data/export")
+def export_data(db: Session = Depends(get_db)):
+    payload = build_database_snapshot(db)
+    filename = f"moex-data-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.json"
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/api/data/import", response_model=DataTransferResult)
-def import_data(payload: DataTransferPath, db: Session = Depends(get_db)):
-    result = import_database_from_path(db, payload.file_path)
-    return {**result, "ok": True, "detail": "Загрузка выполнена"}
+async def import_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    try:
+        raw = await file.read()
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Не удалось прочитать JSON-файл") from exc
+    result = import_database_snapshot(db, payload)
+    return {**result, "ok": True, "file_path": file.filename or "uploaded.json", "detail": "Загрузка выполнена"}
 
 
 @app.get("/api/tables", response_model=list[AnalystTableRead])

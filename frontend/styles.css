@@ -170,8 +170,7 @@ input {
 }
 
 #table-select,
-#analyst-name-input,
-#data-file-path-input {
+#analyst-name-input {
   border: 1px solid var(--border);
   border-radius: 7px;
   min-height: 30px;
@@ -181,10 +180,6 @@ input {
 
 #analyst-name-input {
   min-width: 160px;
-}
-
-#data-file-path-input {
-  min-width: 320px;
 }
 
 input:focus {

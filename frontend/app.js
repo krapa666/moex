@@ -8,9 +8,9 @@ const analystNameInput = document.getElementById('analyst-name-input');
 const saveAnalystBtn = document.getElementById('save-analyst-btn');
 const shiftYearBackBtn = document.getElementById('shift-year-back-btn');
 const shiftYearBtn = document.getElementById('shift-year-btn');
-const dataFilePathInput = document.getElementById('data-file-path-input');
 const exportDataBtn = document.getElementById('export-data-btn');
 const importDataBtn = document.getElementById('import-data-btn');
+const importDataFileInput = document.getElementById('import-data-file-input');
 const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
@@ -46,7 +46,6 @@ const appState = {
 };
 const AUTOSAVE_DELAY_MS = 1800;
 const BASE_FORECAST_YEAR = new Date().getFullYear();
-const DEFAULT_DATA_FILE_PATH = './backups/manual/moex-data.json';
 const RU_TO_EN_LAYOUT_MAP = {
   й: 'q',
   ц: 'w',
@@ -181,11 +180,6 @@ function setGlobalStatus(text) {
   if (globalStatus) {
     globalStatus.textContent = text;
   }
-}
-
-function getDataFilePath() {
-  const value = (dataFilePathInput?.value || '').trim();
-  return value || DEFAULT_DATA_FILE_PATH;
 }
 
 function activeTable() {
@@ -806,42 +800,64 @@ addRowBtn.addEventListener('click', async () => {
 });
 
 exportDataBtn?.addEventListener('click', async () => {
-  const path = getDataFilePath();
-  if (!path) {
-    alert('Укажите путь для выгрузки.');
-    return;
-  }
   try {
-    const result = await api('/api/data/export', {
-      method: 'POST',
-      body: JSON.stringify({ file_path: path }),
-    });
-    alert(`Выгрузка завершена:\n${result.file_path}\nТаблиц: ${result.tables_count}, строк: ${result.rows_count}`);
+    const res = await fetch('/api/data/export');
+    if (!res.ok) {
+      throw new Error(`Ошибка API: ${res.status}`);
+    }
+    const blob = await res.blob();
+    const suggestedName =
+      res.headers.get('Content-Disposition')?.match(/filename=\"?([^\";]+)\"?/)?.[1] || 'moex-data.json';
+
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = suggestedName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+    alert(`Файл выгрузки готов: ${suggestedName}`);
   } catch (err) {
     alert(err.message);
   }
 });
 
 importDataBtn?.addEventListener('click', async () => {
-  const path = getDataFilePath();
-  if (!path) {
-    alert('Укажите путь для загрузки.');
+  importDataFileInput?.click();
+});
+
+importDataFileInput?.addEventListener('change', async () => {
+  const selectedFile = importDataFileInput.files?.[0];
+  if (!selectedFile) return;
+
+  const approved = confirm(`Загрузить данные из файла «${selectedFile.name}»?\n\nТекущие данные в БД будут заменены.`);
+  if (!approved) {
+    importDataFileInput.value = '';
     return;
   }
-  const approved = confirm(`Загрузить данные из файла?\n${path}\n\nТекущие данные в БД будут заменены.`);
-  if (!approved) return;
+
   try {
-    const result = await api('/api/data/import', {
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    const res = await fetch('/api/data/import', {
       method: 'POST',
-      body: JSON.stringify({ file_path: path }),
+      body: formData,
     });
+    if (!res.ok) {
+      const details = await res.text();
+      throw new Error(`Ошибка API: ${res.status}${details ? ` (${details})` : ''}`);
+    }
+    const result = await res.json();
     await loadTables();
     appState.activeTableId = appState.tables[0]?.id ?? null;
     renderTableSelector();
     await loadRows();
-    alert(`Загрузка завершена:\n${result.file_path}\nТаблиц: ${result.tables_count}, строк: ${result.rows_count}`);
+    alert(`Загрузка завершена.\nТаблиц: ${result.tables_count}, строк: ${result.rows_count}`);
   } catch (err) {
     alert(err.message);
+  } finally {
+    importDataFileInput.value = '';
   }
 });
 
@@ -873,9 +889,6 @@ sortButtons.forEach((button) => {
 
 async function initApp() {
   try {
-    if (dataFilePathInput && !dataFilePathInput.value) {
-      dataFilePathInput.value = DEFAULT_DATA_FILE_PATH;
-    }
     await loadTables();
     updateSortIndicators();
     await loadRows();

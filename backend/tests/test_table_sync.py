@@ -1,11 +1,9 @@
-from pathlib import Path
-
 import pytest
 from app.main import (
+    build_database_snapshot,
     delete_row,
     ensure_primary_table_for_row_mutation,
-    export_database_to_path,
-    import_database_from_path,
+    import_database_snapshot,
     is_shared_fields_editable_for_table,
     sync_row_to_other_tables,
 )
@@ -126,10 +124,9 @@ def test_delete_primary_row_removes_rows_with_same_ticker_from_all_tables() -> N
         assert remained == []
 
 
-def test_export_and_import_database_snapshot(tmp_path: Path) -> None:
+def test_export_and_import_database_snapshot() -> None:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    snapshot_path = tmp_path / "moex-data.json"
 
     with Session(engine) as db:
         table1 = AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1)
@@ -147,14 +144,14 @@ def test_export_and_import_database_snapshot(tmp_path: Path) -> None:
         )
         db.commit()
 
-        exported = export_database_to_path(db, str(snapshot_path))
-        assert exported["tables_count"] == 2
-        assert exported["rows_count"] == 2
+        payload = build_database_snapshot(db)
+        assert len(payload["tables"]) == 2
+        assert len(payload["rows"]) == 2
 
         db.add(StockRow(table_id=table1.id, ticker="LKOH"))
         db.commit()
 
-        imported = import_database_from_path(db, str(snapshot_path))
+        imported = import_database_snapshot(db, payload)
         assert imported["tables_count"] == 2
         assert imported["rows_count"] == 2
 
