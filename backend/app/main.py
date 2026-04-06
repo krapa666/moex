@@ -8,9 +8,9 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session, load_only
 
+from .calculations import recalculate_fields
 from .database import SessionLocal, get_db
 from .models import AnalystTable, StockRow
-from .calculations import recalculate_fields
 from .schemas import (
     AnalystTableCreate,
     AnalystTableRead,
@@ -152,6 +152,19 @@ def get_tables_ordered(db: Session) -> list[AnalystTable]:
 def get_primary_table(db: Session) -> AnalystTable | None:
     tables = get_tables_ordered(db)
     return tables[0] if tables else None
+
+
+def is_primary_table_id(db: Session, table_id: int) -> bool:
+    primary = get_primary_table(db)
+    return primary is not None and primary.id == table_id
+
+
+def ensure_primary_table_for_row_mutation(db: Session, table_id: int) -> None:
+    if not is_primary_table_id(db, table_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Добавлять и удалять строки можно только в таблице №1",
+        )
 
 
 def get_primary_row_by_ticker(db: Session, ticker: str) -> StockRow | None:
@@ -445,6 +458,7 @@ def get_rows(table_id: int, db: Session = Depends(get_db)):
 @app.post("/api/rows", response_model=StockRowRead)
 async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
     table = get_table_or_404(db, payload.table_id)
+    ensure_primary_table_for_row_mutation(db, table.id)
     shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
     if not shared_fields_editable:
         primary_row = get_primary_row_by_ticker(db, payload.ticker)
@@ -480,18 +494,28 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
         raise HTTPException(status_code=404, detail="Строка не найдена")
 
     table = get_table_or_404(db, payload.table_id)
-    shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
+    if row.table_id != payload.table_id:
+        raise HTTPException(status_code=400, detail="Нельзя переносить строку между таблицами")
+
+    primary_table = get_primary_table(db)
+    is_primary_row = primary_table is not None and row.table_id == primary_table.id
+    shared_fields_editable = is_primary_row
     old_ticker = row.ticker.strip().upper()
+    new_ticker = payload.ticker.strip().upper()
     row.table_id = payload.table_id
-    row.ticker = payload.ticker.strip().upper()
+    row.ticker = new_ticker if is_primary_row else old_ticker
     if shared_fields_editable:
         row.shares_billion = payload.shares_billion
         row.pe_avg_5y = payload.pe_avg_5y
     else:
-        primary_row = get_primary_row_by_ticker(db, row.ticker)
-        if primary_row is not None:
-            row.shares_billion = primary_row.shares_billion
-            row.pe_avg_5y = primary_row.pe_avg_5y
+        primary_row = get_primary_row_by_ticker(db, old_ticker)
+        if primary_row is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Вторичная таблица не может редактировать общие поля без строки в таблице №1",
+            )
+        row.shares_billion = primary_row.shares_billion
+        row.pe_avg_5y = primary_row.pe_avg_5y
     row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
     apply_net_profit_projection(row, table.year_offset)
     row.net_profit_source_comment = (
@@ -513,7 +537,15 @@ def delete_row(row_id: int, db: Session = Depends(get_db)):
     row = db.get(StockRow, row_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Строка не найдена")
-    db.delete(row)
+    ensure_primary_table_for_row_mutation(db, row.table_id)
+
+    normalized_ticker = row.ticker.strip().upper()
+    if normalized_ticker:
+        linked_rows = db.scalars(select(StockRow).where(StockRow.ticker == normalized_ticker)).all()
+        for linked_row in linked_rows:
+            db.delete(linked_row)
+    else:
+        db.delete(row)
     db.commit()
     return {"ok": True}
 

@@ -183,6 +183,10 @@ function activeTable() {
   return appState.tables.find((table) => table.id === appState.activeTableId) || null;
 }
 
+function isPrimaryActiveTable() {
+  return activeTable()?.table_number === 1;
+}
+
 function activeYears() {
   const offset = activeTable()?.year_offset ?? 0;
   return [
@@ -235,6 +239,11 @@ function renderTableSelector() {
   if (makePrimaryTableBtn) {
     makePrimaryTableBtn.disabled = !current || current.table_number === 1;
     makePrimaryTableBtn.title = current?.table_number === 1 ? 'Эта таблица уже основная' : '';
+  }
+  if (addRowBtn) {
+    const isPrimary = current?.table_number === 1;
+    addRowBtn.disabled = !isPrimary;
+    addRowBtn.title = isPrimary ? '' : 'Добавлять строки можно только в таблице №1';
   }
   applyYearHeaders();
   updateSortIndicators();
@@ -553,19 +562,21 @@ function updateSortIndicators() {
 
 function renderRows(rows) {
   const sortedRows = sortRows(rows);
+  const isPrimaryTable = isPrimaryActiveTable();
   tbody.innerHTML = '';
 
   sortedRows.forEach((row) => {
     const priceDecimals = detectDecimals(row.current_price);
     const sharedFieldsEditable = row.shared_fields_editable !== false;
+    const lockSharedFields = !isPrimaryTable || !sharedFieldsEditable;
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td><input data-field="ticker" value="${row.ticker ?? ''}" /></td>
+      <td><input data-field="ticker" value="${row.ticker ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="current_price">${formatCurrency(row.current_price, priceDecimals)}</span></td>
-      <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" ${sharedFieldsEditable ? '' : 'readonly'} /></td>
+      <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
-      <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${sharedFieldsEditable ? '' : 'readonly'} /></td>
+      <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
@@ -580,7 +591,7 @@ function renderRows(rows) {
       <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
-        <button data-action="delete" class="btn-danger row-delete-btn">Удалить</button>
+        <button data-action="delete" class="btn-danger row-delete-btn" ${isPrimaryTable ? '' : 'disabled title="Удалять строки можно только из таблицы №1"'}>Удалить</button>
         ${row.status_message ? `<div class="status-error">${row.status_message}</div>` : ''}
       </td>
     `;
@@ -649,6 +660,10 @@ function renderRows(rows) {
     tickerInput?.addEventListener('blur', clearInlineComparisonRows);
 
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+      if (!isPrimaryActiveTable()) {
+        alert('Удалять строки можно только из таблицы №1.');
+        return;
+      }
       try {
         await api(`/api/rows/${row.id}`, { method: 'DELETE' });
         await loadRows();
@@ -756,6 +771,10 @@ shiftYearBackBtn?.addEventListener('click', async () => {
 });
 
 addRowBtn.addEventListener('click', async () => {
+  if (!isPrimaryActiveTable()) {
+    alert('Добавлять строки можно только в таблице №1.');
+    return;
+  }
   try {
     await api('/api/rows', {
       method: 'POST',

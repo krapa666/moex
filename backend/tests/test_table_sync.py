@@ -1,8 +1,14 @@
+import pytest
+from app.main import (
+    delete_row,
+    ensure_primary_table_for_row_mutation,
+    is_shared_fields_editable_for_table,
+    sync_row_to_other_tables,
+)
+from app.models import AnalystTable, Base, StockRow
+from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-
-from app.main import is_shared_fields_editable_for_table, sync_row_to_other_tables
-from app.models import AnalystTable, Base, StockRow
 
 
 def test_sync_row_to_other_tables_copies_shared_fields_without_net_profit() -> None:
@@ -72,3 +78,45 @@ def test_shared_fields_are_editable_in_non_primary_only_for_new_ticker() -> None
 
         assert is_shared_fields_editable_for_table(db, table2.id, "SBER") is False
         assert is_shared_fields_editable_for_table(db, table2.id, "LKOH") is True
+
+
+def test_row_mutation_permissions_allow_only_primary_table() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        table1 = AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1)
+        table2 = AnalystTable(analyst_name="Аналитик 2", year_offset=0, sort_order=2)
+        db.add_all([table1, table2])
+        db.commit()
+        db.refresh(table1)
+        db.refresh(table2)
+
+        ensure_primary_table_for_row_mutation(db, table1.id)
+        with pytest.raises(HTTPException) as exc:
+            ensure_primary_table_for_row_mutation(db, table2.id)
+        assert exc.value.status_code == 403
+
+
+def test_delete_primary_row_removes_rows_with_same_ticker_from_all_tables() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        table1 = AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1)
+        table2 = AnalystTable(analyst_name="Аналитик 2", year_offset=0, sort_order=2)
+        db.add_all([table1, table2])
+        db.commit()
+        db.refresh(table1)
+        db.refresh(table2)
+
+        row_primary = StockRow(table_id=table1.id, ticker="SBER")
+        row_secondary = StockRow(table_id=table2.id, ticker="SBER")
+        db.add_all([row_primary, row_secondary])
+        db.commit()
+        db.refresh(row_primary)
+
+        delete_row(row_primary.id, db)
+
+        remained = db.scalars(select(StockRow).where(StockRow.ticker == "SBER")).all()
+        assert remained == []
