@@ -14,6 +14,12 @@ require_cmd docker
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 
+STEP=0
+log_step() {
+  STEP=$((STEP + 1))
+  echo "[compose-down][step ${STEP}] $1"
+}
+
 export_compose_db_snapshot() {
   if ! docker compose ps db --status running >/dev/null 2>&1; then
     echo "[compose-down] db container is not running, skipping snapshot export"
@@ -33,14 +39,15 @@ export_compose_db_snapshot() {
 }
 
 if command -v minikube >/dev/null 2>&1; then
-  echo "[compose-down] restoring host docker context (if minikube docker-env was enabled)..."
+  log_step "restoring host docker context (if minikube docker-env was enabled)"
   # shellcheck disable=SC2046
   # shellcheck disable=SC1090
   eval "$(minikube docker-env -u 2>/dev/null || true)"
 fi
 
-echo "[compose-down] stopping docker compose stack..."
+log_step "exporting shared DB snapshot before shutdown"
 export_compose_db_snapshot
+log_step "stopping docker compose stack"
 docker compose down "$@"
 
-echo "[compose-down] done"
+log_step "compose mode is down"

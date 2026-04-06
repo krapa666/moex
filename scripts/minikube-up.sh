@@ -9,6 +9,7 @@ PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
 PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-port-forward.log"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+STEP=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +36,11 @@ require_cmd minikube
 require_cmd kubectl
 require_cmd docker
 require_cmd curl
+
+log_step() {
+  STEP=$((STEP + 1))
+  echo "[minikube-up][step ${STEP}] $1"
+}
 
 start_frontend_port_forward() {
   if [[ -f "${PORT_FORWARD_PID_FILE}" ]]; then
@@ -102,25 +108,25 @@ wait_for_ingress_admission() {
   exit 1
 }
 
-echo "[minikube-up] starting minikube (if needed)..."
+log_step "starting minikube (if needed)"
 minikube start
 
-echo "[minikube-up] enabling ingress addon..."
+log_step "enabling ingress addon"
 minikube addons enable ingress >/dev/null
 wait_for_ingress_admission
 
-echo "[minikube-up] switching docker daemon to minikube..."
+log_step "switching docker daemon to minikube"
 # shellcheck disable=SC2046
 # shellcheck disable=SC1090
 eval "$(minikube docker-env)"
 
-echo "[minikube-up] building backend image: ${BACKEND_IMAGE}"
+log_step "building backend image: ${BACKEND_IMAGE}"
 docker build -t "${BACKEND_IMAGE}" backend
 
-echo "[minikube-up] building frontend image: ${FRONTEND_IMAGE}"
+log_step "building frontend image: ${FRONTEND_IMAGE}"
 docker build -t "${FRONTEND_IMAGE}" frontend
 
-echo "[minikube-up] applying core manifests (without ingress)..."
+log_step "applying core manifests (without ingress)"
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/secret.yaml
 kubectl apply -f k8s/postgres-pvc.yaml
@@ -128,17 +134,17 @@ kubectl apply -f k8s/postgres.yaml
 kubectl apply -f k8s/backend.yaml
 kubectl apply -f k8s/frontend.yaml
 
-echo "[minikube-up] applying ingress..."
+log_step "applying ingress"
 kubectl apply -f k8s/ingress.yaml
 
-echo "[minikube-up] waiting for deployments..."
+log_step "waiting for deployments and importing snapshot"
 kubectl -n "${NAMESPACE}" rollout status deploy/postgres --timeout=180s
 import_snapshot_into_k8s_db
 kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
 start_frontend_port_forward
 
-echo "[minikube-up] done"
+log_step "minikube mode is up"
 echo "[minikube-up] frontend URL (NodePort):"
 if ! minikube service -n "${NAMESPACE}" frontend --url; then
   echo "[minikube-up] warning: failed to resolve service URL via minikube helper" >&2

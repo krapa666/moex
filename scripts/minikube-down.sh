@@ -6,6 +6,7 @@ KEEP_MINIKUBE=false
 PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+STEP=0
 
 if [[ "${1:-}" == "--keep-minikube" ]]; then
   KEEP_MINIKUBE=true
@@ -21,6 +22,11 @@ require_cmd() {
 
 require_cmd kubectl
 require_cmd minikube
+
+log_step() {
+  STEP=$((STEP + 1))
+  echo "[minikube-down][step ${STEP}] $1"
+}
 
 export_k8s_db_snapshot() {
   if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
@@ -56,11 +62,12 @@ if [[ -f "${PORT_FORWARD_PID_FILE}" ]]; then
   rm -f "${PORT_FORWARD_PID_FILE}"
 fi
 
-echo "[minikube-down] deleting Kubernetes resources..."
+log_step "exporting shared DB snapshot before shutdown"
 export_k8s_db_snapshot
+log_step "deleting Kubernetes resources"
 kubectl delete -k k8s --ignore-not-found=true
 
-echo "[minikube-down] waiting namespace/${NAMESPACE} deletion (if exists)..."
+log_step "waiting namespace/${NAMESPACE} deletion (if exists)"
 for _ in $(seq 1 60); do
   if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
     break
@@ -72,18 +79,18 @@ if kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
   echo "[minikube-down] warning: namespace ${NAMESPACE} still exists, continuing" >&2
 fi
 
-echo "[minikube-down] restoring host docker context..."
+log_step "restoring host docker context"
 # shellcheck disable=SC2046
 # shellcheck disable=SC1090
 eval "$(minikube docker-env -u)"
 
 if [[ "${KEEP_MINIKUBE}" == "false" ]]; then
-  echo "[minikube-down] stopping minikube..."
+  log_step "stopping minikube"
   minikube stop
 else
   echo "[minikube-down] --keep-minikube set, cluster left running"
 fi
 
-echo "[minikube-down] done"
+log_step "minikube mode is down"
 echo "[minikube-down] now you can run docker compose mode:"
 echo "  ./scripts/compose-up.sh"

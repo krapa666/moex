@@ -14,6 +14,12 @@ require_cmd docker
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 
+STEP=0
+log_step() {
+  STEP=$((STEP + 1))
+  echo "[compose-up][step ${STEP}] $1"
+}
+
 import_snapshot_into_compose_db() {
   if [[ ! -s "${SYNC_BACKUP_FILE}" ]]; then
     echo "[compose-up] no shared snapshot found, import skipped"
@@ -33,21 +39,22 @@ import_snapshot_into_compose_db() {
 }
 
 if command -v minikube >/dev/null 2>&1; then
-  echo "[compose-up] restoring host docker context (if minikube docker-env was enabled)..."
+  log_step "restoring host docker context (if minikube docker-env was enabled)"
   # shellcheck disable=SC2046
   # shellcheck disable=SC1090
   eval "$(minikube docker-env -u 2>/dev/null || true)"
 fi
 
-echo "[compose-up] starting docker compose stack..."
+log_step "starting docker compose stack"
 docker compose up -d --build "$@"
+log_step "importing shared DB snapshot (if present)"
 import_snapshot_into_compose_db
 
-echo "[compose-up] done"
+log_step "compose mode is up"
 echo "[compose-up] frontend: http://junibox/"
 
 if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
-  echo "[compose-up] switching nginx reverse-proxy to compose mode..."
+  log_step "switching nginx reverse-proxy to compose mode"
   if [[ -w "/etc/nginx/conf.d" ]]; then
     ./scripts/configure-nginx-compose-proxy.sh --reload || true
   elif command -v sudo >/dev/null 2>&1; then
