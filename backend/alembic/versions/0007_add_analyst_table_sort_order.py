@@ -1,6 +1,6 @@
 """add sort_order for analyst tables
 
-Revision ID: 0007_add_analyst_table_sort_order
+Revision ID: 0007_table_sort_order
 Revises: 0006_add_fourth_forecast_year
 Create Date: 2026-04-06
 """
@@ -10,7 +10,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0007_add_analyst_table_sort_order"
+revision: str = "0007_table_sort_order"
 down_revision: Union[str, None] = "0006_add_fourth_forecast_year"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
