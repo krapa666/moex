@@ -130,6 +130,9 @@ function ensureComparisonTooltip() {
   tooltip = document.createElement('div');
   tooltip.id = 'ticker-comparison-tooltip';
   tooltip.className = 'ticker-comparison-tooltip hidden';
+  tooltip.style.position = 'fixed';
+  tooltip.style.left = '0px';
+  tooltip.style.top = '0px';
   document.body.appendChild(tooltip);
   return tooltip;
 }
@@ -357,8 +360,12 @@ function renderTickerComparisonTooltip(items, ticker) {
 function moveTooltip(event) {
   const tooltip = ensureComparisonTooltip();
   const offset = 14;
-  tooltip.style.left = `${event.clientX + offset}px`;
-  tooltip.style.top = `${event.clientY + offset}px`;
+  const maxLeft = Math.max(window.innerWidth - tooltip.offsetWidth - 8, 8);
+  const maxTop = Math.max(window.innerHeight - tooltip.offsetHeight - 8, 8);
+  const desiredLeft = event.clientX + offset;
+  const desiredTop = event.clientY + offset;
+  tooltip.style.left = `${Math.min(desiredLeft, maxLeft)}px`;
+  tooltip.style.top = `${Math.min(desiredTop, maxTop)}px`;
 }
 
 function clearTooltipHoverTimer() {
@@ -639,6 +646,8 @@ tbody.addEventListener('focusout', () => {
     }
   }, 0);
 });
+
+window.addEventListener('scroll', hideTickerTooltip, true);
 
 tableSelect?.addEventListener('change', async () => {
   appState.activeTableId = Number(tableSelect.value);
