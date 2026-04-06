@@ -407,39 +407,19 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
 
   anchorTr.classList.add('ticker-compare-highlight');
   activeComparisonRowId = rowId;
-  const baseRows = Array.from(tbody.querySelectorAll('tr:not(.comparison-inline-row)'));
-  const anchorIndex = baseRows.indexOf(anchorTr);
-  const isTopHalf = anchorIndex < 0 || anchorIndex < baseRows.length / 2;
-
-  if (isTopHalf) {
-    let insertAfter = anchorTr;
-    otherTables.forEach((item) => {
-      const row = createInlineComparisonRow(item);
-      row.addEventListener('mouseenter', () => {
-        if (comparisonHoverHideTimer) {
-          clearTimeout(comparisonHoverHideTimer);
-          comparisonHoverHideTimer = null;
-        }
-      });
-      row.addEventListener('mouseleave', () => scheduleInlineComparisonHide(anchorTr, null, 250));
-      insertAfter.insertAdjacentElement('afterend', row);
-      insertAfter = row;
+  let insertAfter = anchorTr;
+  otherTables.forEach((item) => {
+    const row = createInlineComparisonRow(item);
+    row.addEventListener('mouseenter', () => {
+      if (comparisonHoverHideTimer) {
+        clearTimeout(comparisonHoverHideTimer);
+        comparisonHoverHideTimer = null;
+      }
     });
-  } else {
-    let insertBefore = anchorTr;
-    otherTables.forEach((item) => {
-      const row = createInlineComparisonRow(item);
-      row.addEventListener('mouseenter', () => {
-        if (comparisonHoverHideTimer) {
-          clearTimeout(comparisonHoverHideTimer);
-          comparisonHoverHideTimer = null;
-        }
-      });
-      row.addEventListener('mouseleave', () => scheduleInlineComparisonHide(anchorTr, null, 250));
-      insertBefore.insertAdjacentElement('beforebegin', row);
-      insertBefore = row;
-    });
-  }
+    row.addEventListener('mouseleave', () => scheduleInlineComparisonHide(anchorTr, null, 250));
+    insertAfter.insertAdjacentElement('afterend', row);
+    insertAfter = row;
+  });
 }
 
 function rowToPayload(row) {
