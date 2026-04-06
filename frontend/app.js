@@ -23,10 +23,6 @@ const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
 const headerPriceYear3 = document.getElementById('header-price-year3');
 const headerPriceYear4 = document.getElementById('header-price-year4');
-const comparisonModal = document.getElementById('comparison-modal');
-const comparisonContent = document.getElementById('comparison-content');
-const comparisonSubtitle = document.getElementById('comparison-subtitle');
-const comparisonCloseBtn = document.getElementById('comparison-close-btn');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -35,6 +31,7 @@ const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
 const saveTimers = new Map();
 const rowDrafts = new Map();
 const dirtyRows = new Set();
+const comparisonCache = new Map();
 const sortState = { key: null, direction: 'asc' };
 const appState = {
   tables: [],
@@ -122,6 +119,16 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function ensureComparisonTooltip() {
+  let tooltip = document.getElementById('ticker-comparison-tooltip');
+  if (tooltip) return tooltip;
+  tooltip = document.createElement('div');
+  tooltip.id = 'ticker-comparison-tooltip';
+  tooltip.className = 'ticker-comparison-tooltip hidden';
+  document.body.appendChild(tooltip);
+  return tooltip;
 }
 
 function parseInputNumber(value) {
@@ -282,6 +289,7 @@ async function loadRows() {
   if (!appState.activeTableId) {
     await loadTables();
   }
+  comparisonCache.clear();
   setGlobalStatus('Загрузка данных...');
   const maxAttempts = 5;
   let lastError = null;
@@ -301,60 +309,82 @@ async function loadRows() {
   throw lastError || new Error('Не удалось загрузить данные');
 }
 
-async function openTickerComparison(ticker) {
-  const normalizedTicker = normalizeTickerInput(ticker).trim();
-  if (!normalizedTicker) {
-    alert('Сначала заполните тикер.');
+function renderTickerComparisonTooltip(items, ticker) {
+  const tooltip = ensureComparisonTooltip();
+  if (!items.length) {
+    tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(ticker)}</div><div>Нет данных для сравнения.</div>`;
     return;
   }
-  const items = await api(`/api/ticker-comparison?ticker=${encodeURIComponent(normalizedTicker)}`);
-  if (!comparisonModal || !comparisonContent || !comparisonSubtitle) return;
 
-  comparisonSubtitle.textContent = `Тикер: ${normalizedTicker}. Ниже показаны прогнозы из всех таблиц аналитиков.`;
-  if (!items.length) {
-    comparisonContent.innerHTML = '<p>Для этого тикера пока нет данных в других таблицах.</p>';
-  } else {
-    comparisonContent.innerHTML = items
-      .map((item) => {
-        const rows = item.years
-          .map(
-            (entry) => `
+  const blocks = items
+    .map((item) => {
+      const nearestYears = (item.years || []).slice(0, 2);
+      const rows = nearestYears
+        .map(
+          (yearItem) => `
+            <tr>
+              <td>${yearItem.year}</td>
+              <td>${formatCurrency(yearItem.forecast_price)}</td>
+              <td>${formatPercent(yearItem.upside_percent)}</td>
+            </tr>
+          `,
+        )
+        .join('');
+      return `
+        <div class="tooltip-block">
+          <div class="tooltip-block-title">№${item.table_number} — ${escapeHtml(item.analyst_name)}</div>
+          <table class="tooltip-table">
+            <thead>
               <tr>
-                <td>${entry.year}</td>
-                <td>${formatNumber(entry.forecast_profit_billion_rub)}</td>
-                <td>${formatCurrency(entry.forecast_price)}</td>
-                <td>${formatPercent(entry.upside_percent)}</td>
+                <th>Год</th>
+                <th>Прогнозная цена</th>
+                <th>Upside</th>
               </tr>
-            `,
-          )
-          .join('');
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    })
+    .join('');
 
-        return `
-          <section class="comparison-card">
-            <h3>Таблица №${item.table_number} — ${escapeHtml(item.analyst_name)}</h3>
-            <table class="comparison-table">
-              <thead>
-                <tr>
-                  <th>Год</th>
-                  <th>Чистая прибыль, млрд ₽</th>
-                  <th>Прогнозная цена, ₽</th>
-                  <th>Upside, %</th>
-                </tr>
-              </thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </section>
-        `;
-      })
-      .join('');
-  }
-
-  comparisonModal.classList.remove('hidden');
+  tooltip.innerHTML = `<div class="tooltip-title">Сравнение по ${escapeHtml(ticker)} (2 ближайших года)</div>${blocks}`;
 }
 
-function closeComparisonModal() {
-  if (!comparisonModal) return;
-  comparisonModal.classList.add('hidden');
+function moveTooltip(event) {
+  const tooltip = ensureComparisonTooltip();
+  const offset = 14;
+  tooltip.style.left = `${event.clientX + offset}px`;
+  tooltip.style.top = `${event.clientY + offset}px`;
+}
+
+function hideTickerTooltip() {
+  ensureComparisonTooltip().classList.add('hidden');
+}
+
+async function showTickerTooltip(event, ticker) {
+  const normalizedTicker = normalizeTickerInput(ticker).trim();
+  if (!normalizedTicker) {
+    hideTickerTooltip();
+    return;
+  }
+  const tooltip = ensureComparisonTooltip();
+  moveTooltip(event);
+  tooltip.classList.remove('hidden');
+  tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(normalizedTicker)}</div><div>Загрузка сравнения...</div>`;
+
+  if (comparisonCache.has(normalizedTicker)) {
+    renderTickerComparisonTooltip(comparisonCache.get(normalizedTicker), normalizedTicker);
+    return;
+  }
+
+  try {
+    const items = await api(`/api/ticker-comparison?ticker=${encodeURIComponent(normalizedTicker)}`);
+    comparisonCache.set(normalizedTicker, items);
+    renderTickerComparisonTooltip(items, normalizedTicker);
+  } catch (_err) {
+    tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(normalizedTicker)}</div><div>Не удалось загрузить сравнение.</div>`;
+  }
 }
 
 function rowToPayload(row) {
@@ -489,7 +519,6 @@ function renderRows(rows) {
       <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
-        <button data-action="compare" class="btn">Сравнить</button>
         <button data-action="delete" class="btn-danger">Удалить</button>
         ${row.status_message ? `<div class="status-error">${row.status_message}</div>` : ''}
       </td>
@@ -548,19 +577,19 @@ function renderRows(rows) {
       });
     });
 
+    const tickerInput = tr.querySelector('input[data-field="ticker"]');
+    tickerInput?.addEventListener('mouseenter', (event) => {
+      const draft = rowDrafts.get(row.id) || row;
+      showTickerTooltip(event, draft.ticker);
+    });
+    tickerInput?.addEventListener('mousemove', moveTooltip);
+    tickerInput?.addEventListener('mouseleave', hideTickerTooltip);
+    tickerInput?.addEventListener('blur', hideTickerTooltip);
+
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       try {
         await api(`/api/rows/${row.id}`, { method: 'DELETE' });
         await loadRows();
-      } catch (err) {
-        alert(err.message);
-      }
-    });
-
-    tr.querySelector('[data-action="compare"]').addEventListener('click', async () => {
-      try {
-        const draft = rowDrafts.get(row.id) || row;
-        await openTickerComparison(draft.ticker);
       } catch (err) {
         alert(err.message);
       }
@@ -696,11 +725,6 @@ sortButtons.forEach((button) => {
     });
     updateSortIndicators();
   });
-});
-
-comparisonCloseBtn?.addEventListener('click', closeComparisonModal);
-comparisonModal?.addEventListener('click', (event) => {
-  if (event.target === comparisonModal) closeComparisonModal();
 });
 
 async function initApp() {

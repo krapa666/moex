@@ -238,62 +238,48 @@ input:focus {
   margin-top: 6px;
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-  z-index: 1000;
-}
-
 .hidden {
   display: none !important;
 }
 
-.modal {
-  width: min(1100px, 95vw);
-  max-height: 90vh;
+.ticker-comparison-tooltip {
+  position: fixed;
+  z-index: 1200;
+  width: min(520px, 92vw);
+  max-height: 65vh;
   overflow: auto;
-  background: #fff;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.3);
-  padding: 16px;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-#comparison-content {
-  display: grid;
-  gap: 12px;
-}
-
-.comparison-card {
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   border-radius: 10px;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.25);
   padding: 10px;
+  pointer-events: none;
 }
 
-.comparison-card h3 {
-  margin: 0 0 8px;
+.tooltip-title {
+  font-weight: 700;
+  margin-bottom: 8px;
 }
 
-.comparison-table {
-  min-width: 100%;
-  border-spacing: 0;
+.tooltip-block {
+  margin-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
 }
 
-.comparison-table th,
-.comparison-table td {
+.tooltip-block-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.tooltip-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tooltip-table th,
+.tooltip-table td {
   border: 1px solid #e2e8f0;
-  padding: 6px 8px;
+  padding: 4px 6px;
   font-size: 12px;
 }
