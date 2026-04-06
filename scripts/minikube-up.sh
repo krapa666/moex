@@ -77,4 +77,5 @@ fi
 echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
 
 echo "[minikube-up] ingress host: http://junibox/"
-echo "[minikube-up] if junibox does not resolve to minikube ingress, use deploy/nginx/home-server-k8s.conf"
+echo "[minikube-up] to refresh reverse-proxy config on junibox run:"
+echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh --reload"

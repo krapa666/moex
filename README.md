@@ -118,11 +118,11 @@ curl -I http://junibox/
 через системный Nginx, используй подготовленный конфиг:
 
 ```bash
-minikube ip
-# подставь IP в deploy/nginx/home-server-k8s.conf вместо MINIKUBE_IP
-sudo cp deploy/nginx/home-server-k8s.conf /etc/nginx/conf.d/moex-k8s.conf
-sudo nginx -t && sudo systemctl reload nginx
+sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 ```
+
+Важно: после `minikube stop/start` IP Minikube может измениться, и прокси-конфиг нужно
+перегенерировать этой же командой, иначе возможен `502 Bad Gateway`.
 
 ### 5) Проверка backend
 ```bash
