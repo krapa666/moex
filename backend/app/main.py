@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal, get_db
@@ -27,6 +27,7 @@ app = FastAPI(title="MOEX Fair Price", version="1.0.0")
 price_refresh_task: asyncio.Task | None = None
 BACKGROUND_REFRESH_SECONDS = 10 * 60
 BASE_FORECAST_YEAR = datetime.now(timezone.utc).year
+sort_order_schema_ready = False
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,13 +66,30 @@ async def periodic_price_refresh() -> None:
 
 
 def ensure_default_table(db: Session) -> None:
+    ensure_sort_order_schema(db)
     first_table = db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc()).limit(1)).first()
     if first_table is None:
         db.add(AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1))
         db.commit()
 
 
+def ensure_sort_order_schema(db: Session) -> None:
+    global sort_order_schema_ready
+    if sort_order_schema_ready:
+        return
+
+    engine = db.get_bind()
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("analyst_tables")}
+    if "sort_order" not in columns:
+        db.execute(text("ALTER TABLE analyst_tables ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"))
+        db.execute(text("UPDATE analyst_tables SET sort_order = id WHERE sort_order = 0"))
+        db.commit()
+    sort_order_schema_ready = True
+
+
 def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
+    ensure_sort_order_schema(db)
     table = db.get(AnalystTable, table_id)
     if table is None:
         raise HTTPException(status_code=404, detail="Таблица аналитика не найдена")
@@ -79,6 +97,7 @@ def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
 
 
 def get_tables_ordered(db: Session) -> list[AnalystTable]:
+    ensure_sort_order_schema(db)
     return db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc())).all()
 
 
