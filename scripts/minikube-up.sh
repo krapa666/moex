@@ -89,6 +89,7 @@ if ! minikube service -n "${NAMESPACE}" frontend --url; then
   echo "[minikube-up] warning: failed to resolve service URL via minikube helper" >&2
 fi
 echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
+echo "[minikube-up] localhost NodePort URL: http://127.0.0.1:30080/"
 
 echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://junibox/"
 

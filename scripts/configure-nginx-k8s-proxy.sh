@@ -33,6 +33,7 @@ require_cmd() {
 
 require_cmd minikube
 require_cmd awk
+require_cmd curl
 
 if [[ ! -f "$TEMPLATE_PATH" ]]; then
   echo "[nginx-k8s-proxy] error: template not found: $TEMPLATE_PATH" >&2
@@ -45,9 +46,18 @@ if [[ -z "$MINIKUBE_IP" ]]; then
   exit 1
 fi
 
-echo "[nginx-k8s-proxy] using minikube ip: ${MINIKUBE_IP}"
+FRONTEND_ENDPOINT="${MINIKUBE_IP}:30080"
+if curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
+  echo "[nginx-k8s-proxy] using frontend endpoint via minikube ip: ${FRONTEND_ENDPOINT}"
+elif curl -fsS --max-time 2 "http://127.0.0.1:30080/" >/dev/null 2>&1; then
+  FRONTEND_ENDPOINT="127.0.0.1:30080"
+  echo "[nginx-k8s-proxy] minikube ip not reachable; falling back to localhost endpoint: ${FRONTEND_ENDPOINT}"
+else
+  echo "[nginx-k8s-proxy] warning: frontend endpoint is not reachable yet; generating config with ${FRONTEND_ENDPOINT}" >&2
+fi
+
 mkdir -p "$(dirname "$OUTPUT_PATH")"
-awk -v ip="$MINIKUBE_IP" '{gsub(/MINIKUBE_IP/, ip); print}' "$TEMPLATE_PATH" > "$OUTPUT_PATH"
+awk -v endpoint="$FRONTEND_ENDPOINT" '{gsub(/MINIKUBE_FRONTEND_ENDPOINT/, endpoint); print}' "$TEMPLATE_PATH" > "$OUTPUT_PATH"
 
 echo "[nginx-k8s-proxy] generated: $OUTPUT_PATH"
 if [[ "$OUTPUT_PATH" == "/etc/nginx/conf.d/moex.conf" && -f "/etc/nginx/conf.d/moex-k8s.conf" ]]; then
