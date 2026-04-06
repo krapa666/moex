@@ -57,6 +57,18 @@ docker compose up --build
 - deployment/service для `postgres`, `backend`, `frontend`;
 - ingress и `kustomization.yaml`.
 
+### Быстрый запуск одной командой
+```bash
+./scripts/minikube-up.sh
+```
+
+Скрипт сам:
+- поднимет Minikube и включит ingress addon;
+- соберёт образы backend/frontend внутри Docker Minikube;
+- применит `kubectl apply -k k8s`;
+- дождётся готовности `postgres`, `backend`, `frontend`;
+- покажет URL доступа.
+
 ### 1) Подготовка Minikube
 ```bash
 minikube start
