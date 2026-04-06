@@ -32,9 +32,6 @@ const saveTimers = new Map();
 const rowDrafts = new Map();
 const dirtyRows = new Set();
 const comparisonCache = new Map();
-let tooltipHoverTimer = null;
-let pendingTooltipPoint = null;
-let pendingTooltipTicker = '';
 const sortState = { key: null, direction: 'asc' };
 const appState = {
   tables: [],
@@ -357,50 +354,44 @@ function renderTickerComparisonTooltip(items, ticker) {
   tooltip.innerHTML = `<div class="tooltip-title">Сравнение по ${escapeHtml(ticker)} (2 ближайших года)</div>${blocks}`;
 }
 
-function moveTooltip(event) {
+function moveTooltip(event, anchorRect = null) {
   const tooltip = ensureComparisonTooltip();
-  const offset = 14;
-  const maxLeft = Math.max(window.innerWidth - tooltip.offsetWidth - 8, 8);
-  const maxTop = Math.max(window.innerHeight - tooltip.offsetHeight - 8, 8);
-  const desiredLeft = event.clientX + offset;
-  const desiredTop = event.clientY + offset;
+  const margin = 8;
+  const cursorOffset = 18;
+  const maxLeft = Math.max(window.innerWidth - tooltip.offsetWidth - margin, margin);
+  const maxTop = Math.max(window.innerHeight - tooltip.offsetHeight - margin, margin);
+
+  let desiredLeft = event.clientX + cursorOffset;
+  let desiredTop = event.clientY + cursorOffset;
+
+  if (anchorRect) {
+    const rightSpace = window.innerWidth - anchorRect.right;
+    const leftSpace = anchorRect.left;
+    if (rightSpace >= tooltip.offsetWidth + margin * 2) {
+      desiredLeft = anchorRect.right + 12;
+      desiredTop = anchorRect.top;
+    } else if (leftSpace >= tooltip.offsetWidth + margin * 2) {
+      desiredLeft = anchorRect.left - tooltip.offsetWidth - 12;
+      desiredTop = anchorRect.top;
+    }
+  }
+
   tooltip.style.left = `${Math.min(desiredLeft, maxLeft)}px`;
   tooltip.style.top = `${Math.min(desiredTop, maxTop)}px`;
 }
 
-function clearTooltipHoverTimer() {
-  if (tooltipHoverTimer) {
-    clearTimeout(tooltipHoverTimer);
-    tooltipHoverTimer = null;
-  }
-}
-
-function scheduleTickerTooltip(event, ticker) {
-  pendingTooltipPoint = { clientX: event.clientX, clientY: event.clientY };
-  pendingTooltipTicker = ticker;
-  clearTooltipHoverTimer();
-  tooltipHoverTimer = setTimeout(() => {
-    if (!pendingTooltipPoint) return;
-    showTickerTooltip(pendingTooltipPoint, pendingTooltipTicker);
-    tooltipHoverTimer = null;
-  }, 1000);
-}
-
 function hideTickerTooltip() {
-  clearTooltipHoverTimer();
-  pendingTooltipPoint = null;
-  pendingTooltipTicker = '';
   ensureComparisonTooltip().classList.add('hidden');
 }
 
-async function showTickerTooltip(event, ticker) {
+async function showTickerTooltip(event, ticker, anchorRect = null) {
   const normalizedTicker = normalizeTickerInput(ticker).trim();
   if (!normalizedTicker) {
     hideTickerTooltip();
     return;
   }
   const tooltip = ensureComparisonTooltip();
-  moveTooltip(event);
+  moveTooltip(event, anchorRect);
   tooltip.classList.remove('hidden');
   tooltip.innerHTML = `<div class="tooltip-title">${escapeHtml(normalizedTicker)}</div><div>Загрузка сравнения...</div>`;
 
@@ -611,13 +602,11 @@ function renderRows(rows) {
     const tickerInput = tr.querySelector('input[data-field="ticker"]');
     tickerInput?.addEventListener('mouseenter', (event) => {
       const draft = rowDrafts.get(row.id) || row;
-      scheduleTickerTooltip(event, draft.ticker);
+      showTickerTooltip(event, draft.ticker, tickerInput.getBoundingClientRect());
     });
     tickerInput?.addEventListener('mousemove', (event) => {
-      if (ensureComparisonTooltip().classList.contains('hidden')) {
-        pendingTooltipPoint = { clientX: event.clientX, clientY: event.clientY };
-      } else {
-        moveTooltip(event);
+      if (!ensureComparisonTooltip().classList.contains('hidden')) {
+        moveTooltip(event, tickerInput.getBoundingClientRect());
       }
     });
     tickerInput?.addEventListener('mouseleave', hideTickerTooltip);
