@@ -54,12 +54,12 @@ docker compose up --build
 
 В репозитории настроен локальный git-hook `.githooks/post-commit`, который после каждого `git commit` автоматически пытается выполнить:
 
-- `git push github <текущая_ветка>`
-- `git push gitlab <текущая_ветка>`
+- `git push github HEAD:main`
+- `git push gitlab HEAD:main`
 
 Используемые remote:
 
-- `github` → `https://github.com/krapa666/project.git`
+- `github` → `https://github.com/krapa666/moex.git`
 - `gitlab` → `https://gitlab.com/krapa/moex.git`
 
 Для token-based пуша хук поддерживает переменные окружения:
