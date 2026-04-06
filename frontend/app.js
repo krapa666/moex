@@ -365,11 +365,17 @@ async function showInlineComparisonRows(anchorTr, ticker) {
 
   anchorTr.classList.add('ticker-compare-highlight');
   let insertAfter = anchorTr;
+  let lastInsertedRow = null;
   otherTables.forEach((item) => {
     const row = createInlineComparisonRow(item);
     insertAfter.insertAdjacentElement('afterend', row);
     insertAfter = row;
+    lastInsertedRow = row;
   });
+
+  if (lastInsertedRow) {
+    lastInsertedRow.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 function rowToPayload(row) {
@@ -595,7 +601,6 @@ tbody.addEventListener('focusout', () => {
   }, 0);
 });
 
-window.addEventListener('scroll', clearInlineComparisonRows, true);
 document.addEventListener('click', clearInlineComparisonRows, true);
 document.addEventListener('mousemove', (event) => {
   const target = event.target;
