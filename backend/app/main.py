@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import func, inspect, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from .database import SessionLocal, get_db
 from .models import AnalystTable, StockRow
@@ -28,6 +28,7 @@ price_refresh_task: asyncio.Task | None = None
 BACKGROUND_REFRESH_SECONDS = 10 * 60
 BASE_FORECAST_YEAR = datetime.now(timezone.utc).year
 sort_order_schema_ready = False
+sort_order_supported = True
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,14 +68,29 @@ async def periodic_price_refresh() -> None:
 
 def ensure_default_table(db: Session) -> None:
     ensure_sort_order_schema(db)
-    first_table = db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc()).limit(1)).first()
+    if sort_order_supported:
+        first_table = db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc()).limit(1)).first()
+    else:
+        first_table = db.scalars(
+            select(AnalystTable)
+            .options(
+                load_only(
+                    AnalystTable.id,
+                    AnalystTable.analyst_name,
+                    AnalystTable.year_offset,
+                    AnalystTable.created_at,
+                )
+            )
+            .order_by(AnalystTable.id.asc())
+            .limit(1)
+        ).first()
     if first_table is None:
         db.add(AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1))
         db.commit()
 
 
 def ensure_sort_order_schema(db: Session) -> None:
-    global sort_order_schema_ready
+    global sort_order_schema_ready, sort_order_supported
     if sort_order_schema_ready:
         return
 
@@ -82,15 +98,34 @@ def ensure_sort_order_schema(db: Session) -> None:
     inspector = inspect(engine)
     columns = {column["name"] for column in inspector.get_columns("analyst_tables")}
     if "sort_order" not in columns:
-        db.execute(text("ALTER TABLE analyst_tables ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"))
-        db.execute(text("UPDATE analyst_tables SET sort_order = id WHERE sort_order = 0"))
-        db.commit()
+        try:
+            db.execute(text("ALTER TABLE analyst_tables ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"))
+            db.execute(text("UPDATE analyst_tables SET sort_order = id WHERE sort_order = 0"))
+            db.commit()
+        except Exception:
+            db.rollback()
+            sort_order_supported = False
     sort_order_schema_ready = True
 
 
 def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
     ensure_sort_order_schema(db)
-    table = db.get(AnalystTable, table_id)
+    if sort_order_supported:
+        table = db.get(AnalystTable, table_id)
+    else:
+        table = db.scalars(
+            select(AnalystTable)
+            .options(
+                load_only(
+                    AnalystTable.id,
+                    AnalystTable.analyst_name,
+                    AnalystTable.year_offset,
+                    AnalystTable.created_at,
+                )
+            )
+            .where(AnalystTable.id == table_id)
+            .limit(1)
+        ).first()
     if table is None:
         raise HTTPException(status_code=404, detail="Таблица аналитика не найдена")
     return table
@@ -98,11 +133,25 @@ def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
 
 def get_tables_ordered(db: Session) -> list[AnalystTable]:
     ensure_sort_order_schema(db)
-    return db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc())).all()
+    if sort_order_supported:
+        return db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc())).all()
+    return db.scalars(
+        select(AnalystTable)
+        .options(
+            load_only(
+                AnalystTable.id,
+                AnalystTable.analyst_name,
+                AnalystTable.year_offset,
+                AnalystTable.created_at,
+            )
+        )
+        .order_by(AnalystTable.id.asc())
+    ).all()
 
 
 def get_primary_table(db: Session) -> AnalystTable | None:
-    return db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc()).limit(1)).first()
+    tables = get_tables_ordered(db)
+    return tables[0] if tables else None
 
 
 def serialize_table(table: AnalystTable, table_number: int) -> dict:
@@ -292,7 +341,7 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
     if total >= 10:
         raise HTTPException(status_code=400, detail="Можно создать не более 10 таблиц")
     source_table = get_primary_table(db)
-    next_sort_order = (db.query(func.max(AnalystTable.sort_order)).scalar() or 0) + 1
+    next_sort_order = (db.query(func.max(AnalystTable.sort_order)).scalar() or 0) + 1 if sort_order_supported else 0
     table = AnalystTable(analyst_name=payload.analyst_name.strip(), year_offset=0, sort_order=next_sort_order)
     db.add(table)
     db.commit()
@@ -440,6 +489,9 @@ async def refresh_prices(table_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/tables/{table_id}/make-primary", response_model=list[AnalystTableRead])
 def make_table_primary(table_id: int, db: Session = Depends(get_db)):
+    ensure_sort_order_schema(db)
+    if not sort_order_supported:
+        raise HTTPException(status_code=400, detail="Переупорядочивание таблиц недоступно: примените миграции БД")
     table = get_table_or_404(db, table_id)
     ordered = get_tables_ordered(db)
     if not ordered:
