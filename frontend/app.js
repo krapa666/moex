@@ -301,14 +301,43 @@ async function loadRows() {
 
 function clearInlineComparisonRows() {
   tbody.querySelectorAll('tr.comparison-inline-row').forEach((row) => row.remove());
+  tbody.querySelectorAll('tr.ticker-compare-highlight').forEach((row) => row.classList.remove('ticker-compare-highlight'));
 }
 
-function buildInlineComparisonText(item) {
-  const years = (item.years || []).slice(0, 2);
-  const text = years
-    .map((yearItem) => `${yearItem.year}: цена ${formatCurrency(yearItem.forecast_price)}, upside ${formatPercent(yearItem.upside_percent)}`)
-    .join(' | ');
-  return `№${item.table_number} — ${item.analyst_name}: ${text || 'нет данных'}`;
+function getComparisonYear(item, index) {
+  return (item.years || [])[index] || null;
+}
+
+function createInlineComparisonRow(item) {
+  const y1 = getComparisonYear(item, 0);
+  const y2 = getComparisonYear(item, 1);
+  const y3 = getComparisonYear(item, 2);
+  const y4 = getComparisonYear(item, 3);
+  const priceDecimals = detectDecimals(item.current_price);
+  const tr = document.createElement('tr');
+  tr.className = 'comparison-inline-row ticker-compare-highlight';
+  tr.innerHTML = `
+    <td><input value="${item.ticker ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(item.current_price, priceDecimals)}</span></td>
+    <td><input value="${item.shares_billion ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(item.market_cap_billion_rub)}</span></td>
+    <td><input value="${item.pe_avg_5y ?? ''}" disabled /></td>
+    <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
+    <td class="readonly-cell ${upsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
+    <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
+    <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
+    <td><input value="${y3?.forecast_profit_billion_rub ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(y3?.forecast_price, priceDecimals)}</span></td>
+    <td class="readonly-cell ${upsideClass(y3?.upside_percent)}">${formatPercent(y3?.upside_percent)}</td>
+    <td><input value="${y4?.forecast_profit_billion_rub ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(y4?.forecast_price, priceDecimals)}</span></td>
+    <td class="readonly-cell ${upsideClass(y4?.upside_percent)}">${formatPercent(y4?.upside_percent)}</td>
+    <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
+    <td><span class="comparison-source">№${item.table_number} — ${escapeHtml(item.analyst_name)}</span></td>
+  `;
+  return tr;
 }
 
 async function showInlineComparisonRows(anchorTr, ticker) {
@@ -329,12 +358,10 @@ async function showInlineComparisonRows(anchorTr, ticker) {
   const otherTables = (items || []).filter((item) => item.table_id !== appState.activeTableId);
   if (!otherTables.length) return;
 
-  const colSpan = anchorTr.children.length || 1;
+  anchorTr.classList.add('ticker-compare-highlight');
   let insertAfter = anchorTr;
   otherTables.forEach((item) => {
-    const row = document.createElement('tr');
-    row.className = 'comparison-inline-row';
-    row.innerHTML = `<td colspan="${colSpan}">${escapeHtml(buildInlineComparisonText(item))}</td>`;
+    const row = createInlineComparisonRow(item);
     insertAfter.insertAdjacentElement('afterend', row);
     insertAfter = row;
   });

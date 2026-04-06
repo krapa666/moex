@@ -243,10 +243,23 @@ input:focus {
 }
 
 .comparison-inline-row td {
-  background: #eef2ff;
-  color: #1e293b;
-  border: 1px solid #c7d2fe;
-  font-size: 12px;
-  padding: 8px 10px;
-  font-weight: 600;
+  background: #ffffff;
+}
+
+.comparison-inline-row input[disabled] {
+  opacity: 1;
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+  background: #ffffff;
+}
+
+.ticker-compare-highlight td {
+  background: #fffbeb;
+  border-top-color: #f59e0b;
+  border-bottom-color: #f59e0b;
+}
+
+.comparison-source {
+  font-weight: 700;
+  color: #92400e;
 }

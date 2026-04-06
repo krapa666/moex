@@ -211,6 +211,12 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
         analyst_name=table.analyst_name,
         year_offset=table.year_offset,
         ticker=row.ticker,
+        current_price=row.current_price,
+        shares_billion=row.shares_billion,
+        market_cap_billion_rub=row.market_cap_billion_rub,
+        pe_avg_5y=row.pe_avg_5y,
+        status_message=row.status_message,
+        price_updated_at=row.price_updated_at,
         years=[
             TickerComparisonYear(
                 year=years[idx],

@@ -79,4 +79,10 @@ class TickerComparisonItem(BaseModel):
     analyst_name: str
     year_offset: int
     ticker: str
+    current_price: float | None
+    shares_billion: float | None
+    market_cap_billion_rub: float | None
+    pe_avg_5y: float | None
+    status_message: str | None
+    price_updated_at: datetime | None
     years: list[TickerComparisonYear]
