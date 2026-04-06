@@ -597,6 +597,14 @@ tbody.addEventListener('focusout', () => {
 
 window.addEventListener('scroll', clearInlineComparisonRows, true);
 document.addEventListener('click', clearInlineComparisonRows, true);
+document.addEventListener('mousemove', (event) => {
+  const target = event.target;
+  if (target instanceof Element && target.matches('input[data-field="ticker"]')) {
+    return;
+  }
+  clearInlineComparisonRows();
+});
+window.addEventListener('blur', clearInlineComparisonRows);
 
 tableSelect?.addEventListener('change', async () => {
   appState.activeTableId = Number(tableSelect.value);
