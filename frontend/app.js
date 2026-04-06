@@ -319,7 +319,10 @@ function clearInlineComparisonRows({ invalidatePending = true } = {}) {
   tbody.querySelectorAll('tr.ticker-compare-highlight').forEach((row) => row.classList.remove('ticker-compare-highlight'));
   tbody.querySelectorAll('tr.comparison-anchor-row').forEach((row) => row.classList.remove('comparison-anchor-row'));
   tbody.querySelectorAll('.comparison-anchor-label').forEach((label) => label.remove());
-  tbody.querySelectorAll('.row-delete-btn.hidden').forEach((btn) => btn.classList.remove('hidden'));
+  tbody.querySelectorAll('.row-delete-btn.hidden').forEach((btn) => {
+    btn.classList.remove('hidden');
+    btn.style.display = '';
+  });
   activeComparisonRowId = null;
 }
 
@@ -416,6 +419,7 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
   const deleteBtn = actionCell?.querySelector('.row-delete-btn');
   if (deleteBtn) {
     deleteBtn.classList.add('hidden');
+    deleteBtn.style.display = 'none';
   }
   actionCell?.querySelector('.comparison-anchor-label')?.remove();
   if (actionCell) {
