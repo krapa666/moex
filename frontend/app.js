@@ -32,6 +32,9 @@ const saveTimers = new Map();
 const rowDrafts = new Map();
 const dirtyRows = new Set();
 const comparisonCache = new Map();
+let tooltipHoverTimer = null;
+let pendingTooltipPoint = null;
+let pendingTooltipTicker = '';
 const sortState = { key: null, direction: 'asc' };
 const appState = {
   tables: [],
@@ -358,7 +361,28 @@ function moveTooltip(event) {
   tooltip.style.top = `${event.clientY + offset}px`;
 }
 
+function clearTooltipHoverTimer() {
+  if (tooltipHoverTimer) {
+    clearTimeout(tooltipHoverTimer);
+    tooltipHoverTimer = null;
+  }
+}
+
+function scheduleTickerTooltip(event, ticker) {
+  pendingTooltipPoint = { clientX: event.clientX, clientY: event.clientY };
+  pendingTooltipTicker = ticker;
+  clearTooltipHoverTimer();
+  tooltipHoverTimer = setTimeout(() => {
+    if (!pendingTooltipPoint) return;
+    showTickerTooltip(pendingTooltipPoint, pendingTooltipTicker);
+    tooltipHoverTimer = null;
+  }, 1000);
+}
+
 function hideTickerTooltip() {
+  clearTooltipHoverTimer();
+  pendingTooltipPoint = null;
+  pendingTooltipTicker = '';
   ensureComparisonTooltip().classList.add('hidden');
 }
 
@@ -580,9 +604,15 @@ function renderRows(rows) {
     const tickerInput = tr.querySelector('input[data-field="ticker"]');
     tickerInput?.addEventListener('mouseenter', (event) => {
       const draft = rowDrafts.get(row.id) || row;
-      showTickerTooltip(event, draft.ticker);
+      scheduleTickerTooltip(event, draft.ticker);
     });
-    tickerInput?.addEventListener('mousemove', moveTooltip);
+    tickerInput?.addEventListener('mousemove', (event) => {
+      if (ensureComparisonTooltip().classList.contains('hidden')) {
+        pendingTooltipPoint = { clientX: event.clientX, clientY: event.clientY };
+      } else {
+        moveTooltip(event);
+      }
+    });
     tickerInput?.addEventListener('mouseleave', hideTickerTooltip);
     tickerInput?.addEventListener('blur', hideTickerTooltip);
 
