@@ -23,6 +23,10 @@ const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
 const headerPriceYear3 = document.getElementById('header-price-year3');
 const headerPriceYear4 = document.getElementById('header-price-year4');
+const comparisonModal = document.getElementById('comparison-modal');
+const comparisonContent = document.getElementById('comparison-content');
+const comparisonSubtitle = document.getElementById('comparison-subtitle');
+const comparisonCloseBtn = document.getElementById('comparison-close-btn');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -109,6 +113,15 @@ function formatPercent(value) {
   }
   const formatted = formatNumber(Math.round(Number(value)), 0);
   return formatted === '—' ? formatted : `${formatted} %`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function parseInputNumber(value) {
@@ -288,6 +301,62 @@ async function loadRows() {
   throw lastError || new Error('Не удалось загрузить данные');
 }
 
+async function openTickerComparison(ticker) {
+  const normalizedTicker = normalizeTickerInput(ticker).trim();
+  if (!normalizedTicker) {
+    alert('Сначала заполните тикер.');
+    return;
+  }
+  const items = await api(`/api/ticker-comparison?ticker=${encodeURIComponent(normalizedTicker)}`);
+  if (!comparisonModal || !comparisonContent || !comparisonSubtitle) return;
+
+  comparisonSubtitle.textContent = `Тикер: ${normalizedTicker}. Ниже показаны прогнозы из всех таблиц аналитиков.`;
+  if (!items.length) {
+    comparisonContent.innerHTML = '<p>Для этого тикера пока нет данных в других таблицах.</p>';
+  } else {
+    comparisonContent.innerHTML = items
+      .map((item) => {
+        const rows = item.years
+          .map(
+            (entry) => `
+              <tr>
+                <td>${entry.year}</td>
+                <td>${formatNumber(entry.forecast_profit_billion_rub)}</td>
+                <td>${formatCurrency(entry.forecast_price)}</td>
+                <td>${formatPercent(entry.upside_percent)}</td>
+              </tr>
+            `,
+          )
+          .join('');
+
+        return `
+          <section class="comparison-card">
+            <h3>Таблица №${item.table_number} — ${escapeHtml(item.analyst_name)}</h3>
+            <table class="comparison-table">
+              <thead>
+                <tr>
+                  <th>Год</th>
+                  <th>Чистая прибыль, млрд ₽</th>
+                  <th>Прогнозная цена, ₽</th>
+                  <th>Upside, %</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </section>
+        `;
+      })
+      .join('');
+  }
+
+  comparisonModal.classList.remove('hidden');
+}
+
+function closeComparisonModal() {
+  if (!comparisonModal) return;
+  comparisonModal.classList.add('hidden');
+}
+
 function rowToPayload(row) {
   const profitMap = row.net_profit_year_map || {};
   return {
@@ -420,6 +489,7 @@ function renderRows(rows) {
       <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
+        <button data-action="compare" class="btn">Сравнить</button>
         <button data-action="delete" class="btn-danger">Удалить</button>
         ${row.status_message ? `<div class="status-error">${row.status_message}</div>` : ''}
       </td>
@@ -482,6 +552,15 @@ function renderRows(rows) {
       try {
         await api(`/api/rows/${row.id}`, { method: 'DELETE' });
         await loadRows();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    tr.querySelector('[data-action="compare"]').addEventListener('click', async () => {
+      try {
+        const draft = rowDrafts.get(row.id) || row;
+        await openTickerComparison(draft.ticker);
       } catch (err) {
         alert(err.message);
       }
@@ -617,6 +696,11 @@ sortButtons.forEach((button) => {
     });
     updateSortIndicators();
   });
+});
+
+comparisonCloseBtn?.addEventListener('click', closeComparisonModal);
+comparisonModal?.addEventListener('click', (event) => {
+  if (event.target === comparisonModal) closeComparisonModal();
 });
 
 async function initApp() {

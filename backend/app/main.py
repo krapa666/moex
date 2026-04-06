@@ -18,6 +18,8 @@ from .schemas import (
     StockRowCreate,
     StockRowRead,
     StockRowUpdate,
+    TickerComparisonItem,
+    TickerComparisonYear,
 )
 from .services import refresh_all_prices, refresh_row_price
 
@@ -112,6 +114,113 @@ def merge_payload_profit_map(payload: StockRowCreate | StockRowUpdate, year_offs
     merged[str(years[2])] = payload.forecast_profit_year3_billion_rub
     merged[str(years[3])] = payload.forecast_profit_year4_billion_rub
     return merged
+
+
+def reset_net_profit_fields(row: StockRow) -> None:
+    row.forecast_profit_year1_billion_rub = None
+    row.forecast_profit_year2_billion_rub = None
+    row.forecast_profit_year3_billion_rub = None
+    row.forecast_profit_year4_billion_rub = None
+    row.net_profit_year_map = {}
+    row.forecast_price_year1 = None
+    row.forecast_price_year2 = None
+    row.forecast_price_year3 = None
+    row.forecast_price_year4 = None
+    row.upside_percent_year1 = None
+    row.upside_percent_year2 = None
+    row.upside_percent_year3 = None
+    row.upside_percent_year4 = None
+
+
+def copy_shared_row_fields(src: StockRow, dest: StockRow) -> None:
+    dest.ticker = src.ticker
+    dest.current_price = src.current_price
+    dest.shares_billion = src.shares_billion
+    dest.market_cap_billion_rub = src.market_cap_billion_rub
+    dest.pe_avg_5y = src.pe_avg_5y
+    dest.status_message = src.status_message
+    dest.price_updated_at = src.price_updated_at
+
+
+def sync_row_to_other_tables(
+    db: Session,
+    row: StockRow,
+    *,
+    old_ticker: str | None = None,
+) -> None:
+    ticker = row.ticker.strip().upper()
+    if not ticker:
+        return
+
+    tables = get_tables_ordered(db)
+    for table in tables:
+        if table.id == row.table_id:
+            continue
+
+        target = None
+        if old_ticker:
+            target = db.scalars(
+                select(StockRow).where(StockRow.table_id == table.id, StockRow.ticker == old_ticker).limit(1)
+            ).first()
+        if target is None:
+            target = db.scalars(
+                select(StockRow).where(StockRow.table_id == table.id, StockRow.ticker == ticker).limit(1)
+            ).first()
+
+        if target is None:
+            target = StockRow(table_id=table.id, ticker=ticker)
+            copy_shared_row_fields(row, target)
+            reset_net_profit_fields(target)
+            db.add(target)
+            continue
+
+        copy_shared_row_fields(row, target)
+        if target.net_profit_year_map is None:
+            reset_net_profit_fields(target)
+        else:
+            apply_net_profit_projection(target, table.year_offset)
+
+
+def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_number: int) -> TickerComparisonItem:
+    years = [BASE_FORECAST_YEAR + table.year_offset + i for i in range(4)]
+    values = [
+        (
+            row.forecast_profit_year1_billion_rub,
+            row.forecast_price_year1,
+            row.upside_percent_year1,
+        ),
+        (
+            row.forecast_profit_year2_billion_rub,
+            row.forecast_price_year2,
+            row.upside_percent_year2,
+        ),
+        (
+            row.forecast_profit_year3_billion_rub,
+            row.forecast_price_year3,
+            row.upside_percent_year3,
+        ),
+        (
+            row.forecast_profit_year4_billion_rub,
+            row.forecast_price_year4,
+            row.upside_percent_year4,
+        ),
+    ]
+    return TickerComparisonItem(
+        table_id=table.id,
+        table_number=table_number,
+        analyst_name=table.analyst_name,
+        year_offset=table.year_offset,
+        ticker=row.ticker,
+        years=[
+            TickerComparisonYear(
+                year=years[idx],
+                forecast_profit_billion_rub=profit,
+                forecast_price=price,
+                upside_percent=upside,
+            )
+            for idx, (profit, price, upside) in enumerate(values)
+        ],
+    )
 
 
 @app.get("/api/health")
@@ -229,6 +338,8 @@ async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
     db.add(row)
     db.commit()
     db.refresh(row)
+    sync_row_to_other_tables(db, row)
+    db.commit()
     return row
 
 
@@ -239,6 +350,7 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
         raise HTTPException(status_code=404, detail="Строка не найдена")
 
     table = get_table_or_404(db, payload.table_id)
+    old_ticker = row.ticker.strip().upper()
     row.table_id = payload.table_id
     row.ticker = payload.ticker.strip().upper()
     row.shares_billion = payload.shares_billion
@@ -250,6 +362,7 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
     )
 
     await refresh_row_price(row, force=bool(row.ticker))
+    sync_row_to_other_tables(db, row, old_ticker=old_ticker if old_ticker != row.ticker else None)
     db.commit()
     db.refresh(row)
     return row
@@ -269,3 +382,24 @@ def delete_row(row_id: int, db: Session = Depends(get_db)):
 async def refresh_prices(table_id: int, db: Session = Depends(get_db)):
     get_table_or_404(db, table_id)
     return await refresh_all_prices(db, force=True, table_id=table_id)
+
+
+@app.get("/api/ticker-comparison", response_model=list[TickerComparisonItem])
+def ticker_comparison(ticker: str, db: Session = Depends(get_db)):
+    normalized = ticker.strip().upper()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Тикер обязателен")
+
+    tables = get_tables_ordered(db)
+    table_number_map = {table.id: index + 1 for index, table in enumerate(tables)}
+    result: list[TickerComparisonItem] = []
+    for table in tables:
+        row = db.scalars(
+            select(StockRow).where(StockRow.table_id == table.id, StockRow.ticker == normalized).limit(1)
+        ).first()
+        if row is None:
+            continue
+        apply_net_profit_projection(row, table.year_offset)
+        result.append(build_ticker_comparison_item(table, row, table_number_map[table.id]))
+
+    return result

@@ -64,3 +64,19 @@ class AnalystTableRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TickerComparisonYear(BaseModel):
+    year: int
+    forecast_profit_billion_rub: float | None
+    forecast_price: float | None
+    upside_percent: float | None
+
+
+class TickerComparisonItem(BaseModel):
+    table_id: int
+    table_number: int
+    analyst_name: str
+    year_offset: int
+    ticker: str
+    years: list[TickerComparisonYear]
