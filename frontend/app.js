@@ -155,6 +155,13 @@ function normalizeTickerInput(value) {
     .toUpperCase();
 }
 
+function applyTickerInputSizing(input) {
+  if (!input) return;
+  const length = String(input.value ?? '').trim().length;
+  const adaptiveChars = Math.max(5, Math.min(10, length || 5));
+  input.style.setProperty('--ticker-ch', String(adaptiveChars + 1));
+}
+
 const INPUT_NORMALIZERS = {
   ticker: normalizeTickerInput,
   shares_billion: normalizeNumericInput,
@@ -352,7 +359,7 @@ function createInlineComparisonRow(item) {
   const tr = document.createElement('tr');
   tr.className = 'comparison-inline-row ticker-compare-highlight';
   tr.innerHTML = `
-    <td><input value="${item.ticker ?? ''}" disabled /></td>
+    <td><input class="ticker-input" value="${item.ticker ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(item.current_price, priceDecimals)}</span></td>
     <td><input value="${item.shares_billion ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(item.market_cap_billion_rub)}</span></td>
@@ -372,6 +379,7 @@ function createInlineComparisonRow(item) {
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">№${item.table_number} — ${escapeHtml(item.analyst_name)}</span></td>
   `;
+  applyTickerInputSizing(tr.querySelector('.ticker-input'));
   return tr;
 }
 
@@ -576,7 +584,7 @@ function renderRows(rows) {
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td><input data-field="ticker" value="${row.ticker ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
+      <td><input class="ticker-input" data-field="ticker" value="${row.ticker ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="current_price">${formatCurrency(row.current_price, priceDecimals)}</span></td>
       <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
@@ -605,6 +613,9 @@ function renderRows(rows) {
         const normalizedValue = normalizeInputByField(input.dataset.field, input.value);
         if (input.value !== normalizedValue) {
           input.value = normalizedValue;
+        }
+        if (input.dataset.field === 'ticker') {
+          applyTickerInputSizing(input);
         }
 
         const updated = {
@@ -654,6 +665,7 @@ function renderRows(rows) {
     });
 
     const tickerInput = tr.querySelector('input[data-field="ticker"]');
+    applyTickerInputSizing(tickerInput);
     tickerInput?.addEventListener('mouseenter', () => {
       const draft = rowDrafts.get(row.id) || row;
       showInlineComparisonRows(tr, draft.ticker, row.id);

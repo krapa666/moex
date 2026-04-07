@@ -169,6 +169,12 @@ input {
   min-height: 28px;
 }
 
+.ticker-input {
+  width: clamp(7ch, calc(var(--ticker-ch, 6) * 1ch), 12ch);
+  min-width: 7ch;
+  max-width: 100%;
+}
+
 #table-select,
 #analyst-name-input {
   border: 1px solid var(--border);
