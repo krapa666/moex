@@ -8,4 +8,7 @@ resources:
   - postgres.yaml
   - backend.yaml
   - frontend.yaml
+  - prometheus.yaml
+  - loki.yaml
+  - grafana.yaml
   - ingress.yaml

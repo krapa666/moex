@@ -133,6 +133,9 @@ kubectl apply -f k8s/postgres-pvc.yaml
 kubectl apply -f k8s/postgres.yaml
 kubectl apply -f k8s/backend.yaml
 kubectl apply -f k8s/frontend.yaml
+kubectl apply -f k8s/prometheus.yaml
+kubectl apply -f k8s/loki.yaml
+kubectl apply -f k8s/grafana.yaml
 
 log_step "applying ingress"
 kubectl apply -f k8s/ingress.yaml
@@ -142,6 +145,9 @@ kubectl -n "${NAMESPACE}" rollout status deploy/postgres --timeout=180s
 import_snapshot_into_k8s_db
 kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/prometheus --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/loki --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/grafana --timeout=180s
 start_frontend_port_forward
 
 log_step "minikube mode is up"
@@ -151,6 +157,10 @@ if ! minikube service -n "${NAMESPACE}" frontend --url; then
 fi
 echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
 echo "[minikube-up] localhost NodePort URL: http://127.0.0.1:30080/"
+echo "[minikube-up] monitoring URLs via ingress:"
+echo "  - http://junibox/prometheus/"
+echo "  - http://junibox/grafana/"
+echo "  - http://junibox/loki/"
 
 echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://junibox/"
 

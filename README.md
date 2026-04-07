@@ -175,6 +175,12 @@
 - `/tmp/moex-k8s-port-forward.pid`
 - `/tmp/moex-k8s-port-forward.log`
 
+В Minikube-режиме также поднимается мониторинг (`prometheus`, `grafana`, `loki`) и
+он доступен через тот же внешний хост:
+- `http://junibox/prometheus/`
+- `http://junibox/grafana/`
+- `http://junibox/loki/`
+
 Опции:
 ```bash
 ./scripts/minikube-up.sh --skip-nginx
