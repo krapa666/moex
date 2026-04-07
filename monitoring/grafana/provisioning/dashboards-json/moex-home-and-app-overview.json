@@ -1,104 +1,187 @@
 {
-  \"annotations\": {\"list\": []},
-  \"editable\": true,
-  \"fiscalYearStartMonth\": 0,
-  \"graphTooltip\": 0,
-  \"id\": null,
-  \"links\": [],
-  \"panels\": [
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
     {
-      \"datasource\": {\"type\": \"prometheus\", \"uid\": \"prometheus\"},
-      \"fieldConfig\": {\"defaults\": {\"unit\": \"percent\", \"decimals\": 1}, \"overrides\": []},
-      \"gridPos\": {\"h\": 5, \"w\": 6, \"x\": 0, \"y\": 0},
-      \"id\": 1,
-      \"options\": {\"colorMode\": \"value\", \"graphMode\": \"none\", \"justifyMode\": \"auto\", \"orientation\": \"auto\", \"reduceOptions\": {\"calcs\": [\"lastNotNull\"], \"fields\": \"\", \"values\": false}, \"textMode\": \"auto\"},
-      \"targets\": [{\"expr\": \"100 - (avg(rate(node_cpu_seconds_total{job='moex-infra',mode='idle'}[5m])) * 100)\", \"refId\": \"A\"}],
-      \"title\": \"Server CPU usage\",
-      \"type\": \"stat\"
+      "type": "stat",
+      "title": "Backend Up",
+      "id": 1,
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(up{job='moex-backend'})", "refId": "A"}],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}}
+          ]
+        },
+        "overrides": []
+      }
     },
     {
-      \"datasource\": {\"type\": \"prometheus\", \"uid\": \"prometheus\"},
-      \"fieldConfig\": {\"defaults\": {\"unit\": \"percent\", \"decimals\": 1}, \"overrides\": []},
-      \"gridPos\": {\"h\": 5, \"w\": 6, \"x\": 6, \"y\": 0},
-      \"id\": 2,
-      \"options\": {\"colorMode\": \"value\", \"graphMode\": \"none\", \"justifyMode\": \"auto\", \"orientation\": \"auto\", \"reduceOptions\": {\"calcs\": [\"lastNotNull\"], \"fields\": \"\", \"values\": false}, \"textMode\": \"auto\"},
-      \"targets\": [{\"expr\": \"(1 - (node_memory_MemAvailable_bytes{job='moex-infra'} / node_memory_MemTotal_bytes{job='moex-infra'})) * 100\", \"refId\": \"A\"}],
-      \"title\": \"Server RAM usage\",
-      \"type\": \"stat\"
+      "type": "stat",
+      "title": "Backend RPS (5m)",
+      "id": 2,
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(http_requests_total{job='moex-backend'}[5m]))", "refId": "A"}],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 2}, "overrides": []}
     },
     {
-      \"datasource\": {\"type\": \"prometheus\", \"uid\": \"prometheus\"},
-      \"fieldConfig\": {\"defaults\": {\"unit\": \"percent\", \"decimals\": 1}, \"overrides\": []},
-      \"gridPos\": {\"h\": 5, \"w\": 6, \"x\": 12, \"y\": 0},
-      \"id\": 3,
-      \"options\": {\"colorMode\": \"value\", \"graphMode\": \"none\", \"justifyMode\": \"auto\", \"orientation\": \"auto\", \"reduceOptions\": {\"calcs\": [\"lastNotNull\"], \"fields\": \"\", \"values\": false}, \"textMode\": \"auto\"},
-      \"targets\": [{\"expr\": \"100 * (1 - (node_filesystem_avail_bytes{job='moex-infra',mountpoint='/',fstype!~'tmpfs|overlay'} / node_filesystem_size_bytes{job='moex-infra',mountpoint='/',fstype!~'tmpfs|overlay'}))\", \"refId\": \"A\"}],
-      \"title\": \"Disk usage /\",
-      \"type\": \"stat\"
+      "type": "stat",
+      "title": "5xx / min",
+      "id": 3,
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(http_requests_total{job='moex-backend',status=~'5..'}[5m])) * 60", "refId": "A"}],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "orange", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        },
+        "overrides": []
+      }
     },
     {
-      \"datasource\": {\"type\": \"prometheus\", \"uid\": \"prometheus\"},
-      \"fieldConfig\": {\"defaults\": {\"mappings\": [], \"thresholds\": {\"mode\": \"absolute\", \"steps\": [{\"color\": \"red\", \"value\": 0}, {\"color\": \"green\", \"value\": 1}]}, \"unit\": \"short\"}, \"overrides\": []},
-      \"gridPos\": {\"h\": 5, \"w\": 6, \"x\": 18, \"y\": 0},
-      \"id\": 4,
-      \"options\": {\"colorMode\": \"background\", \"graphMode\": \"none\", \"justifyMode\": \"center\", \"orientation\": \"horizontal\", \"reduceOptions\": {\"calcs\": [\"lastNotNull\"], \"fields\": \"\", \"values\": false}, \"textMode\": \"value_and_name\"},
-      \"targets\": [{\"expr\": \"sum(up{job=~'moex-backend|moex-infra'})\", \"refId\": \"A\"}],
-      \"title\": \"Running targets\",
-      \"type\": \"stat\"
+      "type": "stat",
+      "title": "Node CPU %",
+      "id": 4,
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "100 - avg(rate(node_cpu_seconds_total{job='moex-infra',mode='idle'}[5m])) * 100", "refId": "A"}],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1}, "overrides": []}
     },
     {
-      \"datasource\": {\"type\": \"prometheus\", \"uid\": \"prometheus\"},
-      \"fieldConfig\": {\"defaults\": {\"unit\": \"reqps\"}, \"overrides\": []},
-      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 0, \"y\": 5},
-      \"id\": 5,
-      \"targets\": [{\"expr\": \"sum(rate(http_requests_total{job='moex-backend'}[5m]))\", \"legendFormat\": \"RPS\", \"refId\": \"A\"}],
-      \"title\": \"Backend request rate\",
-      \"type\": \"timeseries\"
+      "type": "timeseries",
+      "title": "Requests by status",
+      "id": 5,
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "sum(rate(http_requests_total{job='moex-backend'}[5m]))", "legendFormat": "all", "refId": "A"},
+        {"expr": "sum(rate(http_requests_total{job='moex-backend',status=~'2..'}[5m]))", "legendFormat": "2xx", "refId": "B"},
+        {"expr": "sum(rate(http_requests_total{job='moex-backend',status=~'4..'}[5m]))", "legendFormat": "4xx", "refId": "C"},
+        {"expr": "sum(rate(http_requests_total{job='moex-backend',status=~'5..'}[5m]))", "legendFormat": "5xx", "refId": "D"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 2}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
     },
     {
-      \"datasource\": {\"type\": \"prometheus\", \"uid\": \"prometheus\"},
-      \"fieldConfig\": {\"defaults\": {\"unit\": \"reqps\"}, \"overrides\": []},
-      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 12, \"y\": 5},
-      \"id\": 6,
-      \"targets\": [{\"expr\": \"sum(rate(http_requests_total{job='moex-backend',status=~'5..'}[5m]))\", \"legendFormat\": \"5xx\", \"refId\": \"A\"}],
-      \"title\": \"Backend 5xx rate\",
-      \"type\": \"timeseries\"
+      "type": "timeseries",
+      "title": "Infra health",
+      "id": 6,
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "up{job=~'moex-backend|moex-infra'}", "legendFormat": "{{job}} :: {{instance}}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "green", "value": 1}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}}
     },
     {
-      \"datasource\": {\"type\": \"prometheus\", \"uid\": \"prometheus\"},
-      \"fieldConfig\": {\"defaults\": {}, \"overrides\": []},
-      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 0, \"y\": 13},
-      \"id\": 7,
-      \"targets\": [{\"expr\": \"up{job=~'moex-backend|moex-infra'}\", \"legendFormat\": \"{{job}} :: {{instance}}\", \"refId\": \"A\"}],
-      \"title\": \"Components health\",
-      \"type\": \"timeseries\"
+      "type": "timeseries",
+      "title": "Memory and Disk usage",
+      "id": 7,
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "(1 - (node_memory_MemAvailable_bytes{job='moex-infra'} / node_memory_MemTotal_bytes{job='moex-infra'})) * 100", "legendFormat": "RAM %", "refId": "A"},
+        {"expr": "100 * (1 - (node_filesystem_avail_bytes{job='moex-infra',mountpoint='/',fstype!~'tmpfs|overlay'} / node_filesystem_size_bytes{job='moex-infra',mountpoint='/',fstype!~'tmpfs|overlay'}))", "legendFormat": "Disk / %", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
     },
     {
-      \"datasource\": {\"type\": \"loki\", \"uid\": \"loki\"},
-      \"gridPos\": {\"h\": 8, \"w\": 12, \"x\": 12, \"y\": 13},
-      \"id\": 8,
-      \"options\": {\"dedupStrategy\": \"none\", \"enableLogDetails\": true, \"prettifyLogMessage\": false, \"showCommonLabels\": false, \"showLabels\": true, \"showTime\": true, \"sortOrder\": \"Descending\", \"wrapLogMessage\": true},
-      \"targets\": [
+      "type": "logs",
+      "title": "Errors and warnings (Loki)",
+      "id": 8,
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
         {
-          \"expr\": \"{container=~\\\\\"moex-(backend|db|frontend|prometheus|grafana|loki|promtail|pgbackup|node-exporter)\\\\\"} |~ \\\\\"(?i)(error|warn|critical|fatal|panic|exception|failed|timeout)\\\\\"\",
-          \"queryType\": \"range\",
-          \"refId\": \"A\"
+          "expr": "{container=~\"moex-(backend|db|frontend|prometheus|grafana|loki|promtail|pgbackup|node-exporter)\"} |~ \"(?i)(error|warn|critical|fatal|panic|exception|failed|timeout)\"",
+          "queryType": "range",
+          "refId": "A"
         }
       ],
-      \"title\": \"Important logs (Loki)\",
-      \"type\": \"logs\"
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
     }
   ],
-  \"refresh\": \"30s\",
-  \"schemaVersion\": 39,
-  \"style\": \"dark\",
-  \"tags\": [\"moex\", \"infra\", \"loki\"],
-  \"templating\": {\"list\": []},
-  \"time\": {\"from\": \"now-6h\", \"to\": \"now\"},
-  \"timepicker\": {},
-  \"timezone\": \"browser\",
-  \"title\": \"MOEX Home Server \u0026 App Overview\",
-  \"uid\": \"moex-home-overview\",
-  \"version\": 1,
-  \"weekStart\": \"\"
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["moex", "backend", "infra", "loki"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "MOEX App Operations Overview",
+  "uid": "moex-home-overview",
+  "version": 2,
+  "weekStart": ""
 }

@@ -81,6 +81,7 @@ services:
     environment:
       GF_SERVER_ROOT_URL: http://junibox/grafana/
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards-json/moex-home-and-app-overview.json
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
