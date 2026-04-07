@@ -44,7 +44,48 @@ metadata:
   namespace: moex
 data:
   moex-home-and-app-overview.json: |
-$(sed 's/^/    /' monitoring/grafana/provisioning/dashboards-json/moex-home-and-app-overview.json)
+    {
+      "title": "MOEX App Operations Overview",
+      "uid": "moex-home-overview",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": {"from": "now-6h", "to": "now"},
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Backend Up",
+          "id": 1,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "max(up{job='moex-backend'})", "refId": "A"}]
+        },
+        {
+          "type": "timeseries",
+          "title": "Backend RPS",
+          "id": 2,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum(rate(http_requests_total{job='moex-backend'}[5m]))", "refId": "A", "legendFormat": "RPS"}]
+        },
+        {
+          "type": "timeseries",
+          "title": "Backend 5xx",
+          "id": 3,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum(rate(http_requests_total{job='moex-backend',status=~'5..'}[5m]))", "refId": "A", "legendFormat": "5xx"}]
+        },
+        {
+          "type": "logs",
+          "title": "Loki logs",
+          "id": 4,
+          "gridPos": {"h": 9, "w": 24, "x": 0, "y": 8},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [{"expr": "{job=~\".*\"}", "queryType": "range", "refId": "A"}]
+        }
+      ]
+    }
 ---
 apiVersion: apps/v1
 kind: Deployment
