@@ -44,7 +44,7 @@ pick_endpoint() {
   local endpoint="$2"
   local health_path="$3"
   if curl -fsS --max-time 2 "http://${endpoint}${health_path}" >/dev/null 2>&1; then
-    echo "[nginx-k8s-proxy] using ${name} endpoint: ${endpoint}"
+    echo "[nginx-k8s-proxy] using ${name} endpoint: ${endpoint}" >&2
   else
     echo "[nginx-k8s-proxy] warning: ${name} endpoint is not reachable yet; using ${endpoint}" >&2
   fi
