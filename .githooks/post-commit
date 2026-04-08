@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ -z "${branch}" || "${branch}" == "HEAD" ]]; then
+  exit 0
+fi
+target_branch="main"
+
+push_remote() {
+  local remote="$1"
+  local branch="$2"
+  local push_url=""
+  local gitlab_token="${GITLAB_TOKEN:-$(git config --local --get moex.gitlabToken || true)}"
+  local github_token="${GITHUB_TOKEN:-$(git config --local --get moex.githubToken || true)}"
+
+  if [[ "$remote" == "gitlab" && -n "$gitlab_token" ]]; then
+    push_url="https://oauth2:${gitlab_token}@gitlab.com/krapa/moex.git"
+  elif [[ "$remote" == "github" && -n "$github_token" ]]; then
+    push_url="https://x-access-token:${github_token}@github.com/krapa666/moex.git"
+  fi
+
+  if [[ -n "$push_url" ]]; then
+    echo "[post-commit] pushing ${branch} -> ${remote}:${target_branch} (token auth)" >&2
+    if ! GIT_TERMINAL_PROMPT=0 git push "$push_url" "HEAD:${target_branch}"; then
+      echo "[post-commit] warning: push to ${remote} failed" >&2
+    fi
+    return
+  fi
+
+  if git remote get-url "$remote" >/dev/null 2>&1; then
+    echo "[post-commit] pushing ${branch} -> ${remote}:${target_branch}" >&2
+    if ! GIT_TERMINAL_PROMPT=0 git push "$remote" "HEAD:${target_branch}"; then
+      echo "[post-commit] warning: push to ${remote} failed" >&2
+    fi
+  fi
+}
+
+push_remote github "$branch"
+push_remote gitlab "$branch"
