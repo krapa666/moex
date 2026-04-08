@@ -51,13 +51,13 @@ spec:
               subPath: prometheus.yml
           readinessProbe:
             httpGet:
-              path: /-/ready
+              path: /prometheus/-/ready
               port: 9090
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /-/healthy
+              path: /prometheus/-/healthy
               port: 9090
             initialDelaySeconds: 20
             periodSeconds: 15
