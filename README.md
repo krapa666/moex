@@ -174,6 +174,12 @@
 и пишет PID/лог в:
 - `/tmp/moex-k8s-port-forward.pid`
 - `/tmp/moex-k8s-port-forward.log`
+- `/tmp/moex-k8s-prometheus-port-forward.pid`
+- `/tmp/moex-k8s-prometheus-port-forward.log`
+- `/tmp/moex-k8s-grafana-port-forward.pid`
+- `/tmp/moex-k8s-grafana-port-forward.log`
+- `/tmp/moex-k8s-loki-port-forward.pid`
+- `/tmp/moex-k8s-loki-port-forward.log`
 
 В Minikube-режиме также поднимается мониторинг (`prometheus`, `grafana`, `loki`) и
 он доступен через тот же внешний хост:

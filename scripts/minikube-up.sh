@@ -7,6 +7,12 @@ FRONTEND_IMAGE="krapa666/moex-frontend:latest"
 SKIP_NGINX=false
 PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
 PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-port-forward.log"
+PROMETHEUS_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-prometheus-port-forward.pid"
+PROMETHEUS_PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-prometheus-port-forward.log"
+GRAFANA_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-grafana-port-forward.pid"
+GRAFANA_PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-grafana-port-forward.log"
+LOKI_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-loki-port-forward.pid"
+LOKI_PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-loki-port-forward.log"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 STEP=0
@@ -67,6 +73,40 @@ start_frontend_port_forward() {
   done
 
   echo "[minikube-up] warning: port-forward did not become ready in time; see ${PORT_FORWARD_LOG_FILE}" >&2
+}
+
+start_service_port_forward() {
+  local service="$1"
+  local local_port="$2"
+  local remote_port="$3"
+  local pid_file="$4"
+  local log_file="$5"
+  local health_url="$6"
+
+  if [[ -f "${pid_file}" ]]; then
+    local existing_pid
+    existing_pid="$(cat "${pid_file}" 2>/dev/null || true)"
+    if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" >/dev/null 2>&1; then
+      echo "[minikube-up] ${service} port-forward already running (pid: ${existing_pid})"
+      return
+    fi
+    rm -f "${pid_file}"
+  fi
+
+  echo "[minikube-up] starting ${service} port-forward on 127.0.0.1:${local_port}..."
+  nohup kubectl -n "${NAMESPACE}" port-forward "svc/${service}" "${local_port}:${remote_port}" --address 127.0.0.1 >"${log_file}" 2>&1 &
+  local pf_pid=$!
+  echo "${pf_pid}" > "${pid_file}"
+
+  for _ in $(seq 1 30); do
+    if curl -fsS --max-time 2 "${health_url}" >/dev/null 2>&1; then
+      echo "[minikube-up] ${service} port-forward is ready (pid: ${pf_pid})"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "[minikube-up] warning: ${service} port-forward did not become ready in time; see ${log_file}" >&2
 }
 
 import_snapshot_into_k8s_db() {
@@ -149,6 +189,9 @@ kubectl -n "${NAMESPACE}" rollout status deploy/prometheus --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/loki --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/grafana --timeout=180s
 start_frontend_port_forward
+start_service_port_forward prometheus 39090 9090 "${PROMETHEUS_PORT_FORWARD_PID_FILE}" "${PROMETHEUS_PORT_FORWARD_LOG_FILE}" "http://127.0.0.1:39090/prometheus/-/ready"
+start_service_port_forward grafana 33000 3000 "${GRAFANA_PORT_FORWARD_PID_FILE}" "${GRAFANA_PORT_FORWARD_LOG_FILE}" "http://127.0.0.1:33000/api/health"
+start_service_port_forward loki 33100 3100 "${LOKI_PORT_FORWARD_PID_FILE}" "${LOKI_PORT_FORWARD_LOG_FILE}" "http://127.0.0.1:33100/ready"
 
 log_step "minikube mode is up"
 echo "[minikube-up] frontend URL (NodePort):"

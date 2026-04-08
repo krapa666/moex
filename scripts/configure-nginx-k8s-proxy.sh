@@ -39,27 +39,36 @@ if [[ ! -f "$TEMPLATE_PATH" ]]; then
   exit 1
 fi
 
-FRONTEND_ENDPOINT="127.0.0.1:30080"
-if curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
-  echo "[nginx-k8s-proxy] using localhost frontend endpoint: ${FRONTEND_ENDPOINT}"
-else
-  require_cmd minikube
-  MINIKUBE_IP="$(minikube ip 2>/dev/null | tr -d '[:space:]')"
-  if [[ -z "$MINIKUBE_IP" ]]; then
-    echo "[nginx-k8s-proxy] error: localhost endpoint is unavailable and minikube profile is not running" >&2
-    echo "[nginx-k8s-proxy] hint: run ./scripts/minikube-up.sh (or start your local frontend on 127.0.0.1:30080)" >&2
-    exit 1
-  fi
-  FRONTEND_ENDPOINT="${MINIKUBE_IP}:30080"
-  if curl -fsS --max-time 2 "http://${FRONTEND_ENDPOINT}/" >/dev/null 2>&1; then
-    echo "[nginx-k8s-proxy] localhost endpoint unavailable; using minikube ip endpoint: ${FRONTEND_ENDPOINT}"
+pick_endpoint() {
+  local name="$1"
+  local endpoint="$2"
+  local health_path="$3"
+  if curl -fsS --max-time 2 "http://${endpoint}${health_path}" >/dev/null 2>&1; then
+    echo "[nginx-k8s-proxy] using ${name} endpoint: ${endpoint}"
   else
-    echo "[nginx-k8s-proxy] warning: frontend endpoint is not reachable yet; generating config with ${FRONTEND_ENDPOINT}" >&2
+    echo "[nginx-k8s-proxy] warning: ${name} endpoint is not reachable yet; using ${endpoint}" >&2
   fi
-fi
+  printf '%s' "${endpoint}"
+}
+
+FRONTEND_ENDPOINT="$(pick_endpoint frontend '127.0.0.1:30080' '/')"
+PROMETHEUS_ENDPOINT="$(pick_endpoint prometheus '127.0.0.1:39090' '/prometheus/-/ready')"
+GRAFANA_ENDPOINT="$(pick_endpoint grafana '127.0.0.1:33000' '/api/health')"
+LOKI_ENDPOINT="$(pick_endpoint loki '127.0.0.1:33100' '/ready')"
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
-awk -v endpoint="$FRONTEND_ENDPOINT" '{gsub(/MINIKUBE_FRONTEND_ENDPOINT/, endpoint); print}' "$TEMPLATE_PATH" > "$OUTPUT_PATH"
+awk \
+  -v frontend="$FRONTEND_ENDPOINT" \
+  -v prometheus="$PROMETHEUS_ENDPOINT" \
+  -v grafana="$GRAFANA_ENDPOINT" \
+  -v loki="$LOKI_ENDPOINT" \
+  '{
+     gsub(/MINIKUBE_FRONTEND_ENDPOINT/, frontend);
+     gsub(/MINIKUBE_PROMETHEUS_ENDPOINT/, prometheus);
+     gsub(/MINIKUBE_GRAFANA_ENDPOINT/, grafana);
+     gsub(/MINIKUBE_LOKI_ENDPOINT/, loki);
+     print
+   }' "$TEMPLATE_PATH" > "$OUTPUT_PATH"
 
 echo "[nginx-k8s-proxy] generated: $OUTPUT_PATH"
 if [[ "$OUTPUT_PATH" == "/etc/nginx/conf.d/moex.conf" && -f "/etc/nginx/conf.d/moex-k8s.conf" ]]; then

@@ -4,6 +4,9 @@ set -euo pipefail
 NAMESPACE="moex"
 KEEP_MINIKUBE=false
 PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
+PROMETHEUS_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-prometheus-port-forward.pid"
+GRAFANA_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-grafana-port-forward.pid"
+LOKI_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-loki-port-forward.pid"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 STEP=0
@@ -53,14 +56,24 @@ export_k8s_db_snapshot() {
   fi
 }
 
-if [[ -f "${PORT_FORWARD_PID_FILE}" ]]; then
-  pf_pid="$(cat "${PORT_FORWARD_PID_FILE}" 2>/dev/null || true)"
-  if [[ -n "${pf_pid}" ]] && kill -0 "${pf_pid}" >/dev/null 2>&1; then
-    echo "[minikube-down] stopping frontend port-forward (pid: ${pf_pid})..."
-    kill "${pf_pid}" || true
+stop_port_forward() {
+  local service="$1"
+  local pid_file="$2"
+  if [[ -f "${pid_file}" ]]; then
+    local pf_pid
+    pf_pid="$(cat "${pid_file}" 2>/dev/null || true)"
+    if [[ -n "${pf_pid}" ]] && kill -0 "${pf_pid}" >/dev/null 2>&1; then
+      echo "[minikube-down] stopping ${service} port-forward (pid: ${pf_pid})..."
+      kill "${pf_pid}" || true
+    fi
+    rm -f "${pid_file}"
   fi
-  rm -f "${PORT_FORWARD_PID_FILE}"
-fi
+}
+
+stop_port_forward frontend "${PORT_FORWARD_PID_FILE}"
+stop_port_forward prometheus "${PROMETHEUS_PORT_FORWARD_PID_FILE}"
+stop_port_forward grafana "${GRAFANA_PORT_FORWARD_PID_FILE}"
+stop_port_forward loki "${LOKI_PORT_FORWARD_PID_FILE}"
 
 log_step "exporting shared DB snapshot before shutdown"
 export_k8s_db_snapshot
