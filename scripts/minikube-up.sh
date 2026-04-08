@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+NAMESPACE="moex"
+BACKEND_IMAGE="krapa666/moex-backend:latest"
+FRONTEND_IMAGE="krapa666/moex-frontend:latest"
+SKIP_NGINX=false
+PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
+PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-port-forward.log"
+SYNC_BACKUP_DIR="./backups/mode-sync"
+SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+STEP=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skip-nginx)
+      SKIP_NGINX=true
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "[minikube-up] error: required command not found: $cmd" >&2
+    exit 1
+  fi
+}
+
+require_cmd minikube
+require_cmd kubectl
+require_cmd docker
+require_cmd curl
+
+log_step() {
+  STEP=$((STEP + 1))
+  echo "[minikube-up][step ${STEP}] $1"
+}
+
+start_frontend_port_forward() {
+  if [[ -f "${PORT_FORWARD_PID_FILE}" ]]; then
+    local existing_pid
+    existing_pid="$(cat "${PORT_FORWARD_PID_FILE}" 2>/dev/null || true)"
+    if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" >/dev/null 2>&1; then
+      echo "[minikube-up] frontend port-forward already running (pid: ${existing_pid})"
+      return
+    fi
+    rm -f "${PORT_FORWARD_PID_FILE}"
+  fi
+
+  echo "[minikube-up] starting frontend port-forward on 127.0.0.1:30080..."
+  nohup kubectl -n "${NAMESPACE}" port-forward svc/frontend 30080:80 --address 127.0.0.1 >"${PORT_FORWARD_LOG_FILE}" 2>&1 &
+  local pf_pid=$!
+  echo "${pf_pid}" > "${PORT_FORWARD_PID_FILE}"
+
+  for _ in $(seq 1 30); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:30080/" >/dev/null 2>&1; then
+      echo "[minikube-up] frontend port-forward is ready (pid: ${pf_pid})"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "[minikube-up] warning: port-forward did not become ready in time; see ${PORT_FORWARD_LOG_FILE}" >&2
+}
+
+import_snapshot_into_k8s_db() {
+  if [[ ! -s "${SYNC_BACKUP_FILE}" ]]; then
+    echo "[minikube-up] no shared snapshot found, import skipped"
+    return
+  fi
+
+  local pg_pod=""
+  pg_pod="$(kubectl -n "${NAMESPACE}" get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -z "${pg_pod}" ]]; then
+    echo "[minikube-up] postgres pod not found, import skipped" >&2
+    return
+  fi
+
+  echo "[minikube-up] importing shared snapshot into k8s postgres (${pg_pod})..."
+  if gunzip -c "${SYNC_BACKUP_FILE}" | kubectl -n "${NAMESPACE}" exec -i "${pg_pod}" -- psql -v ON_ERROR_STOP=1 -U postgres -d fair_price >/dev/null; then
+    echo "[minikube-up] snapshot import completed"
+  else
+    echo "[minikube-up] warning: failed to import shared snapshot into k8s postgres" >&2
+  fi
+}
+
+wait_for_ingress_admission() {
+  echo "[minikube-up] waiting for ingress-nginx controller rollout..."
+  kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=240s
+
+  echo "[minikube-up] waiting for ingress admission endpoints..."
+  for _ in $(seq 1 60); do
+    endpoint_ip="$(kubectl -n ingress-nginx get endpoints ingress-nginx-controller-admission -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)"
+    if [[ -n "${endpoint_ip}" ]]; then
+      echo "[minikube-up] ingress admission endpoint is ready: ${endpoint_ip}"
+      return
+    fi
+    sleep 2
+  done
+
+  echo "[minikube-up] error: ingress admission endpoint did not become ready in time" >&2
+  exit 1
+}
+
+log_step "starting minikube (if needed)"
+minikube start
+
+log_step "enabling ingress addon"
+minikube addons enable ingress >/dev/null
+wait_for_ingress_admission
+
+log_step "switching docker daemon to minikube"
+# shellcheck disable=SC2046
+# shellcheck disable=SC1090
+eval "$(minikube docker-env)"
+
+log_step "building backend image: ${BACKEND_IMAGE}"
+docker build -t "${BACKEND_IMAGE}" backend
+
+log_step "building frontend image: ${FRONTEND_IMAGE}"
+docker build -t "${FRONTEND_IMAGE}" frontend
+
+log_step "applying core manifests (without ingress)"
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/postgres-pvc.yaml
+kubectl apply -f k8s/postgres.yaml
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/frontend.yaml
+kubectl apply -f k8s/prometheus.yaml
+kubectl apply -f k8s/loki.yaml
+kubectl apply -f k8s/grafana.yaml
+
+log_step "applying ingress"
+kubectl apply -f k8s/ingress.yaml
+
+log_step "waiting for deployments and importing snapshot"
+kubectl -n "${NAMESPACE}" rollout status deploy/postgres --timeout=180s
+import_snapshot_into_k8s_db
+kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/prometheus --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/loki --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/grafana --timeout=180s
+start_frontend_port_forward
+
+log_step "minikube mode is up"
+echo "[minikube-up] frontend URL (NodePort):"
+if ! minikube service -n "${NAMESPACE}" frontend --url; then
+  echo "[minikube-up] warning: failed to resolve service URL via minikube helper" >&2
+fi
+echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
+echo "[minikube-up] localhost NodePort URL: http://127.0.0.1:30080/"
+echo "[minikube-up] monitoring URLs via ingress:"
+echo "  - http://junibox/prometheus/"
+echo "  - http://junibox/grafana/"
+echo "  - http://junibox/loki/"
+
+echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://junibox/"
+
+if [[ "${SKIP_NGINX}" == "true" ]]; then
+  echo "[minikube-up] --skip-nginx set, reverse-proxy regeneration skipped"
+elif [[ -x "./scripts/configure-nginx-k8s-proxy.sh" ]]; then
+  echo "[minikube-up] regenerating nginx reverse-proxy config..."
+  if [[ -w "/etc/nginx/conf.d" ]]; then
+    ./scripts/configure-nginx-k8s-proxy.sh --reload || true
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ./scripts/configure-nginx-k8s-proxy.sh --reload || true
+  else
+    echo "[minikube-up] warning: no permissions to reload nginx. Run manually:" >&2
+    echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh --reload" >&2
+  fi
+fi
