@@ -292,6 +292,9 @@ sudo ./scripts/configure-nginx-k8s-proxy.sh --https --server-name your-domain.ex
 - `MOEX_PUBLIC_DOMAIN` (или `MOEX_SERVER_NAME`) — домен для `server_name`.
 - `MOEX_SSL_CERT_PATH` — путь к `fullchain.pem`.
 - `MOEX_SSL_CERT_KEY_PATH` — путь к `privkey.pem`.
+- `MOEX_FORCE_HTTPS=true` — принудительно включить HTTPS-шаблон (даже без локальной проверки файлов в `compose-up.sh` / `minikube-up.sh`).
+
+Важно: `compose-up.sh`/`minikube-up.sh` больше не проверяют сертификаты самостоятельно (это может ломаться из-за прав доступа к `/etc/letsencrypt/*` при запуске без root). Проверка и авто-включение HTTPS выполняется внутри `configure-nginx-*.sh`, который обычно запускается через `sudo`.
 
 3. Проверка:
 ```bash

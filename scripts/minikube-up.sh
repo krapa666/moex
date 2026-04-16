@@ -18,6 +18,7 @@ SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
 SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
 SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
+FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
 STEP=0
 
 while [[ $# -gt 0 ]]; do
@@ -153,14 +154,17 @@ wait_for_ingress_admission() {
 
 build_nginx_args() {
   local args=("--server-name" "${PUBLIC_DOMAIN}")
-  if [[ -f "${SSL_CERT_PATH}" && -f "${SSL_CERT_KEY_PATH}" ]]; then
-    echo "[minikube-up] detected TLS certificate for ${PUBLIC_DOMAIN}, enabling HTTPS nginx config"
-    args+=("--https" "--ssl-cert" "${SSL_CERT_PATH}" "--ssl-key" "${SSL_CERT_KEY_PATH}")
+  if [[ -n "${MOEX_SSL_CERT_PATH:-}" ]]; then
+    args+=("--ssl-cert" "${SSL_CERT_PATH}")
+  fi
+  if [[ -n "${MOEX_SSL_CERT_KEY_PATH:-}" ]]; then
+    args+=("--ssl-key" "${SSL_CERT_KEY_PATH}")
+  fi
+  if [[ "${FORCE_HTTPS}" == "1" || "${FORCE_HTTPS,,}" == "true" || "${FORCE_HTTPS,,}" == "yes" ]]; then
+    args+=("--https")
+    echo "[minikube-up] MOEX_FORCE_HTTPS enabled, forcing HTTPS nginx config" >&2
   else
-    echo "[minikube-up] TLS certificate not found for ${PUBLIC_DOMAIN}; keeping HTTP nginx config"
-    echo "[minikube-up] expected cert files:"
-    echo "  - ${SSL_CERT_PATH}"
-    echo "  - ${SSL_CERT_KEY_PATH}"
+    echo "[minikube-up] nginx mode auto-detection delegated to configure-nginx-k8s-proxy.sh" >&2
   fi
   printf '%s\n' "${args[@]}"
 }
