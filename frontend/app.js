@@ -12,7 +12,6 @@ const exportDataBtn = document.getElementById('export-data-btn');
 const importDataBtn = document.getElementById('import-data-btn');
 const importDataFileInput = document.getElementById('import-data-file-input');
 const globalStatus = document.getElementById('global-status');
-const accessModePill = document.getElementById('access-mode-pill');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
 const sortMarketCap = document.getElementById('sort-market-cap');
@@ -297,13 +296,6 @@ function renderTableSelector() {
   updateSortIndicators();
 }
 
-function renderAccessMode() {
-  if (!accessModePill) return;
-  const modeLabel = canEditData() ? 'администратор (локальная сеть)' : 'гость (внешняя сеть)';
-  const suffix = appState.clientIp ? `, IP: ${appState.clientIp}` : '';
-  accessModePill.textContent = `Режим: ${modeLabel}${suffix}`;
-}
-
 function ensureAdminMode() {
   if (canEditData()) return true;
   alert('Гостевой режим: изменение данных доступно только из локальной сети.');
@@ -357,7 +349,6 @@ async function loadAccessMode() {
   const mode = await api('/api/access-mode');
   appState.accessMode = mode.mode === 'admin' ? 'admin' : 'guest';
   appState.clientIp = mode.client_ip || null;
-  renderAccessMode();
 }
 
 async function loadRows() {
