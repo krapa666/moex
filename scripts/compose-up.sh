@@ -13,6 +13,9 @@ require_cmd docker
 
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-junibox}}"
+SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
+SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
 
 STEP=0
 log_step() {
@@ -38,6 +41,20 @@ import_snapshot_into_compose_db() {
   fi
 }
 
+build_nginx_args() {
+  local args=("--server-name" "${PUBLIC_DOMAIN}")
+  if [[ -f "${SSL_CERT_PATH}" && -f "${SSL_CERT_KEY_PATH}" ]]; then
+    echo "[compose-up] detected TLS certificate for ${PUBLIC_DOMAIN}, enabling HTTPS nginx config"
+    args+=("--https" "--ssl-cert" "${SSL_CERT_PATH}" "--ssl-key" "${SSL_CERT_KEY_PATH}")
+  else
+    echo "[compose-up] TLS certificate not found for ${PUBLIC_DOMAIN}; keeping HTTP nginx config"
+    echo "[compose-up] expected cert files:"
+    echo "  - ${SSL_CERT_PATH}"
+    echo "  - ${SSL_CERT_KEY_PATH}"
+  fi
+  printf '%s\n' "${args[@]}"
+}
+
 if command -v minikube >/dev/null 2>&1; then
   log_step "restoring host docker context (if minikube docker-env was enabled)"
   # shellcheck disable=SC2046
@@ -55,12 +72,13 @@ echo "[compose-up] frontend: http://junibox/"
 
 if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
   log_step "switching nginx reverse-proxy to compose mode"
+  mapfile -t nginx_args < <(build_nginx_args)
   if [[ -w "/etc/nginx/conf.d" ]]; then
-    ./scripts/configure-nginx-compose-proxy.sh --reload || true
+    ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
   elif command -v sudo >/dev/null 2>&1; then
-    sudo ./scripts/configure-nginx-compose-proxy.sh --reload || true
+    sudo ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
   else
     echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
-    echo "  sudo ./scripts/configure-nginx-compose-proxy.sh --reload" >&2
+    echo "  sudo ./scripts/configure-nginx-compose-proxy.sh ${nginx_args[*]} --reload" >&2
   fi
 fi

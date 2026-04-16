@@ -88,6 +88,14 @@
 
 ## 4. API (основное)
 
+## 4.0 Авторизация и роли
+- Роли:
+  - **Гость** — ограниченный режим интерфейса: доступно только переключение таблиц и сдвиг года (`-1/+1`), остальные кнопки/поля скрыты. Названия таблиц в UI показываются как `Аналитик 1`, `Аналитик 2`, ...
+  - **Пользователь** — может выполнять операции записи (создание/изменение/удаление, импорт).
+  - **Администратор** — дополнительно может создавать новых пользователей.
+- Авторизация выполняется по Bearer-токену (`Authorization: Bearer <token>`).
+- Сессии хранятся в БД (`user_sessions`) и по умолчанию живут 24 часа.
+
 ## 4.1 Таблицы аналитиков
 - `GET /api/tables` — список таблиц в текущем порядке (основная = №1).
 - `POST /api/tables` — создать таблицу.
@@ -106,6 +114,9 @@
 - `GET /api/health`
 - `GET /metrics`
 - `GET /api/ticker-comparison?ticker=...`
+- `POST /api/auth/login` — вход (получение токена).
+- `GET /api/auth/me` — информация о текущем пользователе по токену.
+- `POST /api/auth/register` — создание пользователя (**только администратор**).
 
 ---
 
@@ -151,6 +162,16 @@
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000
 - Loki readiness: http://localhost:3100/ready
+
+## 6.5 Админ по умолчанию
+- При первом старте backend, если в БД нет администратора, создаётся пользователь-админ.
+- По умолчанию:
+  - `ADMIN_USERNAME=admin`
+  - `ADMIN_PASSWORD=admin12345`
+- Для production обязательно переопределите:
+  - `ADMIN_USERNAME`
+  - `ADMIN_PASSWORD`
+  - `AUTH_PASSWORD_SALT`
 
 ## 6.4 Непрерывность данных между Compose и Minikube
 - При `compose-down` и `minikube-down` выполняется экспорт snapshot БД.
@@ -242,6 +263,53 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl restart nginx
 ```
+
+## 8.4 Публикация в интернет (port-forward на роутере)
+- Шаблоны `deploy/nginx/home-server.conf` и `deploy/nginx/home-server-k8s.conf` уже подготовлены для внешнего трафика:
+  - `listen 80 default_server;` и `server_name ... _;` — принимают запросы по внешнему IP/домену, даже если Host не `junibox`.
+  - Добавлены корректные proxy-заголовки `X-Forwarded-*` и таймауты для стабильной работы через NAT.
+  - `client_max_body_size 20m` — чтобы импорт JSON-файла БД не упирался в стандартный лимит Nginx.
+- Для безопасности мониторинг и служебные endpoints ограничены только локальными/приватными сетями:
+  - `/prometheus/`, `/grafana/`, `/loki/`, `/torrent/`.
+  - Из интернета эти маршруты будут отдавать `403 Forbidden`.
+- Рекомендация перед открытием портов:
+  1. Настроить домен + TLS (Let's Encrypt).
+  2. Пробрасывать наружу только `80/443`.
+  3. Не публиковать backend напрямую (`:8000`) и внутренние сервисы (`:3000`, `:9090`, `:3100`, `:9091`).
+
+### Переход на HTTPS (валидные сертификаты)
+1. Получите сертификат Let's Encrypt для домена (webroot-mode):
+```bash
+sudo mkdir -p /var/www/certbot
+sudo certbot certonly --webroot -w /var/www/certbot -d your-domain.example
+```
+2. Сгенерируйте HTTPS-конфиг reverse-proxy:
+```bash
+# Compose
+sudo ./scripts/configure-nginx-compose-proxy.sh --https --server-name your-domain.example --reload
+
+# Minikube
+sudo ./scripts/configure-nginx-k8s-proxy.sh --https --server-name your-domain.example --reload
+```
+Альтернатива: можно не передавать `--https`, если сертификаты уже лежат в
+`/etc/letsencrypt/live/<domain>/fullchain.pem` и `privkey.pem` — скрипты
+`configure-nginx-*.sh` автоматически переключатся на HTTPS-шаблон.
+
+Переменные окружения (для `compose-up.sh` / `minikube-up.sh` и configure-скриптов):
+- `MOEX_PUBLIC_DOMAIN` (или `MOEX_SERVER_NAME`) — домен для `server_name`.
+- `MOEX_SSL_CERT_PATH` — путь к `fullchain.pem`.
+- `MOEX_SSL_CERT_KEY_PATH` — путь к `privkey.pem`.
+
+3. Проверка:
+```bash
+curl -I https://your-domain.example
+```
+
+Если HTTPS по-прежнему не открывается, проверьте:
+1. Что активен именно `moex.conf`: `sudo nginx -T | rg -n 'moex|server_name|listen 443|ssl_certificate'`.
+2. Что сертификат существует и читается nginx-процессом.
+3. Что наружу проброшен порт `443` и открыт в firewall.
+4. Что после генерации конфига выполнен reload (`--reload`) без ошибок `nginx -t`.
 
 ---
 

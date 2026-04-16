@@ -15,6 +15,9 @@ LOKI_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-loki-port-forward.pid"
 LOKI_PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-loki-port-forward.log"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-junibox}}"
+SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
+SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
 STEP=0
 
 while [[ $# -gt 0 ]]; do
@@ -148,6 +151,20 @@ wait_for_ingress_admission() {
   exit 1
 }
 
+build_nginx_args() {
+  local args=("--server-name" "${PUBLIC_DOMAIN}")
+  if [[ -f "${SSL_CERT_PATH}" && -f "${SSL_CERT_KEY_PATH}" ]]; then
+    echo "[minikube-up] detected TLS certificate for ${PUBLIC_DOMAIN}, enabling HTTPS nginx config"
+    args+=("--https" "--ssl-cert" "${SSL_CERT_PATH}" "--ssl-key" "${SSL_CERT_KEY_PATH}")
+  else
+    echo "[minikube-up] TLS certificate not found for ${PUBLIC_DOMAIN}; keeping HTTP nginx config"
+    echo "[minikube-up] expected cert files:"
+    echo "  - ${SSL_CERT_PATH}"
+    echo "  - ${SSL_CERT_KEY_PATH}"
+  fi
+  printf '%s\n' "${args[@]}"
+}
+
 log_step "starting minikube (if needed)"
 minikube start
 
@@ -211,12 +228,13 @@ if [[ "${SKIP_NGINX}" == "true" ]]; then
   echo "[minikube-up] --skip-nginx set, reverse-proxy regeneration skipped"
 elif [[ -x "./scripts/configure-nginx-k8s-proxy.sh" ]]; then
   echo "[minikube-up] regenerating nginx reverse-proxy config..."
+  mapfile -t nginx_args < <(build_nginx_args)
   if [[ -w "/etc/nginx/conf.d" ]]; then
-    ./scripts/configure-nginx-k8s-proxy.sh --reload || true
+    ./scripts/configure-nginx-k8s-proxy.sh "${nginx_args[@]}" --reload || true
   elif command -v sudo >/dev/null 2>&1; then
-    sudo ./scripts/configure-nginx-k8s-proxy.sh --reload || true
+    sudo ./scripts/configure-nginx-k8s-proxy.sh "${nginx_args[@]}" --reload || true
   else
     echo "[minikube-up] warning: no permissions to reload nginx. Run manually:" >&2
-    echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh --reload" >&2
+    echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh ${nginx_args[*]} --reload" >&2
   fi
 fi
