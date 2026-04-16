@@ -88,13 +88,12 @@
 
 ## 4. API (основное)
 
-## 4.0 Авторизация и роли
-- Роли:
-  - **Гость** — ограниченный режим интерфейса: доступно только переключение таблиц и сдвиг года (`-1/+1`), остальные кнопки/поля скрыты. Названия таблиц в UI показываются как `Аналитик 1`, `Аналитик 2`, ...
-  - **Пользователь** — может выполнять операции записи (создание/изменение/удаление, импорт).
-  - **Администратор** — дополнительно может создавать новых пользователей.
-- Авторизация выполняется по Bearer-токену (`Authorization: Bearer <token>`).
-- Сессии хранятся в БД (`user_sessions`) и по умолчанию живут 24 часа.
+## 4.0 Режимы доступа (без авторизации)
+- В системе больше нет логина/пароля.
+- Права определяются по IP клиента:
+  - **Локальная сеть** (`private/loopback` IP) → режим **администратора** (полный доступ).
+  - **Внешняя сеть** (публичный IP) → режим **гостя** (только чтение).
+- Backend определяет режим по `X-Forwarded-For` (через nginx proxy) и блокирует все mutating endpoint’ы для внешних клиентов.
 
 ## 4.1 Таблицы аналитиков
 - `GET /api/tables` — список таблиц в текущем порядке (основная = №1).
@@ -114,9 +113,7 @@
 - `GET /api/health`
 - `GET /metrics`
 - `GET /api/ticker-comparison?ticker=...`
-- `POST /api/auth/login` — вход (получение токена).
-- `GET /api/auth/me` — информация о текущем пользователе по токену.
-- `POST /api/auth/register` — создание пользователя (**только администратор**).
+- `GET /api/access-mode` — текущий режим доступа (`admin`/`guest`) и IP клиента.
 
 ---
 
@@ -146,7 +143,7 @@
 ./scripts/compose-up.sh
 ```
 Скрипт также автоматически переключает хостовый Nginx reverse-proxy в compose-режим
-(`scripts/configure-nginx-compose-proxy.sh --reload`), чтобы URL в домашней сети оставался тем же: `http://junibox/`.
+(`scripts/configure-nginx-compose-proxy.sh --reload`), чтобы URL в домашней сети оставался тем же: `http://moex.ddns.net/`.
 
 ## 6.2 Остановка
 ```bash
@@ -163,15 +160,11 @@
 - Grafana: http://localhost:3000
 - Loki readiness: http://localhost:3100/ready
 
-## 6.5 Админ по умолчанию
-- При первом старте backend, если в БД нет администратора, создаётся пользователь-админ.
-- По умолчанию:
-  - `ADMIN_USERNAME=admin`
-  - `ADMIN_PASSWORD=admin12345`
-- Для production обязательно переопределите:
-  - `ADMIN_USERNAME`
-  - `ADMIN_PASSWORD`
-  - `AUTH_PASSWORD_SALT`
+## 6.5 Определение прав по сети
+- Права пользователя определяются автоматически:
+  - локальная сеть → режим администратора;
+  - внешняя сеть → режим гостя (read-only).
+- Источник IP берётся из `X-Forwarded-For`, поэтому приложение должно работать за корректно настроенным nginx proxy.
 
 ## 6.4 Непрерывность данных между Compose и Minikube
 - При `compose-down` и `minikube-down` выполняется экспорт snapshot БД.
@@ -190,7 +183,7 @@
 ./scripts/minikube-up.sh
 ```
 Скрипт автоматически переключает тот же хостовый Nginx reverse-proxy в Minikube-режим
-(`scripts/configure-nginx-k8s-proxy.sh --reload`), сохраняя единый внешний URL `http://junibox/`.
+(`scripts/configure-nginx-k8s-proxy.sh --reload`), сохраняя единый внешний URL `http://moex.ddns.net/`.
 Также скрипт поднимает `kubectl port-forward` для frontend на `127.0.0.1:30080`
 и пишет PID/лог в:
 - `/tmp/moex-k8s-port-forward.pid`
@@ -204,9 +197,9 @@
 
 В Minikube-режиме также поднимается мониторинг (`prometheus`, `grafana`, `loki`) и
 он доступен через тот же внешний хост:
-- `http://junibox/prometheus/`
-- `http://junibox/grafana/`
-- `http://junibox/loki/`
+- `http://moex.ddns.net/prometheus/`
+- `http://moex.ddns.net/grafana/`
+- `http://moex.ddns.net/loki/`
 
 Опции:
 ```bash
@@ -232,7 +225,7 @@ kubectl apply -k k8s
 
 ---
 
-## 8. Развёртывание на домашнем сервере (junibox)
+## 8. Развёртывание на домашнем сервере (moex.ddns.net)
 
 ## 8.1 Базовые зависимости
 ```bash
@@ -266,7 +259,7 @@ sudo systemctl restart nginx
 
 ## 8.4 Публикация в интернет (port-forward на роутере)
 - Шаблоны `deploy/nginx/home-server.conf` и `deploy/nginx/home-server-k8s.conf` уже подготовлены для внешнего трафика:
-  - `listen 80 default_server;` и `server_name ... _;` — принимают запросы по внешнему IP/домену, даже если Host не `junibox`.
+  - `listen 80 default_server;` и `server_name ... _;` — принимают запросы по внешнему IP/домену, даже если Host не `moex.ddns.net`.
   - Добавлены корректные proxy-заголовки `X-Forwarded-*` и таймауты для стабильной работы через NAT.
   - `client_max_body_size 20m` — чтобы импорт JSON-файла БД не упирался в стандартный лимит Nginx.
 - Для безопасности мониторинг и служебные endpoints ограничены только локальными/приватными сетями:
@@ -390,7 +383,7 @@ curl http://localhost:8000/api/health
 Причина: слишком длинный `revision` ID.
 Решение: использовать сокращённый revision (в проекте уже исправлено для миграции `0007`).
 
-## 13.3 После Minikube restart `502 Bad Gateway` через `junibox`
+## 13.3 После Minikube restart `502 Bad Gateway` через `moex.ddns.net`
 Перегенерируйте proxy-конфиг:
 ```bash
 sudo ./scripts/configure-nginx-k8s-proxy.sh --reload

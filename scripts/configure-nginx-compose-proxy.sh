@@ -6,7 +6,7 @@ TEMPLATE_PATH_HTTPS="deploy/nginx/home-server-https.conf"
 OUTPUT_PATH="/etc/nginx/conf.d/moex.conf"
 RELOAD=false
 HTTPS=false
-SERVER_NAME="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-junibox}}"
+SERVER_NAME="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
 SSL_CERT_PATH=""
 SSL_CERT_KEY_PATH=""
 

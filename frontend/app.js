@@ -12,6 +12,7 @@ const exportDataBtn = document.getElementById('export-data-btn');
 const importDataBtn = document.getElementById('import-data-btn');
 const importDataFileInput = document.getElementById('import-data-file-input');
 const globalStatus = document.getElementById('global-status');
+const accessModePill = document.getElementById('access-mode-pill');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
 const sortMarketCap = document.getElementById('sort-market-cap');
@@ -43,6 +44,8 @@ const sortState = { key: null, direction: 'asc' };
 const appState = {
   tables: [],
   activeTableId: null,
+  accessMode: 'guest',
+  clientIp: null,
 };
 const AUTOSAVE_DELAY_MS = 1800;
 const BASE_FORECAST_YEAR = new Date().getFullYear();
@@ -197,6 +200,17 @@ function isPrimaryActiveTable() {
   return activeTable()?.table_number === 1;
 }
 
+function canEditData() {
+  return appState.accessMode === 'admin';
+}
+
+function displayAnalystName(table) {
+  if (canEditData()) {
+    return `№${table.table_number} — ${table.analyst_name}`;
+  }
+  return `Аналитик ${table.table_number}`;
+}
+
 function activeYears() {
   const offset = activeTable()?.year_offset ?? 0;
   return [
@@ -236,28 +250,64 @@ function renderTableSelector() {
   appState.tables.forEach((table) => {
     const option = document.createElement('option');
     option.value = String(table.id);
-    option.textContent = `№${table.table_number} — ${table.analyst_name}`;
+    option.textContent = displayAnalystName(table);
     if (table.id === appState.activeTableId) option.selected = true;
     tableSelect.appendChild(option);
   });
   const current = activeTable();
+  const adminMode = canEditData();
   if (analystNameInput && current) analystNameInput.value = current.analyst_name;
+  if (analystNameInput) analystNameInput.hidden = !adminMode;
+  if (saveAnalystBtn) {
+    saveAnalystBtn.hidden = !adminMode;
+    saveAnalystBtn.disabled = !adminMode;
+  }
+  if (addTableBtn) {
+    addTableBtn.hidden = !adminMode;
+    addTableBtn.disabled = !adminMode;
+  }
   if (deleteTableBtn) {
-    deleteTableBtn.disabled = !current || current.table_number === 1;
-    deleteTableBtn.title = current?.table_number === 1 ? 'Таблица №1 защищена от удаления' : '';
+    deleteTableBtn.hidden = !adminMode;
+    deleteTableBtn.disabled = !adminMode || !current || current.table_number === 1;
+    deleteTableBtn.title = !adminMode ? 'Доступно только в локальной сети' : current?.table_number === 1 ? 'Таблица №1 защищена от удаления' : '';
   }
   if (makePrimaryTableBtn) {
-    makePrimaryTableBtn.disabled = !current || current.table_number === 1;
-    makePrimaryTableBtn.title = current?.table_number === 1 ? 'Эта таблица уже основная' : '';
+    makePrimaryTableBtn.hidden = !adminMode;
+    makePrimaryTableBtn.disabled = !adminMode || !current || current.table_number === 1;
+    makePrimaryTableBtn.title = !adminMode ? 'Доступно только в локальной сети' : current?.table_number === 1 ? 'Эта таблица уже основная' : '';
   }
   if (addRowBtn) {
     const isPrimary = current?.table_number === 1;
-    addRowBtn.style.display = isPrimary ? '' : 'none';
-    addRowBtn.disabled = !isPrimary;
-    addRowBtn.title = isPrimary ? '' : 'Кнопка доступна только в таблице №1';
+    addRowBtn.style.display = adminMode && isPrimary ? '' : 'none';
+    addRowBtn.hidden = !adminMode;
+    addRowBtn.disabled = !adminMode || !isPrimary;
+    addRowBtn.title = !adminMode ? 'Доступно только в локальной сети' : isPrimary ? '' : 'Кнопка доступна только в таблице №1';
   }
+  if (shiftYearBtn) {
+    shiftYearBtn.hidden = !adminMode;
+    shiftYearBtn.disabled = !adminMode;
+  }
+  if (shiftYearBackBtn) {
+    shiftYearBackBtn.hidden = !adminMode;
+    shiftYearBackBtn.disabled = !adminMode;
+  }
+  if (importDataBtn) importDataBtn.hidden = !adminMode;
+  if (exportDataBtn) exportDataBtn.hidden = !adminMode;
   applyYearHeaders();
   updateSortIndicators();
+}
+
+function renderAccessMode() {
+  if (!accessModePill) return;
+  const modeLabel = canEditData() ? 'администратор (локальная сеть)' : 'гость (внешняя сеть)';
+  const suffix = appState.clientIp ? `, IP: ${appState.clientIp}` : '';
+  accessModePill.textContent = `Режим: ${modeLabel}${suffix}`;
+}
+
+function ensureAdminMode() {
+  if (canEditData()) return true;
+  alert('Гостевой режим: изменение данных доступно только из локальной сети.');
+  return false;
 }
 
 function isEditingInput() {
@@ -301,6 +351,13 @@ async function loadTables() {
     appState.activeTableId = tables[0].id;
   }
   renderTableSelector();
+}
+
+async function loadAccessMode() {
+  const mode = await api('/api/access-mode');
+  appState.accessMode = mode.mode === 'admin' ? 'admin' : 'guest';
+  appState.clientIp = mode.client_ip || null;
+  renderAccessMode();
 }
 
 async function loadRows() {
@@ -377,7 +434,7 @@ function createInlineComparisonRow(item) {
     <td class="readonly-cell"><span>${formatCurrency(y4?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y4?.upside_percent)}">${formatPercent(y4?.upside_percent)}</td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
-    <td><span class="comparison-source">№${item.table_number} — ${escapeHtml(item.analyst_name)}</span></td>
+    <td><span class="comparison-source">${escapeHtml(displayAnalystName(item))}</span></td>
   `;
   applyTickerInputSizing(tr.querySelector('.ticker-input'));
   return tr;
@@ -434,7 +491,7 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
 
   const current = activeTable();
   const currentTableName = current
-    ? `№${current.table_number} — ${escapeHtml(current.analyst_name)}`
+    ? escapeHtml(displayAnalystName(current))
     : 'Текущая таблица';
   const actionCell = anchorTr.lastElementChild;
   const deleteBtn = actionCell?.querySelector('.row-delete-btn');
@@ -575,12 +632,14 @@ function updateSortIndicators() {
 function renderRows(rows) {
   const sortedRows = sortRows(rows);
   const isPrimaryTable = isPrimaryActiveTable();
+  const adminMode = canEditData();
   tbody.innerHTML = '';
 
   sortedRows.forEach((row) => {
     const priceDecimals = detectDecimals(row.current_price);
     const sharedFieldsEditable = row.shared_fields_editable !== false;
-    const lockSharedFields = !isPrimaryTable || !sharedFieldsEditable;
+    const lockSharedFields = !adminMode || !isPrimaryTable || !sharedFieldsEditable;
+    const lockAllFields = !adminMode;
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
@@ -589,21 +648,21 @@ function renderRows(rows) {
       <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
       <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
-      <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" /></td>
+      <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
-      <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" /></td>
+      <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
-      <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" /></td>
+      <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
-      <td><input data-field="forecast_profit_year4_billion_rub" value="${mapProfitByYear(row, 3) ?? ''}" /></td>
+      <td><input data-field="forecast_profit_year4_billion_rub" value="${mapProfitByYear(row, 3) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year4">${formatCurrency(row.forecast_price_year4, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
-        <button data-action="delete" class="btn-danger row-delete-btn" ${isPrimaryTable ? '' : 'disabled title="Удалять строки можно только из таблицы №1"'}>Удалить</button>
+        <button data-action="delete" class="btn-danger row-delete-btn" ${adminMode && isPrimaryTable ? '' : 'disabled title="Доступно только администратору в таблице №1"'}>Удалить</button>
         ${row.status_message ? `<div class="status-error">${row.status_message}</div>` : ''}
       </td>
     `;
@@ -676,6 +735,10 @@ function renderRows(rows) {
     tickerInput?.addEventListener('blur', clearInlineComparisonRows);
 
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+      if (!canEditData()) {
+        alert('Гостевой режим: удаление недоступно.');
+        return;
+      }
       if (!isPrimaryActiveTable()) {
         alert('Удалять строки можно только из таблицы №1.');
         return;
@@ -713,6 +776,7 @@ tableSelect?.addEventListener('change', async () => {
 });
 
 saveAnalystBtn?.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   const current = activeTable();
   if (!current) return;
   const analystName = (analystNameInput?.value || '').trim();
@@ -726,6 +790,7 @@ saveAnalystBtn?.addEventListener('click', async () => {
 });
 
 addTableBtn?.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   const desiredName = prompt('Введите имя аналитика для новой таблицы');
   if (!desiredName) return;
   await api('/api/tables', {
@@ -739,6 +804,7 @@ addTableBtn?.addEventListener('click', async () => {
 });
 
 makePrimaryTableBtn?.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   const current = activeTable();
   if (!current || current.table_number === 1) return;
   await api(`/api/tables/${current.id}/make-primary`, { method: 'POST' });
@@ -749,13 +815,14 @@ makePrimaryTableBtn?.addEventListener('click', async () => {
 });
 
 deleteTableBtn?.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   const current = activeTable();
   if (!current) return;
   if (current.table_number === 1) {
     alert('Таблица №1 является основной и не может быть удалена.');
     return;
   }
-  const approved = confirm(`Удалить таблицу №${current.table_number} «${current.analyst_name}»?`);
+  const approved = confirm(`Удалить таблицу «${displayAnalystName(current)}»?`);
   if (!approved) return;
   await api(`/api/tables/${current.id}`, { method: 'DELETE' });
   await loadTables();
@@ -765,6 +832,7 @@ deleteTableBtn?.addEventListener('click', async () => {
 });
 
 shiftYearBtn?.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   const current = activeTable();
   if (!current) return;
   await api(`/api/tables/${current.id}`, {
@@ -776,6 +844,7 @@ shiftYearBtn?.addEventListener('click', async () => {
 });
 
 shiftYearBackBtn?.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   const current = activeTable();
   if (!current) return;
   await api(`/api/tables/${current.id}`, {
@@ -787,6 +856,7 @@ shiftYearBackBtn?.addEventListener('click', async () => {
 });
 
 addRowBtn.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   if (!isPrimaryActiveTable()) {
     alert('Добавлять строки можно только в таблице №1.');
     return;
@@ -836,6 +906,7 @@ exportDataBtn?.addEventListener('click', async () => {
 });
 
 importDataBtn?.addEventListener('click', async () => {
+  if (!ensureAdminMode()) return;
   importDataFileInput?.click();
 });
 
@@ -901,6 +972,7 @@ sortButtons.forEach((button) => {
 
 async function initApp() {
   try {
+    await loadAccessMode();
     await loadTables();
     updateSortIndicators();
     await loadRows();

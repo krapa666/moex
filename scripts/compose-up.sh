@@ -13,7 +13,7 @@ require_cmd docker
 
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
-PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-junibox}}"
+PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
 SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
 SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
 
@@ -68,7 +68,7 @@ log_step "importing shared DB snapshot (if present)"
 import_snapshot_into_compose_db
 
 log_step "compose mode is up"
-echo "[compose-up] frontend: http://junibox/"
+echo "[compose-up] frontend: http://${PUBLIC_DOMAIN}/"
 
 if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
   log_step "switching nginx reverse-proxy to compose mode"

@@ -15,7 +15,7 @@ LOKI_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-loki-port-forward.pid"
 LOKI_PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-loki-port-forward.log"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
-PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-junibox}}"
+PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
 SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
 SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
 STEP=0
@@ -218,11 +218,11 @@ fi
 echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
 echo "[minikube-up] localhost NodePort URL: http://127.0.0.1:30080/"
 echo "[minikube-up] monitoring URLs via ingress:"
-echo "  - http://junibox/prometheus/"
-echo "  - http://junibox/grafana/"
-echo "  - http://junibox/loki/"
+echo "  - http://${PUBLIC_DOMAIN}/prometheus/"
+echo "  - http://${PUBLIC_DOMAIN}/grafana/"
+echo "  - http://${PUBLIC_DOMAIN}/loki/"
 
-echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://junibox/"
+echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://${PUBLIC_DOMAIN}/"
 
 if [[ "${SKIP_NGINX}" == "true" ]]; then
   echo "[minikube-up] --skip-nginx set, reverse-proxy regeneration skipped"

@@ -1,9 +1,10 @@
 import asyncio
 import contextlib
+import ipaddress
 import json
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import func, inspect, select, text
@@ -167,6 +168,29 @@ def ensure_primary_table_for_row_mutation(db: Session, table_id: int) -> None:
             status_code=403,
             detail="Добавлять и удалять строки можно только в таблице №1",
         )
+
+
+def resolve_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        candidate = forwarded_for.split(",", 1)[0].strip()
+        if candidate:
+            return candidate
+    return request.client.host if request.client else ""
+
+
+def is_local_network_request(request: Request) -> bool:
+    ip_text = resolve_client_ip(request)
+    try:
+        ip = ipaddress.ip_address(ip_text)
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_loopback
+
+
+def require_local_admin(request: Request) -> None:
+    if not is_local_network_request(request):
+        raise HTTPException(status_code=403, detail="Доступ только для локальной сети (гостевой режим)")
 
 
 def get_primary_row_by_ticker(db: Session, ticker: str) -> StockRow | None:
@@ -477,6 +501,12 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/access-mode")
+def access_mode(request: Request) -> dict[str, str]:
+    mode = "admin" if is_local_network_request(request) else "guest"
+    return {"mode": mode, "client_ip": resolve_client_ip(request)}
+
+
 @app.get("/api/data/export")
 def export_data(db: Session = Depends(get_db)):
     payload = build_database_snapshot(db)
@@ -490,7 +520,8 @@ def export_data(db: Session = Depends(get_db)):
 
 
 @app.post("/api/data/import", response_model=DataTransferResult)
-async def import_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_data(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    require_local_admin(request)
     try:
         raw = await file.read()
         payload = json.loads(raw.decode("utf-8"))
@@ -507,7 +538,8 @@ def get_tables(db: Session = Depends(get_db)):
 
 
 @app.post("/api/tables", response_model=AnalystTableRead)
-def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
+def create_table(payload: AnalystTableCreate, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     ensure_default_table(db)
     total = db.query(AnalystTable).count()
     if total >= 10:
@@ -554,7 +586,8 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/tables/{table_id}", response_model=AnalystTableRead)
-def update_table(table_id: int, payload: AnalystTableUpdate, db: Session = Depends(get_db)):
+def update_table(table_id: int, payload: AnalystTableUpdate, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     table = get_table_or_404(db, table_id)
     if payload.analyst_name is not None:
         table.analyst_name = payload.analyst_name.strip()
@@ -572,7 +605,8 @@ def update_table(table_id: int, payload: AnalystTableUpdate, db: Session = Depen
 
 
 @app.delete("/api/tables/{table_id}")
-def delete_table(table_id: int, db: Session = Depends(get_db)):
+def delete_table(table_id: int, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     table = get_table_or_404(db, table_id)
     primary = get_primary_table(db)
     if primary is not None and primary.id == table.id:
@@ -597,7 +631,8 @@ def get_rows(table_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/rows", response_model=StockRowRead)
-async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
+async def create_row(payload: StockRowCreate, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     table = get_table_or_404(db, payload.table_id)
     ensure_primary_table_for_row_mutation(db, table.id)
     shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
@@ -629,7 +664,8 @@ async def create_row(payload: StockRowCreate, db: Session = Depends(get_db)):
 
 
 @app.put("/api/rows/{row_id}", response_model=StockRowRead)
-async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends(get_db)):
+async def update_row(row_id: int, payload: StockRowUpdate, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     row = db.get(StockRow, row_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Строка не найдена")
@@ -674,7 +710,8 @@ async def update_row(row_id: int, payload: StockRowUpdate, db: Session = Depends
 
 
 @app.delete("/api/rows/{row_id}")
-def delete_row(row_id: int, db: Session = Depends(get_db)):
+def delete_row(row_id: int, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     row = db.get(StockRow, row_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Строка не найдена")
@@ -692,13 +729,15 @@ def delete_row(row_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/rows/refresh", response_model=list[StockRowRead])
-async def refresh_prices(table_id: int, db: Session = Depends(get_db)):
+async def refresh_prices(table_id: int, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     get_table_or_404(db, table_id)
     return await refresh_all_prices(db, force=True, table_id=table_id)
 
 
 @app.post("/api/tables/{table_id}/make-primary", response_model=list[AnalystTableRead])
-def make_table_primary(table_id: int, db: Session = Depends(get_db)):
+def make_table_primary(table_id: int, request: Request, db: Session = Depends(get_db)):
+    require_local_admin(request)
     ensure_sort_order_schema(db)
     if not sort_order_supported:
         raise HTTPException(status_code=400, detail="Переупорядочивание таблиц недоступно: примените миграции БД")
