@@ -37,6 +37,10 @@ class StockRowRead(StockRowBase):
     upside_percent_year2: float | None
     upside_percent_year3: float | None
     upside_percent_year4: float | None
+    potential_pe_year1: float | None = None
+    potential_pe_year2: float | None = None
+    potential_pe_year3: float | None = None
+    potential_pe_year4: float | None = None
     status_message: str | None
     price_updated_at: datetime | None
     created_at: datetime
@@ -72,6 +76,7 @@ class TickerComparisonYear(BaseModel):
     forecast_profit_billion_rub: float | None
     forecast_price: float | None
     upside_percent: float | None
+    potential_pe: float | None = None
 
 
 class TickerComparisonItem(BaseModel):

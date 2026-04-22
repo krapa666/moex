@@ -11,6 +11,7 @@ def recalculate_fields(row: StockRow) -> None:
         profit = getattr(row, f"forecast_profit_year{year}_billion_rub")
         price_field = f"forecast_price_year{year}"
         upside_field = f"upside_percent_year{year}"
+        potential_pe_field = f"potential_pe_year{year}"
 
         if (
             profit is not None
@@ -33,3 +34,12 @@ def recalculate_fields(row: StockRow) -> None:
             setattr(row, upside_field, upside)
         else:
             setattr(row, upside_field, None)
+
+        if (
+            row.market_cap_billion_rub is not None
+            and profit is not None
+            and profit > 0
+        ):
+            setattr(row, potential_pe_field, row.market_cap_billion_rub / profit)
+        else:
+            setattr(row, potential_pe_field, None)

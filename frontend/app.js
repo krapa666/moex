@@ -27,6 +27,10 @@ const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
 const headerPriceYear3 = document.getElementById('header-price-year3');
 const headerPriceYear4 = document.getElementById('header-price-year4');
+const headerPeYear1 = document.getElementById('header-pe-year1');
+const headerPeYear2 = document.getElementById('header-pe-year2');
+const headerPeYear3 = document.getElementById('header-pe-year3');
+const headerPeYear4 = document.getElementById('header-pe-year4');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -230,6 +234,10 @@ function applyYearHeaders() {
   if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
   if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
   if (headerPriceYear4) headerPriceYear4.textContent = `Прогнозная цена (${y4}), ₽`;
+  if (headerPeYear1) headerPeYear1.textContent = `Потенциальный P/E (${y1})`;
+  if (headerPeYear2) headerPeYear2.textContent = `Потенциальный P/E (${y2})`;
+  if (headerPeYear3) headerPeYear3.textContent = `Потенциальный P/E (${y3})`;
+  if (headerPeYear4) headerPeYear4.textContent = `Потенциальный P/E (${y4})`;
 }
 
 function yearKeyByIndex(index) {
@@ -415,15 +423,19 @@ function createInlineComparisonRow(item) {
     <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
+    <td class="readonly-cell"><span>${formatNumber(y1?.potential_pe)}</span></td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
+    <td class="readonly-cell"><span>${formatNumber(y2?.potential_pe)}</span></td>
     <td><input value="${y3?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y3?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y3?.upside_percent)}">${formatPercent(y3?.upside_percent)}</td>
+    <td class="readonly-cell"><span>${formatNumber(y3?.potential_pe)}</span></td>
     <td><input value="${y4?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y4?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y4?.upside_percent)}">${formatPercent(y4?.upside_percent)}</td>
+    <td class="readonly-cell"><span>${formatNumber(y4?.potential_pe)}</span></td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">${escapeHtml(displayAnalystName(item))}</span></td>
   `;
@@ -555,6 +567,10 @@ function updateCalculatedCells(tr, row) {
   setUpsideCell('upside_year2', row.upside_percent_year2);
   setUpsideCell('upside_year3', row.upside_percent_year3);
   setUpsideCell('upside_year4', row.upside_percent_year4);
+  setCellText('potential_pe_year1', formatNumber(row.potential_pe_year1));
+  setCellText('potential_pe_year2', formatNumber(row.potential_pe_year2));
+  setCellText('potential_pe_year3', formatNumber(row.potential_pe_year3));
+  setCellText('potential_pe_year4', formatNumber(row.potential_pe_year4));
   setCellText('price_updated_at', formatDate(row.price_updated_at));
 }
 
@@ -642,15 +658,19 @@ function renderRows(rows) {
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
+      <td class="readonly-cell"><span data-cell="potential_pe_year1">${formatNumber(row.potential_pe_year1)}</span></td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
+      <td class="readonly-cell"><span data-cell="potential_pe_year2">${formatNumber(row.potential_pe_year2)}</span></td>
       <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
+      <td class="readonly-cell"><span data-cell="potential_pe_year3">${formatNumber(row.potential_pe_year3)}</span></td>
       <td><input data-field="forecast_profit_year4_billion_rub" value="${mapProfitByYear(row, 3) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year4">${formatCurrency(row.forecast_price_year4, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
+      <td class="readonly-cell"><span data-cell="potential_pe_year4">${formatNumber(row.potential_pe_year4)}</span></td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
         <button data-action="delete" class="btn-danger row-delete-btn" ${adminMode && isPrimaryTable ? '' : 'disabled title="Доступно только администратору в таблице №1"'}>Удалить</button>

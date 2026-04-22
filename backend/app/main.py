@@ -455,21 +455,25 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
             row.forecast_profit_year1_billion_rub,
             row.forecast_price_year1,
             row.upside_percent_year1,
+            getattr(row, "potential_pe_year1", None),
         ),
         (
             row.forecast_profit_year2_billion_rub,
             row.forecast_price_year2,
             row.upside_percent_year2,
+            getattr(row, "potential_pe_year2", None),
         ),
         (
             row.forecast_profit_year3_billion_rub,
             row.forecast_price_year3,
             row.upside_percent_year3,
+            getattr(row, "potential_pe_year3", None),
         ),
         (
             row.forecast_profit_year4_billion_rub,
             row.forecast_price_year4,
             row.upside_percent_year4,
+            getattr(row, "potential_pe_year4", None),
         ),
     ]
     return TickerComparisonItem(
@@ -490,8 +494,9 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
                 forecast_profit_billion_rub=profit,
                 forecast_price=price,
                 upside_percent=upside,
+                potential_pe=potential_pe,
             )
-            for idx, (profit, price, upside) in enumerate(values)
+            for idx, (profit, price, upside, potential_pe) in enumerate(values)
         ],
     )
 
