@@ -234,10 +234,10 @@ function applyYearHeaders() {
   if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
   if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
   if (headerPriceYear4) headerPriceYear4.textContent = `Прогнозная цена (${y4}), ₽`;
-  if (headerPeYear1) headerPeYear1.textContent = `Потенциальный P/E (${y1})`;
-  if (headerPeYear2) headerPeYear2.textContent = `Потенциальный P/E (${y2})`;
-  if (headerPeYear3) headerPeYear3.textContent = `Потенциальный P/E (${y3})`;
-  if (headerPeYear4) headerPeYear4.textContent = `Потенциальный P/E (${y4})`;
+  if (headerPeYear1) headerPeYear1.textContent = `Прогнозный P/E (${y1})`;
+  if (headerPeYear2) headerPeYear2.textContent = `Прогнозный P/E (${y2})`;
+  if (headerPeYear3) headerPeYear3.textContent = `Прогнозный P/E (${y3})`;
+  if (headerPeYear4) headerPeYear4.textContent = `Прогнозный P/E (${y4})`;
 }
 
 function yearKeyByIndex(index) {
@@ -321,6 +321,11 @@ function upsideClass(value) {
   if (num > 0) return 'upside-up';
   if (num < 0) return 'upside-down';
   return 'upside-flat';
+}
+
+function currentYearUpsideClass(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 35 ? 'upside-current-year-strong' : '';
 }
 
 async function api(path, options = {}) {
@@ -422,7 +427,7 @@ function createInlineComparisonRow(item) {
     <td><input value="${item.pe_avg_5y ?? ''}" disabled /></td>
     <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
-    <td class="readonly-cell ${upsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
+    <td class="readonly-cell ${upsideClass(y1?.upside_percent)} ${currentYearUpsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
     <td class="readonly-cell"><span>${formatNumber(y1?.potential_pe)}</span></td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
@@ -553,8 +558,12 @@ function updateCalculatedCells(tr, row) {
     const cell = tr.querySelector(`[data-cell="${cellName}"]`);
     if (!cell) return;
     cell.textContent = formatPercent(value);
-    cell.classList.remove('upside-up', 'upside-down', 'upside-flat');
+    cell.classList.remove('upside-up', 'upside-down', 'upside-flat', 'upside-current-year-strong');
     cell.classList.add(upsideClass(value));
+    if (cellName === 'upside_year1') {
+      const strongClass = currentYearUpsideClass(value);
+      if (strongClass) cell.classList.add(strongClass);
+    }
   };
 
   setCellText('current_price', formatCurrency(row.current_price, priceDecimals));
@@ -657,7 +666,7 @@ function renderRows(rows) {
       <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year1)} ${currentYearUpsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
       <td class="readonly-cell"><span data-cell="potential_pe_year1">${formatNumber(row.potential_pe_year1)}</span></td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
