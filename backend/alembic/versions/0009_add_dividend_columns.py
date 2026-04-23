@@ -1,7 +1,7 @@
 """add dividend columns
 
 Revision ID: 0009_add_dividend_columns
-Revises: 0008_add_auth_tables
+Revises: 0008_auth_tables
 Create Date: 2026-04-23
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "0009_add_dividend_columns"
-down_revision = "0008_add_auth_tables"
+down_revision = "0008_auth_tables"
 branch_labels = None
 depends_on = None
 
