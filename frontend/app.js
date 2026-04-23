@@ -17,20 +17,16 @@ const sortTicker = document.getElementById('sort-ticker');
 const sortMarketCap = document.getElementById('sort-market-cap');
 const sortUpsideYear1 = document.getElementById('sort-upside-year1');
 const sortUpsideYear2 = document.getElementById('sort-upside-year2');
-const sortUpsideYear3 = document.getElementById('sort-upside-year3');
-const sortUpsideYear4 = document.getElementById('sort-upside-year4');
 const headerProfitYear1 = document.getElementById('header-profit-year1');
 const headerProfitYear2 = document.getElementById('header-profit-year2');
-const headerProfitYear3 = document.getElementById('header-profit-year3');
-const headerProfitYear4 = document.getElementById('header-profit-year4');
 const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
-const headerPriceYear3 = document.getElementById('header-price-year3');
-const headerPriceYear4 = document.getElementById('header-price-year4');
+const headerDividendsYear1 = document.getElementById('header-dividends-year1');
+const headerDividendsYear2 = document.getElementById('header-dividends-year2');
+const headerDivYieldYear1 = document.getElementById('header-div-yield-year1');
+const headerDivYieldYear2 = document.getElementById('header-div-yield-year2');
 const headerPeYear1 = document.getElementById('header-pe-year1');
 const headerPeYear2 = document.getElementById('header-pe-year2');
-const headerPeYear3 = document.getElementById('header-pe-year3');
-const headerPeYear4 = document.getElementById('header-pe-year4');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -174,7 +170,8 @@ const INPUT_NORMALIZERS = {
   pe_avg_5y: normalizeNumericInput,
   forecast_profit_year1_billion_rub: normalizeNumericInput,
   forecast_profit_year2_billion_rub: normalizeNumericInput,
-  forecast_profit_year3_billion_rub: normalizeNumericInput,
+  dividends_year1: normalizeNumericInput,
+  dividends_year2: normalizeNumericInput,
 };
 
 function normalizeInputByField(field, value) {
@@ -219,25 +216,21 @@ function activeYears() {
   return [
     BASE_FORECAST_YEAR + offset,
     BASE_FORECAST_YEAR + offset + 1,
-    BASE_FORECAST_YEAR + offset + 2,
-    BASE_FORECAST_YEAR + offset + 3,
   ];
 }
 
 function applyYearHeaders() {
-  const [y1, y2, y3, y4] = activeYears();
+  const [y1, y2] = activeYears();
   if (headerProfitYear1) headerProfitYear1.textContent = `Прогнозная ЧП (${y1}), млрд ₽`;
   if (headerProfitYear2) headerProfitYear2.textContent = `Прогнозная ЧП (${y2}), млрд ₽`;
-  if (headerProfitYear3) headerProfitYear3.textContent = `Прогнозная ЧП (${y3}), млрд ₽`;
-  if (headerProfitYear4) headerProfitYear4.textContent = `Прогнозная ЧП (${y4}), млрд ₽`;
   if (headerPriceYear1) headerPriceYear1.textContent = `Прогнозная цена (${y1}), ₽`;
   if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
-  if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
-  if (headerPriceYear4) headerPriceYear4.textContent = `Прогнозная цена (${y4}), ₽`;
-  if (headerPeYear1) headerPeYear1.textContent = `Прогнозный P/E (${y1})`;
-  if (headerPeYear2) headerPeYear2.textContent = `Прогнозный P/E (${y2})`;
-  if (headerPeYear3) headerPeYear3.textContent = `Прогнозный P/E (${y3})`;
-  if (headerPeYear4) headerPeYear4.textContent = `Прогнозный P/E (${y4})`;
+  if (headerDividendsYear1) headerDividendsYear1.textContent = `Дивиденды (${y1}), ₽`;
+  if (headerDividendsYear2) headerDividendsYear2.textContent = `Дивиденды (${y2}), ₽`;
+  if (headerDivYieldYear1) headerDivYieldYear1.textContent = `Див. доходн. (${y1}), %`;
+  if (headerDivYieldYear2) headerDivYieldYear2.textContent = `Див. доходн. (${y2}), %`;
+  if (headerPeYear1) headerPeYear1.textContent = `Прогн. P/E (${y1})`;
+  if (headerPeYear2) headerPeYear2.textContent = `Прогн. P/E (${y2})`;
 }
 
 function yearKeyByIndex(index) {
@@ -414,8 +407,6 @@ function getComparisonYear(item, index) {
 function createInlineComparisonRow(item) {
   const y1 = getComparisonYear(item, 0);
   const y2 = getComparisonYear(item, 1);
-  const y3 = getComparisonYear(item, 2);
-  const y4 = getComparisonYear(item, 3);
   const priceDecimals = detectDecimals(item.current_price);
   const tr = document.createElement('tr');
   tr.className = 'comparison-inline-row ticker-compare-highlight';
@@ -428,19 +419,15 @@ function createInlineComparisonRow(item) {
     <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y1?.upside_percent)} ${currentYearUpsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
-    <td class="readonly-cell"><span>${formatNumber(y1?.potential_pe)}</span></td>
+    <td><input value="${y1?.dividends ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatPercent(y1?.dividend_yield_percent)}</span></td>
+    <td class="readonly-cell pe-col"><span>${formatNumber(y1?.potential_pe)}</span></td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
-    <td class="readonly-cell"><span>${formatNumber(y2?.potential_pe)}</span></td>
-    <td><input value="${y3?.forecast_profit_billion_rub ?? ''}" disabled /></td>
-    <td class="readonly-cell"><span>${formatCurrency(y3?.forecast_price, priceDecimals)}</span></td>
-    <td class="readonly-cell ${upsideClass(y3?.upside_percent)}">${formatPercent(y3?.upside_percent)}</td>
-    <td class="readonly-cell"><span>${formatNumber(y3?.potential_pe)}</span></td>
-    <td><input value="${y4?.forecast_profit_billion_rub ?? ''}" disabled /></td>
-    <td class="readonly-cell"><span>${formatCurrency(y4?.forecast_price, priceDecimals)}</span></td>
-    <td class="readonly-cell ${upsideClass(y4?.upside_percent)}">${formatPercent(y4?.upside_percent)}</td>
-    <td class="readonly-cell"><span>${formatNumber(y4?.potential_pe)}</span></td>
+    <td><input value="${y2?.dividends ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatPercent(y2?.dividend_yield_percent)}</span></td>
+    <td class="readonly-cell pe-col"><span>${formatNumber(y2?.potential_pe)}</span></td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">${escapeHtml(displayAnalystName(item))}</span></td>
   `;
@@ -542,8 +529,8 @@ function rowToPayload(row) {
     pe_avg_5y: parseInputNumber(row.pe_avg_5y),
     forecast_profit_year1_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(0)]),
     forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
-    forecast_profit_year3_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(2)]),
-    forecast_profit_year4_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(3)]),
+    dividends_year1: parseInputNumber(row.dividends_year1),
+    dividends_year2: parseInputNumber(row.dividends_year2),
     net_profit_year_map: profitMap,
   };
 }
@@ -570,16 +557,14 @@ function updateCalculatedCells(tr, row) {
   setCellText('market_cap', formatCurrency(row.market_cap_billion_rub));
   setCellText('forecast_price_year1', formatCurrency(row.forecast_price_year1, priceDecimals));
   setCellText('forecast_price_year2', formatCurrency(row.forecast_price_year2, priceDecimals));
-  setCellText('forecast_price_year3', formatCurrency(row.forecast_price_year3, priceDecimals));
-  setCellText('forecast_price_year4', formatCurrency(row.forecast_price_year4, priceDecimals));
   setUpsideCell('upside_year1', row.upside_percent_year1);
   setUpsideCell('upside_year2', row.upside_percent_year2);
-  setUpsideCell('upside_year3', row.upside_percent_year3);
-  setUpsideCell('upside_year4', row.upside_percent_year4);
+  setCellText('dividends_year1', formatCurrency(row.dividends_year1));
+  setCellText('dividend_yield_year1', formatPercent(row.dividend_yield_percent_year1));
   setCellText('potential_pe_year1', formatNumber(row.potential_pe_year1));
+  setCellText('dividends_year2', formatCurrency(row.dividends_year2));
+  setCellText('dividend_yield_year2', formatPercent(row.dividend_yield_percent_year2));
   setCellText('potential_pe_year2', formatNumber(row.potential_pe_year2));
-  setCellText('potential_pe_year3', formatNumber(row.potential_pe_year3));
-  setCellText('potential_pe_year4', formatNumber(row.potential_pe_year4));
   setCellText('price_updated_at', formatDate(row.price_updated_at));
 }
 
@@ -625,14 +610,12 @@ function sortRows(rows) {
 }
 
 function updateSortIndicators() {
-  const [year1, year2, year3, year4] = activeYears();
+  const [year1, year2] = activeYears();
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
     { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Upside (${year1}), %` },
     { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Upside (${year2}), %` },
-    { element: sortUpsideYear3, key: 'upside_percent_year3', label: `Upside (${year3}), %` },
-    { element: sortUpsideYear4, key: 'upside_percent_year4', label: `Upside (${year4}), %` },
   ];
 
   sortableHeaders.forEach(({ element, key, label }) => {
@@ -667,19 +650,15 @@ function renderRows(rows) {
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1)} ${currentYearUpsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
-      <td class="readonly-cell"><span data-cell="potential_pe_year1">${formatNumber(row.potential_pe_year1)}</span></td>
+      <td><input data-field="dividends_year1" value="${row.dividends_year1 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
+      <td class="readonly-cell"><span data-cell="dividend_yield_year1">${formatPercent(row.dividend_yield_percent_year1)}</span></td>
+      <td class="readonly-cell pe-col"><span data-cell="potential_pe_year1">${formatNumber(row.potential_pe_year1)}</span></td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
-      <td class="readonly-cell"><span data-cell="potential_pe_year2">${formatNumber(row.potential_pe_year2)}</span></td>
-      <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
-      <td class="readonly-cell"><span data-cell="potential_pe_year3">${formatNumber(row.potential_pe_year3)}</span></td>
-      <td><input data-field="forecast_profit_year4_billion_rub" value="${mapProfitByYear(row, 3) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell"><span data-cell="forecast_price_year4">${formatCurrency(row.forecast_price_year4, priceDecimals)}</span></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
-      <td class="readonly-cell"><span data-cell="potential_pe_year4">${formatNumber(row.potential_pe_year4)}</span></td>
+      <td><input data-field="dividends_year2" value="${row.dividends_year2 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
+      <td class="readonly-cell"><span data-cell="dividend_yield_year2">${formatPercent(row.dividend_yield_percent_year2)}</span></td>
+      <td class="readonly-cell pe-col"><span data-cell="potential_pe_year2">${formatNumber(row.potential_pe_year2)}</span></td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
         <button data-action="delete" class="btn-danger row-delete-btn" ${adminMode && isPrimaryTable ? '' : 'disabled title="Доступно только администратору в таблице №1"'}>Удалить</button>
@@ -891,8 +870,8 @@ addRowBtn.addEventListener('click', async () => {
         pe_avg_5y: null,
         forecast_profit_year1_billion_rub: null,
         forecast_profit_year2_billion_rub: null,
-        forecast_profit_year3_billion_rub: null,
-        forecast_profit_year4_billion_rub: null,
+        dividends_year1: null,
+        dividends_year2: null,
       }),
     });
     await loadRows();
