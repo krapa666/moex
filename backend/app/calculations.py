@@ -39,8 +39,14 @@ def recalculate_fields(row: StockRow) -> None:
             and row.current_price is not None
             and row.current_price > 0
         ):
-            remaining_dividends = remaining_dividends_prev_year or 0
-            upside = ((forecast_price - row.current_price + remaining_dividends) / row.current_price) * 100
+            if year == 1:
+                remaining_dividends = remaining_dividends_prev_year or 0
+                upside = ((forecast_price - row.current_price + remaining_dividends) / row.current_price) * 100
+            elif year == 2:
+                next_year_dividends = getattr(row, "dividends_year2", None) or 0
+                upside = ((forecast_price - row.current_price + next_year_dividends) / row.current_price) * 100
+            else:
+                upside = ((forecast_price - row.current_price) / row.current_price) * 100
             setattr(row, upside_field, upside)
         else:
             setattr(row, upside_field, None)

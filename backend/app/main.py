@@ -457,6 +457,7 @@ def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
             continue
         target.shares_billion = row.shares_billion
         target.pe_avg_5y = row.pe_avg_5y
+        target.remaining_dividends_prev_year1 = row.remaining_dividends_prev_year1
         apply_net_profit_projection(target, table.year_offset)
 
 
@@ -659,6 +660,7 @@ async def create_row(payload: StockRowCreate, request: Request, db: Session = De
         if primary_row is not None:
             payload.shares_billion = primary_row.shares_billion
             payload.pe_avg_5y = primary_row.pe_avg_5y
+            payload.remaining_dividends_prev_year1 = primary_row.remaining_dividends_prev_year1
 
     row = StockRow(
         table_id=payload.table_id,
@@ -706,6 +708,7 @@ async def update_row(row_id: int, payload: StockRowUpdate, request: Request, db:
     if shared_fields_editable:
         row.shares_billion = payload.shares_billion
         row.pe_avg_5y = payload.pe_avg_5y
+        row.remaining_dividends_prev_year1 = payload.remaining_dividends_prev_year1
     else:
         primary_row = get_primary_row_by_ticker(db, old_ticker)
         if primary_row is None:
@@ -715,9 +718,9 @@ async def update_row(row_id: int, payload: StockRowUpdate, request: Request, db:
             )
         row.shares_billion = primary_row.shares_billion
         row.pe_avg_5y = primary_row.pe_avg_5y
+        row.remaining_dividends_prev_year1 = primary_row.remaining_dividends_prev_year1
     row.dividends_year1 = payload.dividends_year1
     row.dividends_year2 = payload.dividends_year2
-    row.remaining_dividends_prev_year1 = payload.remaining_dividends_prev_year1
     row.remaining_dividends_prev_year2 = payload.remaining_dividends_prev_year2
     row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
     apply_net_profit_projection(row, table.year_offset)
