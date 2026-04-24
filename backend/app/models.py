@@ -24,6 +24,8 @@ class StockRow(Base):
     forecast_profit_year4_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividends_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividends_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    remaining_dividends_prev_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    remaining_dividends_prev_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
     net_profit_year_map: Mapped[dict[str, float | None] | None] = mapped_column(JSON, nullable=True)
     net_profit_source_comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
 

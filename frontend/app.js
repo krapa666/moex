@@ -25,6 +25,8 @@ const headerDividendsYear1 = document.getElementById('header-dividends-year1');
 const headerDividendsYear2 = document.getElementById('header-dividends-year2');
 const headerDivYieldYear1 = document.getElementById('header-div-yield-year1');
 const headerDivYieldYear2 = document.getElementById('header-div-yield-year2');
+const headerRemDivYear1 = document.getElementById('header-rem-div-year1');
+const headerRemDivYear2 = document.getElementById('header-rem-div-year2');
 const headerPeYear1 = document.getElementById('header-pe-year1');
 const headerPeYear2 = document.getElementById('header-pe-year2');
 
@@ -172,6 +174,8 @@ const INPUT_NORMALIZERS = {
   forecast_profit_year2_billion_rub: normalizeNumericInput,
   dividends_year1: normalizeNumericInput,
   dividends_year2: normalizeNumericInput,
+  remaining_dividends_prev_year1: normalizeNumericInput,
+  remaining_dividends_prev_year2: normalizeNumericInput,
 };
 
 function normalizeInputByField(field, value) {
@@ -229,6 +233,8 @@ function applyYearHeaders() {
   if (headerDividendsYear2) headerDividendsYear2.textContent = `Дивиденды (${y2}), ₽`;
   if (headerDivYieldYear1) headerDivYieldYear1.textContent = `Див. доходн. (${y1}), %`;
   if (headerDivYieldYear2) headerDivYieldYear2.textContent = `Див. доходн. (${y2}), %`;
+  if (headerRemDivYear1) headerRemDivYear1.textContent = `Див. пр. года (остаток, ${y1}), ₽`;
+  if (headerRemDivYear2) headerRemDivYear2.textContent = `Див. пр. года (остаток, ${y2}), ₽`;
   if (headerPeYear1) headerPeYear1.textContent = `Прогн. P/E (${y1})`;
   if (headerPeYear2) headerPeYear2.textContent = `Прогн. P/E (${y2})`;
 }
@@ -421,12 +427,14 @@ function createInlineComparisonRow(item) {
     <td class="readonly-cell ${upsideClass(y1?.upside_percent)} ${currentYearUpsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
     <td><input value="${y1?.dividends ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatPercent(y1?.dividend_yield_percent)}</span></td>
+    <td><input value="${y1?.remaining_dividends_prev_year ?? ''}" disabled /></td>
     <td class="readonly-cell pe-col"><span>${formatNumber(y1?.potential_pe)}</span></td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
     <td><input value="${y2?.dividends ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatPercent(y2?.dividend_yield_percent)}</span></td>
+    <td><input value="${y2?.remaining_dividends_prev_year ?? ''}" disabled /></td>
     <td class="readonly-cell pe-col"><span>${formatNumber(y2?.potential_pe)}</span></td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">${escapeHtml(displayAnalystName(item))}</span></td>
@@ -531,6 +539,8 @@ function rowToPayload(row) {
     forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
     dividends_year1: parseInputNumber(row.dividends_year1),
     dividends_year2: parseInputNumber(row.dividends_year2),
+    remaining_dividends_prev_year1: parseInputNumber(row.remaining_dividends_prev_year1),
+    remaining_dividends_prev_year2: parseInputNumber(row.remaining_dividends_prev_year2),
     net_profit_year_map: profitMap,
   };
 }
@@ -561,9 +571,11 @@ function updateCalculatedCells(tr, row) {
   setUpsideCell('upside_year2', row.upside_percent_year2);
   setCellText('dividends_year1', formatCurrency(row.dividends_year1));
   setCellText('dividend_yield_year1', formatPercent(row.dividend_yield_percent_year1));
+  setCellText('remaining_dividends_prev_year1', formatCurrency(row.remaining_dividends_prev_year1));
   setCellText('potential_pe_year1', formatNumber(row.potential_pe_year1));
   setCellText('dividends_year2', formatCurrency(row.dividends_year2));
   setCellText('dividend_yield_year2', formatPercent(row.dividend_yield_percent_year2));
+  setCellText('remaining_dividends_prev_year2', formatCurrency(row.remaining_dividends_prev_year2));
   setCellText('potential_pe_year2', formatNumber(row.potential_pe_year2));
   setCellText('price_updated_at', formatDate(row.price_updated_at));
 }
@@ -652,12 +664,14 @@ function renderRows(rows) {
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1)} ${currentYearUpsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
       <td><input data-field="dividends_year1" value="${row.dividends_year1 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="dividend_yield_year1">${formatPercent(row.dividend_yield_percent_year1)}</span></td>
+      <td><input data-field="remaining_dividends_prev_year1" value="${row.remaining_dividends_prev_year1 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell pe-col"><span data-cell="potential_pe_year1">${formatNumber(row.potential_pe_year1)}</span></td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
       <td><input data-field="dividends_year2" value="${row.dividends_year2 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="dividend_yield_year2">${formatPercent(row.dividend_yield_percent_year2)}</span></td>
+      <td><input data-field="remaining_dividends_prev_year2" value="${row.remaining_dividends_prev_year2 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell pe-col"><span data-cell="potential_pe_year2">${formatNumber(row.potential_pe_year2)}</span></td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
@@ -872,6 +886,8 @@ addRowBtn.addEventListener('click', async () => {
         forecast_profit_year2_billion_rub: null,
         dividends_year1: null,
         dividends_year2: null,
+        remaining_dividends_prev_year1: null,
+        remaining_dividends_prev_year2: null,
       }),
     });
     await loadRows();

@@ -253,6 +253,8 @@ def build_database_snapshot(db: Session) -> dict:
                 "forecast_profit_year4_billion_rub": row.forecast_profit_year4_billion_rub,
                 "dividends_year1": row.dividends_year1,
                 "dividends_year2": row.dividends_year2,
+                "remaining_dividends_prev_year1": row.remaining_dividends_prev_year1,
+                "remaining_dividends_prev_year2": row.remaining_dividends_prev_year2,
                 "net_profit_year_map": row.net_profit_year_map,
                 "net_profit_source_comment": row.net_profit_source_comment,
                 "forecast_price_year1": row.forecast_price_year1,
@@ -325,6 +327,8 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
             forecast_profit_year4_billion_rub=row_data.get("forecast_profit_year4_billion_rub"),
             dividends_year1=row_data.get("dividends_year1"),
             dividends_year2=row_data.get("dividends_year2"),
+            remaining_dividends_prev_year1=row_data.get("remaining_dividends_prev_year1"),
+            remaining_dividends_prev_year2=row_data.get("remaining_dividends_prev_year2"),
             net_profit_year_map=row_data.get("net_profit_year_map"),
             net_profit_source_comment=row_data.get("net_profit_source_comment"),
             forecast_price_year1=row_data.get("forecast_price_year1"),
@@ -372,6 +376,8 @@ def reset_net_profit_fields(row: StockRow) -> None:
     row.forecast_profit_year4_billion_rub = None
     row.dividends_year1 = None
     row.dividends_year2 = None
+    row.remaining_dividends_prev_year1 = None
+    row.remaining_dividends_prev_year2 = None
     row.net_profit_year_map = {}
     row.forecast_price_year1 = None
     row.forecast_price_year2 = None
@@ -464,6 +470,7 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
             getattr(row, "potential_pe_year1", None),
             row.dividends_year1,
             getattr(row, "dividend_yield_percent_year1", None),
+            row.remaining_dividends_prev_year1,
         ),
         (
             row.forecast_profit_year2_billion_rub,
@@ -472,6 +479,7 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
             getattr(row, "potential_pe_year2", None),
             row.dividends_year2,
             getattr(row, "dividend_yield_percent_year2", None),
+            row.remaining_dividends_prev_year2,
         ),
     ]
     return TickerComparisonItem(
@@ -495,8 +503,9 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
                 potential_pe=potential_pe,
                 dividends=dividends,
                 dividend_yield_percent=dividend_yield,
+                remaining_dividends_prev_year=remaining_dividends_prev_year,
             )
-            for idx, (profit, price, upside, potential_pe, dividends, dividend_yield) in enumerate(values)
+            for idx, (profit, price, upside, potential_pe, dividends, dividend_yield, remaining_dividends_prev_year) in enumerate(values)
         ],
     )
 
@@ -573,6 +582,8 @@ def create_table(payload: AnalystTableCreate, request: Request, db: Session = De
                     forecast_profit_year4_billion_rub=None,
                     dividends_year1=None,
                     dividends_year2=None,
+                    remaining_dividends_prev_year1=None,
+                    remaining_dividends_prev_year2=None,
                     net_profit_year_map={},
                     forecast_price_year1=None,
                     forecast_price_year2=None,
@@ -656,6 +667,8 @@ async def create_row(payload: StockRowCreate, request: Request, db: Session = De
         pe_avg_5y=payload.pe_avg_5y,
         dividends_year1=payload.dividends_year1,
         dividends_year2=payload.dividends_year2,
+        remaining_dividends_prev_year1=payload.remaining_dividends_prev_year1,
+        remaining_dividends_prev_year2=payload.remaining_dividends_prev_year2,
         net_profit_year_map=merge_payload_profit_map(payload, table.year_offset),
         net_profit_source_comment=payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None,
     )
@@ -704,6 +717,8 @@ async def update_row(row_id: int, payload: StockRowUpdate, request: Request, db:
         row.pe_avg_5y = primary_row.pe_avg_5y
     row.dividends_year1 = payload.dividends_year1
     row.dividends_year2 = payload.dividends_year2
+    row.remaining_dividends_prev_year1 = payload.remaining_dividends_prev_year1
+    row.remaining_dividends_prev_year2 = payload.remaining_dividends_prev_year2
     row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
     apply_net_profit_projection(row, table.year_offset)
     row.net_profit_source_comment = (

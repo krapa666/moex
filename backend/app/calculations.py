@@ -10,6 +10,7 @@ def recalculate_fields(row: StockRow) -> None:
     for year in (1, 2, 3, 4):
         profit = getattr(row, f"forecast_profit_year{year}_billion_rub")
         dividends = getattr(row, f"dividends_year{year}", None)
+        remaining_dividends_prev_year = getattr(row, f"remaining_dividends_prev_year{year}", None)
         price_field = f"forecast_price_year{year}"
         upside_field = f"upside_percent_year{year}"
         potential_pe_field = f"potential_pe_year{year}"
@@ -38,10 +39,8 @@ def recalculate_fields(row: StockRow) -> None:
             and row.current_price is not None
             and row.current_price > 0
         ):
-            upside = ((forecast_price - row.current_price) / row.current_price) * 100
-            dividend_yield = getattr(row, dividend_yield_field, None)
-            if dividend_yield is not None:
-                upside += dividend_yield
+            remaining_dividends = remaining_dividends_prev_year or 0
+            upside = ((forecast_price - row.current_price + remaining_dividends) / row.current_price) * 100
             setattr(row, upside_field, upside)
         else:
             setattr(row, upside_field, None)
