@@ -255,6 +255,8 @@ def build_database_snapshot(db: Session) -> dict:
                 "dividends_year2": row.dividends_year2,
                 "remaining_dividends_prev_year1": row.remaining_dividends_prev_year1,
                 "remaining_dividends_prev_year2": row.remaining_dividends_prev_year2,
+                "dividend_year_map": row.dividend_year_map,
+                "remaining_dividend_year_map": row.remaining_dividend_year_map,
                 "net_profit_year_map": row.net_profit_year_map,
                 "net_profit_source_comment": row.net_profit_source_comment,
                 "forecast_price_year1": row.forecast_price_year1,
@@ -329,6 +331,8 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
             dividends_year2=row_data.get("dividends_year2"),
             remaining_dividends_prev_year1=row_data.get("remaining_dividends_prev_year1"),
             remaining_dividends_prev_year2=row_data.get("remaining_dividends_prev_year2"),
+            dividend_year_map=row_data.get("dividend_year_map"),
+            remaining_dividend_year_map=row_data.get("remaining_dividend_year_map"),
             net_profit_year_map=row_data.get("net_profit_year_map"),
             net_profit_source_comment=row_data.get("net_profit_source_comment"),
             forecast_price_year1=row_data.get("forecast_price_year1"),
@@ -352,10 +356,16 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
 def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
     years = [BASE_FORECAST_YEAR + year_offset + i for i in range(4)]
     profit_map = row.net_profit_year_map or {}
+    dividend_map = row.dividend_year_map or {}
+    remaining_dividend_map = row.remaining_dividend_year_map or {}
     row.forecast_profit_year1_billion_rub = profit_map.get(str(years[0]))
     row.forecast_profit_year2_billion_rub = profit_map.get(str(years[1]))
     row.forecast_profit_year3_billion_rub = profit_map.get(str(years[2]))
     row.forecast_profit_year4_billion_rub = profit_map.get(str(years[3]))
+    row.dividends_year1 = dividend_map.get(str(years[0]))
+    row.dividends_year2 = dividend_map.get(str(years[1]))
+    row.remaining_dividends_prev_year1 = remaining_dividend_map.get(str(years[0]))
+    row.remaining_dividends_prev_year2 = row.dividends_year1
     recalculate_fields(row)
 
 
@@ -369,6 +379,21 @@ def merge_payload_profit_map(payload: StockRowCreate | StockRowUpdate, year_offs
     return merged
 
 
+def merge_payload_dividend_maps(
+    payload: StockRowCreate | StockRowUpdate,
+    year_offset: int,
+    existing_dividend_map: dict[str, float | None] | None = None,
+    existing_remaining_map: dict[str, float | None] | None = None,
+) -> tuple[dict[str, float | None], dict[str, float | None]]:
+    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(2)]
+    dividend_map = dict(existing_dividend_map or {})
+    remaining_map = dict(existing_remaining_map or {})
+    dividend_map[str(years[0])] = payload.dividends_year1
+    dividend_map[str(years[1])] = payload.dividends_year2
+    remaining_map[str(years[0])] = payload.remaining_dividends_prev_year1
+    return dividend_map, remaining_map
+
+
 def reset_net_profit_fields(row: StockRow) -> None:
     row.forecast_profit_year1_billion_rub = None
     row.forecast_profit_year2_billion_rub = None
@@ -378,6 +403,8 @@ def reset_net_profit_fields(row: StockRow) -> None:
     row.dividends_year2 = None
     row.remaining_dividends_prev_year1 = None
     row.remaining_dividends_prev_year2 = None
+    row.dividend_year_map = {}
+    row.remaining_dividend_year_map = {}
     row.net_profit_year_map = {}
     row.forecast_price_year1 = None
     row.forecast_price_year2 = None
@@ -457,7 +484,8 @@ def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
             continue
         target.shares_billion = row.shares_billion
         target.pe_avg_5y = row.pe_avg_5y
-        target.remaining_dividends_prev_year1 = row.remaining_dividends_prev_year1
+        target.dividend_year_map = dict(row.dividend_year_map or {})
+        target.remaining_dividend_year_map = dict(row.remaining_dividend_year_map or {})
         apply_net_profit_projection(target, table.year_offset)
 
 
@@ -585,6 +613,8 @@ def create_table(payload: AnalystTableCreate, request: Request, db: Session = De
                     dividends_year2=None,
                     remaining_dividends_prev_year1=None,
                     remaining_dividends_prev_year2=None,
+                    dividend_year_map=dict(src.dividend_year_map or {}),
+                    remaining_dividend_year_map=dict(src.remaining_dividend_year_map or {}),
                     net_profit_year_map={},
                     forecast_price_year1=None,
                     forecast_price_year2=None,
@@ -661,16 +691,23 @@ async def create_row(payload: StockRowCreate, request: Request, db: Session = De
             payload.shares_billion = primary_row.shares_billion
             payload.pe_avg_5y = primary_row.pe_avg_5y
             payload.remaining_dividends_prev_year1 = primary_row.remaining_dividends_prev_year1
+            payload.dividend_year_map = primary_row.dividend_year_map
+            payload.remaining_dividend_year_map = primary_row.remaining_dividend_year_map
+
+    dividend_map, remaining_dividend_map = merge_payload_dividend_maps(
+        payload,
+        table.year_offset,
+        existing_dividend_map=payload.dividend_year_map,
+        existing_remaining_map=payload.remaining_dividend_year_map,
+    )
 
     row = StockRow(
         table_id=payload.table_id,
         ticker=payload.ticker.strip().upper(),
         shares_billion=payload.shares_billion,
         pe_avg_5y=payload.pe_avg_5y,
-        dividends_year1=payload.dividends_year1,
-        dividends_year2=payload.dividends_year2,
-        remaining_dividends_prev_year1=payload.remaining_dividends_prev_year1,
-        remaining_dividends_prev_year2=payload.remaining_dividends_prev_year2,
+        dividend_year_map=dividend_map,
+        remaining_dividend_year_map=remaining_dividend_map,
         net_profit_year_map=merge_payload_profit_map(payload, table.year_offset),
         net_profit_source_comment=payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None,
     )
@@ -708,7 +745,7 @@ async def update_row(row_id: int, payload: StockRowUpdate, request: Request, db:
     if shared_fields_editable:
         row.shares_billion = payload.shares_billion
         row.pe_avg_5y = payload.pe_avg_5y
-        row.remaining_dividends_prev_year1 = payload.remaining_dividends_prev_year1
+        effective_remaining_year1 = payload.remaining_dividends_prev_year1
     else:
         primary_row = get_primary_row_by_ticker(db, old_ticker)
         if primary_row is None:
@@ -718,10 +755,17 @@ async def update_row(row_id: int, payload: StockRowUpdate, request: Request, db:
             )
         row.shares_billion = primary_row.shares_billion
         row.pe_avg_5y = primary_row.pe_avg_5y
-        row.remaining_dividends_prev_year1 = primary_row.remaining_dividends_prev_year1
-    row.dividends_year1 = payload.dividends_year1
-    row.dividends_year2 = payload.dividends_year2
-    row.remaining_dividends_prev_year2 = payload.remaining_dividends_prev_year2
+        effective_remaining_year1 = primary_row.remaining_dividends_prev_year1
+
+    payload.remaining_dividends_prev_year1 = effective_remaining_year1
+    dividend_map, remaining_dividend_map = merge_payload_dividend_maps(
+        payload,
+        table.year_offset,
+        existing_dividend_map=row.dividend_year_map,
+        existing_remaining_map=row.remaining_dividend_year_map,
+    )
+    row.dividend_year_map = dividend_map
+    row.remaining_dividend_year_map = remaining_dividend_map
     row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
     apply_net_profit_projection(row, table.year_offset)
     row.net_profit_source_comment = (

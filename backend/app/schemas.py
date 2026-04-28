@@ -16,6 +16,8 @@ class StockRowBase(BaseModel):
     dividends_year2: float | None = Field(default=None, ge=0)
     remaining_dividends_prev_year1: float | None = Field(default=None, ge=0)
     remaining_dividends_prev_year2: float | None = Field(default=None, ge=0)
+    dividend_year_map: dict[str, float | None] | None = Field(default=None)
+    remaining_dividend_year_map: dict[str, float | None] | None = Field(default=None)
     net_profit_year_map: dict[str, float | None] | None = Field(default=None)
     net_profit_source_comment: str | None = Field(default=None, max_length=512)
 
