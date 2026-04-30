@@ -211,6 +211,31 @@ def is_shared_fields_editable_for_table(db: Session, table_id: int, ticker: str)
     return get_primary_row_by_ticker(db, normalized_ticker) is None
 
 
+def ensure_unique_ticker_per_table(db: Session, table_id: int, ticker: str, exclude_row_id: int | None = None) -> None:
+    normalized_ticker = ticker.strip().upper()
+    if not normalized_ticker:
+        return
+    stmt = select(StockRow).where(StockRow.table_id == table_id, StockRow.ticker == normalized_ticker)
+    if exclude_row_id is not None:
+        stmt = stmt.where(StockRow.id != exclude_row_id)
+    duplicate = db.scalars(stmt.limit(1)).first()
+    if duplicate is not None:
+        raise HTTPException(status_code=409, detail=f"Тикер {normalized_ticker} уже существует в таблице")
+
+
+def remove_duplicate_rows_for_table(db: Session, table_id: int) -> None:
+    rows = db.scalars(select(StockRow).where(StockRow.table_id == table_id).order_by(StockRow.id.asc())).all()
+    seen: set[str] = set()
+    for row in rows:
+        normalized_ticker = (row.ticker or "").strip().upper()
+        if not normalized_ticker:
+            continue
+        if normalized_ticker in seen:
+            db.delete(row)
+            continue
+        seen.add(normalized_ticker)
+
+
 def serialize_table(table: AnalystTable, table_number: int) -> dict:
     return {
         "id": table.id,
@@ -671,6 +696,8 @@ def delete_table(table_id: int, request: Request, db: Session = Depends(get_db))
 @app.get("/api/rows", response_model=list[StockRowRead])
 def get_rows(table_id: int, db: Session = Depends(get_db)):
     table = get_table_or_404(db, table_id)
+    remove_duplicate_rows_for_table(db, table_id)
+    db.commit()
     rows = db.scalars(select(StockRow).where(StockRow.table_id == table_id).order_by(StockRow.id.asc())).all()
     for row in rows:
         apply_net_profit_projection(row, table.year_offset)
@@ -684,6 +711,7 @@ async def create_row(payload: StockRowCreate, request: Request, db: Session = De
     require_local_admin(request)
     table = get_table_or_404(db, payload.table_id)
     ensure_primary_table_for_row_mutation(db, table.id)
+    ensure_unique_ticker_per_table(db, payload.table_id, payload.ticker)
     shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
     if not shared_fields_editable:
         primary_row = get_primary_row_by_ticker(db, payload.ticker)
@@ -734,6 +762,7 @@ async def update_row(row_id: int, payload: StockRowUpdate, request: Request, db:
     table = get_table_or_404(db, payload.table_id)
     if row.table_id != payload.table_id:
         raise HTTPException(status_code=400, detail="Нельзя переносить строку между таблицами")
+    ensure_unique_ticker_per_table(db, payload.table_id, payload.ticker, exclude_row_id=row_id)
 
     primary_table = get_primary_table(db)
     is_primary_row = primary_table is not None and row.table_id == primary_table.id
