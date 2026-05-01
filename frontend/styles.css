@@ -94,6 +94,8 @@ h1 {
 
 .table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 78vh;
 }
 
 table {
@@ -138,6 +140,12 @@ th {
   z-index: 12;
   color: #374151;
   font-size: 13px;
+}
+
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 13;
 }
 
 .th-sort {
