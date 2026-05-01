@@ -88,14 +88,12 @@ h1 {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 8px 28px rgba(17, 24, 39, 0.06);
 }
 
 .table-wrap {
   overflow-x: auto;
-  overflow-y: auto;
-  max-height: calc(100vh - 220px);
 }
 
 table {
@@ -137,7 +135,7 @@ th {
   position: sticky;
   top: 0;
   background: #f9fafb;
-  z-index: 2;
+  z-index: 12;
   color: #374151;
   font-size: 13px;
 }
