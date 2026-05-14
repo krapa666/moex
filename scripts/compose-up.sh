@@ -18,6 +18,8 @@ SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/full
 SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
 FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
 CONFIGURE_HOST_NGINX="${MOEX_CONFIGURE_HOST_NGINX:-0}"
+FRONTEND_BIND="${MOEX_FRONTEND_BIND:-127.0.0.1}"
+FRONTEND_PORT="${MOEX_FRONTEND_PORT:-8080}"
 
 STEP=0
 log_step() {
@@ -73,8 +75,8 @@ log_step "importing shared DB snapshot (if present)"
 import_snapshot_into_compose_db
 
 log_step "compose mode is up"
-echo "[compose-up] services are available inside the Docker network only (no host ports are published)"
-echo "[compose-up] attach an external reverse proxy to the compose network or use docker compose exec for checks"
+echo "[compose-up] frontend is available for host Nginx at http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
+echo "[compose-up] backend, database and monitoring services stay inside the Docker network (no host ports)"
 
 if [[ "${CONFIGURE_HOST_NGINX}" == "1" || "${CONFIGURE_HOST_NGINX,,}" == "true" || "${CONFIGURE_HOST_NGINX,,}" == "yes" ]]; then
   if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then

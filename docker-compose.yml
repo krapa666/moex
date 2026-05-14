@@ -57,8 +57,10 @@ services:
     container_name: moex-frontend
     depends_on:
       - backend
-    expose:
-      - "80"
+    ports:
+      # Only the SPA reverse-proxy is bound to loopback for host Nginx.
+      # Backend, Postgres and monitoring remain internal-only.
+      - "${MOEX_FRONTEND_BIND:-127.0.0.1}:${MOEX_FRONTEND_PORT:-8080}:80"
     restart: unless-stopped
 
   prometheus:

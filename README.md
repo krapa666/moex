@@ -142,9 +142,9 @@
 ```bash
 ./scripts/compose-up.sh
 ```
-Скрипт запускает Compose без публикации портов на host: `db`, `backend`, `frontend`, Prometheus, Grafana и Loki доступны только внутри Docker-сети. Это защищает сервер от конфликтов с уже занятыми портами (`5432`, `8000`, `3000`, `9090`, `3100` и т.д.).
+Скрипт запускает Compose так, чтобы внутренние сервисы (`db`, `backend`, Prometheus, Grafana, Loki) не публиковались на host и не конфликтовали с уже занятыми портами (`5432`, `8000`, `3000`, `9090`, `3100` и т.д.).
 
-Если на сервере нужен хостовый Nginx reverse-proxy, подключите его к Docker-сети или явно включите старую автогенерацию конфига через `MOEX_CONFIGURE_HOST_NGINX=1` (учтите, что шаблоны `deploy/nginx/home-server*.conf` рассчитаны на опубликованные host-порты).
+Для совместимости с хостовым Nginx (`https://moex.ddns.net/`) публикуется только frontend на loopback: `127.0.0.1:8080 -> moex-frontend:80`. Это не открывает backend/PostgreSQL/мониторинг наружу, но даёт Nginx рабочий upstream вместо 502. Если `8080` занят, задайте `MOEX_FRONTEND_PORT`, например `MOEX_FRONTEND_PORT=18080 ./scripts/compose-up.sh`, и обновите Nginx upstream.
 
 ## 6.2 Остановка
 ```bash
@@ -154,7 +154,7 @@
 `backups/mode-sync/latest.sql.gz` для последующего переноса между режимами.
 
 ## 6.3 Доступ после старта
-По умолчанию Docker Compose **не публикует порты на host**. Проверки выполняются внутри Docker-сети, например:
+По умолчанию Docker Compose публикует только frontend на `127.0.0.1:8080` для host-Nginx. Backend, БД и мониторинг проверяются внутри Docker-сети, например:
 
 ```bash
 docker compose exec backend curl -s http://127.0.0.1:8000/api/health
@@ -164,7 +164,7 @@ docker compose exec grafana wget -qO- http://127.0.0.1:3000/api/health
 docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
 ```
 
-Для доступа из браузера используйте reverse-proxy, подключённый к Docker-сети Compose, либо временный `docker compose port`/override-файл с публикацией только нужного frontend-порта.
+Для доступа из браузера используйте `https://moex.ddns.net/` через host-Nginx, который проксирует корень на `127.0.0.1:8080`.
 
 ## 6.5 Определение прав по сети
 - Права пользователя определяются автоматически:
@@ -322,7 +322,7 @@ curl -I https://your-domain.example
 - Loki + Promtail собирают логи контейнеров.
 - Готовые dashboard/alerts находятся в `monitoring/`.
 
-Полезные проверки в Compose-режиме без host-портов:
+Полезные проверки в Compose-режиме:
 ```bash
 docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
 docker compose exec backend curl -s http://127.0.0.1:8000/api/health
@@ -433,8 +433,8 @@ sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 ## 16. Краткий чеклист первого запуска
 
 1. `./scripts/compose-up.sh`
-2. Подключить reverse-proxy к Docker-сети или выполнить внутреннюю проверку `docker compose exec backend curl -s http://127.0.0.1:8000/api/health`
-3. Открыть внешний URL reverse-proxy
+2. Проверить frontend upstream для Nginx: `curl -I http://127.0.0.1:8080/`
+3. Открыть `https://moex.ddns.net/`
 4. Проверить Grafana/Prometheus
 5. Выполнить пробное добавление тикера и проверить авторасчёты
 6. Проверить сравнение между таблицами
