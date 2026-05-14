@@ -1,10 +1,12 @@
 import pytest
 from app.main import (
+    BASE_FORECAST_YEAR,
     build_database_snapshot,
     delete_row,
     ensure_primary_table_for_row_mutation,
     import_database_snapshot,
     is_shared_fields_editable_for_table,
+    sync_primary_table_multipliers,
     sync_row_to_other_tables,
 )
 from app.models import AnalystTable, Base, StockRow
@@ -61,6 +63,49 @@ def test_sync_row_to_other_tables_copies_shared_fields_without_net_profit() -> N
                 assert row.forecast_profit_year1_billion_rub is None
                 assert row.forecast_price_year1 is None
                 assert row.upside_percent_year1 is None
+
+
+def test_primary_dividends_fill_only_empty_secondary_cells() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        table1 = AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1)
+        table2 = AnalystTable(analyst_name="Аналитик 2", year_offset=0, sort_order=2)
+        table3 = AnalystTable(analyst_name="Аналитик 3", year_offset=0, sort_order=3)
+        db.add_all([table1, table2, table3])
+        db.commit()
+        db.refresh(table1)
+        db.refresh(table2)
+        db.refresh(table3)
+
+        year1 = str(BASE_FORECAST_YEAR)
+        year2 = str(BASE_FORECAST_YEAR + 1)
+
+        primary = StockRow(
+            table_id=table1.id,
+            ticker="MGNT",
+            shares_billion=0.1,
+            pe_avg_5y=8.0,
+            dividend_year_map={year1: 100.0, year2: 120.0},
+        )
+        secondary_with_value = StockRow(
+            table_id=table2.id,
+            ticker="MGNT",
+            dividend_year_map={year1: 55.0},
+        )
+        secondary_empty = StockRow(
+            table_id=table3.id,
+            ticker="MGNT",
+            dividend_year_map={year1: None},
+        )
+        db.add_all([primary, secondary_with_value, secondary_empty])
+        db.commit()
+
+        sync_primary_table_multipliers(db, primary)
+
+        assert secondary_with_value.dividend_year_map == {year1: 55.0, year2: 120.0}
+        assert secondary_empty.dividend_year_map == {year1: 100.0, year2: 120.0}
 
 
 def test_shared_fields_are_editable_in_non_primary_only_for_new_ticker() -> None:

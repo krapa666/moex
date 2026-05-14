@@ -142,8 +142,9 @@
 ```bash
 ./scripts/compose-up.sh
 ```
-Скрипт также автоматически переключает хостовый Nginx reverse-proxy в compose-режим
-(`scripts/configure-nginx-compose-proxy.sh --reload`), чтобы URL в домашней сети оставался тем же: `http://moex.ddns.net/`.
+Скрипт запускает Compose без публикации портов на host: `db`, `backend`, `frontend`, Prometheus, Grafana и Loki доступны только внутри Docker-сети. Это защищает сервер от конфликтов с уже занятыми портами (`5432`, `8000`, `3000`, `9090`, `3100` и т.д.).
+
+Если на сервере нужен хостовый Nginx reverse-proxy, подключите его к Docker-сети или явно включите старую автогенерацию конфига через `MOEX_CONFIGURE_HOST_NGINX=1` (учтите, что шаблоны `deploy/nginx/home-server*.conf` рассчитаны на опубликованные host-порты).
 
 ## 6.2 Остановка
 ```bash
@@ -153,12 +154,17 @@
 `backups/mode-sync/latest.sql.gz` для последующего переноса между режимами.
 
 ## 6.3 Доступ после старта
-- Frontend: http://localhost:8080
-- Backend health: http://localhost:8000/api/health
-- Metrics (через proxy): http://localhost:8080/metrics
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000
-- Loki readiness: http://localhost:3100/ready
+По умолчанию Docker Compose **не публикует порты на host**. Проверки выполняются внутри Docker-сети, например:
+
+```bash
+docker compose exec backend curl -s http://127.0.0.1:8000/api/health
+docker compose exec frontend wget -qO- http://127.0.0.1/metrics | head
+docker compose exec prometheus wget -qO- http://127.0.0.1:9090/prometheus/-/ready
+docker compose exec grafana wget -qO- http://127.0.0.1:3000/api/health
+docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
+```
+
+Для доступа из браузера используйте reverse-proxy, подключённый к Docker-сети Compose, либо временный `docker compose port`/override-файл с публикацией только нужного frontend-порта.
 
 ## 6.5 Определение прав по сети
 - Права пользователя определяются автоматически:
@@ -316,11 +322,11 @@ curl -I https://your-domain.example
 - Loki + Promtail собирают логи контейнеров.
 - Готовые dashboard/alerts находятся в `monitoring/`.
 
-Полезные проверки:
+Полезные проверки в Compose-режиме без host-портов:
 ```bash
-curl -s http://localhost:3100/ready
-curl -s http://localhost:8000/api/health
-curl -s http://localhost:8080/metrics | head
+docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
+docker compose exec backend curl -s http://127.0.0.1:8000/api/health
+docker compose exec frontend wget -qO- http://127.0.0.1/metrics | head
 ```
 
 ---
@@ -427,8 +433,8 @@ sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 ## 16. Краткий чеклист первого запуска
 
 1. `./scripts/compose-up.sh`
-2. Открыть `http://localhost:8080`
-3. Проверить `http://localhost:8000/api/health`
+2. Подключить reverse-proxy к Docker-сети или выполнить внутреннюю проверку `docker compose exec backend curl -s http://127.0.0.1:8000/api/health`
+3. Открыть внешний URL reverse-proxy
 4. Проверить Grafana/Prometheus
 5. Выполнить пробное добавление тикера и проверить авторасчёты
 6. Проверить сравнение между таблицами

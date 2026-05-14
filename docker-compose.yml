@@ -9,6 +9,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d fair_price"]
       interval: 10s
@@ -25,8 +27,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     restart: unless-stopped
 
   pgbackup:
@@ -55,8 +57,8 @@ services:
     container_name: moex-frontend
     depends_on:
       - backend
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     restart: unless-stopped
 
   prometheus:
@@ -69,8 +71,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.external-url=http://junibox/prometheus/"
       - "--web.route-prefix=/prometheus"
-    ports:
-      - "9090:9090"
+    expose:
+      - "9090"
     depends_on:
       - backend
     restart: unless-stopped
@@ -84,8 +86,8 @@ services:
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards-json/moex-home-and-app-overview.json
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       - prometheus
       - loki
@@ -97,8 +99,8 @@ services:
     command: ["-config.file=/etc/loki/local-config.yml"]
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yml:ro
-    ports:
-      - "3100:3100"
+    expose:
+      - "3100"
     restart: unless-stopped
 
   promtail:

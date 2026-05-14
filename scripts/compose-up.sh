@@ -17,6 +17,7 @@ PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
 SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
 SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
 FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
+CONFIGURE_HOST_NGINX="${MOEX_CONFIGURE_HOST_NGINX:-0}"
 
 STEP=0
 log_step() {
@@ -72,17 +73,22 @@ log_step "importing shared DB snapshot (if present)"
 import_snapshot_into_compose_db
 
 log_step "compose mode is up"
-echo "[compose-up] frontend: http://${PUBLIC_DOMAIN}/"
+echo "[compose-up] services are available inside the Docker network only (no host ports are published)"
+echo "[compose-up] attach an external reverse proxy to the compose network or use docker compose exec for checks"
 
-if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
-  log_step "switching nginx reverse-proxy to compose mode"
-  mapfile -t nginx_args < <(build_nginx_args)
-  if [[ -w "/etc/nginx/conf.d" ]]; then
-    ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
-  else
-    echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
-    echo "  sudo ./scripts/configure-nginx-compose-proxy.sh ${nginx_args[*]} --reload" >&2
+if [[ "${CONFIGURE_HOST_NGINX}" == "1" || "${CONFIGURE_HOST_NGINX,,}" == "true" || "${CONFIGURE_HOST_NGINX,,}" == "yes" ]]; then
+  if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
+    log_step "switching nginx reverse-proxy to compose mode"
+    mapfile -t nginx_args < <(build_nginx_args)
+    if [[ -w "/etc/nginx/conf.d" ]]; then
+      ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
+    else
+      echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
+      echo "  sudo ./scripts/configure-nginx-compose-proxy.sh ${nginx_args[*]} --reload" >&2
+    fi
   fi
+else
+  echo "[compose-up] host nginx auto-configuration skipped (set MOEX_CONFIGURE_HOST_NGINX=1 to opt in)"
 fi

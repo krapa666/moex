@@ -419,6 +419,17 @@ def merge_payload_dividend_maps(
     return dividend_map, remaining_map
 
 
+def merge_missing_dividend_values(
+    source_map: dict[str, float | None] | None,
+    target_map: dict[str, float | None] | None,
+) -> dict[str, float | None]:
+    merged = dict(target_map or {})
+    for year, value in (source_map or {}).items():
+        if value is not None and merged.get(year) is None:
+            merged[year] = value
+    return merged
+
+
 def reset_net_profit_fields(row: StockRow) -> None:
     row.forecast_profit_year1_billion_rub = None
     row.forecast_profit_year2_billion_rub = None
@@ -509,7 +520,7 @@ def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
             continue
         target.shares_billion = row.shares_billion
         target.pe_avg_5y = row.pe_avg_5y
-        target.dividend_year_map = dict(row.dividend_year_map or {})
+        target.dividend_year_map = merge_missing_dividend_values(row.dividend_year_map, target.dividend_year_map)
         target.remaining_dividend_year_map = dict(row.remaining_dividend_year_map or {})
         apply_net_profit_projection(target, table.year_offset)
 
