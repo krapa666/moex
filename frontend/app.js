@@ -49,7 +49,6 @@ const appState = {
   activeTableId: null,
 };
 const authState = {
-  token: localStorage.getItem('moex_auth_token') || null,
   user: null,
 };
 const AUTOSAVE_DELAY_MS = 1800;
@@ -308,9 +307,6 @@ async function api(path, options = {}) {
   if (!hasFormDataBody && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
-  if (authState.token) {
-    headers.Authorization = `Bearer ${authState.token}`;
-  }
 
   const res = await fetch(path, {
     headers,
@@ -352,17 +348,10 @@ function applyWriteAccessUi() {
 }
 
 async function restoreSession() {
-  if (!authState.token) {
-    authState.user = null;
-    updateAuthUi();
-    return;
-  }
   try {
     authState.user = await api('/api/auth/me');
   } catch (_err) {
-    authState.token = null;
-    authState.user = null;
-    localStorage.removeItem('moex_auth_token');
+    authState.user = { username: 'guest', is_admin: false };
   }
   updateAuthUi();
 }
@@ -914,6 +903,9 @@ addRowBtn.addEventListener('click', async () => {
 });
 
 authLoginBtn?.addEventListener('click', async () => {
+  alert('Вход по логину/паролю отключён. Доступ определяется вашей сетью.');
+  return;
+
   const username = prompt('Логин:');
   if (!username) return;
   const password = prompt('Пароль:');
@@ -923,9 +915,7 @@ authLoginBtn?.addEventListener('click', async () => {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
-    authState.token = response.token;
     authState.user = response.user;
-    localStorage.setItem('moex_auth_token', authState.token);
     updateAuthUi();
     await loadRows();
     alert(`Вход выполнен: ${response.user.username}`);
@@ -935,14 +925,13 @@ authLoginBtn?.addEventListener('click', async () => {
 });
 
 authLogoutBtn?.addEventListener('click', () => {
-  authState.token = null;
-  authState.user = null;
-  localStorage.removeItem('moex_auth_token');
-  updateAuthUi();
-  loadRows().catch((err) => alert(err.message));
+  alert('Выход не требуется: права определяются по сети доступа.');
 });
 
 authRegisterBtn?.addEventListener('click', async () => {
+  alert('Регистрация отключена: доступ определяется вашей сетью.');
+  return;
+
   const username = prompt('Новый логин:');
   if (!username) return;
   const password = prompt('Новый пароль (минимум 8 символов):');

@@ -5,9 +5,11 @@ import hmac
 import json
 import os
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import ipaddress
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import func, inspect, select, text
@@ -38,6 +40,13 @@ price_refresh_task: asyncio.Task | None = None
 BACKGROUND_REFRESH_SECONDS = 10 * 60
 BASE_FORECAST_YEAR = datetime.now(timezone.utc).year
 SESSION_TTL_HOURS = 24
+
+
+@dataclass
+class AccessPrincipal:
+    username: str
+    is_admin: bool
+
 sort_order_schema_ready = False
 sort_order_supported = True
 
@@ -204,43 +213,44 @@ def ensure_admin_user(db: Session) -> None:
     db.commit()
 
 
-def resolve_current_user(db: Session, authorization: str | None) -> User | None:
-    if not authorization:
-        return None
-    parts = authorization.split(" ", 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None
-    token = parts[1].strip()
-    if not token:
-        return None
-
-    now = datetime.now(timezone.utc)
-    session = db.scalars(
-        select(UserSession).where(UserSession.token == token, UserSession.expires_at > now).limit(1)
-    ).first()
-    if session is None:
-        return None
-    return db.get(User, session.user_id)
+def get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    if request.client is not None:
+        return request.client.host
+    return ""
 
 
-def get_current_user(
-    db: Session = Depends(get_db),
-    authorization: str | None = Header(default=None),
-) -> User:
-    user = resolve_current_user(db, authorization)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Требуется авторизация")
-    return user
+def is_local_network_ip(ip_text: str) -> bool:
+    if not ip_text:
+        return False
+    try:
+        ip_obj = ipaddress.ip_address(ip_text)
+    except ValueError:
+        return False
+    return ip_obj.is_private or ip_obj.is_loopback
 
 
-def get_optional_current_user(
-    db: Session = Depends(get_db),
-    authorization: str | None = Header(default=None),
-) -> User | None:
-    return resolve_current_user(db, authorization)
+def resolve_network_principal(request: Request) -> AccessPrincipal | None:
+    client_ip = get_client_ip(request)
+    if is_local_network_ip(client_ip):
+        return AccessPrincipal(username="local-network", is_admin=True)
+    return None
 
 
-def require_admin_user(current_user: User = Depends(get_current_user)) -> User:
+def get_current_user(request: Request) -> AccessPrincipal:
+    principal = resolve_network_principal(request)
+    if principal is None:
+        raise HTTPException(status_code=403, detail="Доступ только из локальной сети")
+    return principal
+
+
+def get_optional_current_user(request: Request) -> AccessPrincipal | None:
+    return resolve_network_principal(request)
+
+
+def require_admin_user(current_user: AccessPrincipal = Depends(get_current_user)) -> AccessPrincipal:
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Только администратор может регистрировать пользователей")
     return current_user
@@ -556,32 +566,21 @@ def health() -> dict[str, str]:
 
 @app.post("/api/auth/login", response_model=AuthLoginResponse)
 def auth_login(payload: AuthLoginRequest, db: Session = Depends(get_db)):
-    username = payload.username.strip()
-    user = db.scalars(select(User).where(User.username == username).limit(1)).first()
-    if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-
-    token = secrets.token_urlsafe(48)
-    session = UserSession(
-        user_id=user.id,
-        token=token,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=SESSION_TTL_HOURS),
-    )
-    db.add(session)
-    db.commit()
-    return AuthLoginResponse(token=token, user=UserRead.model_validate(user))
+    raise HTTPException(status_code=403, detail="Вход по логину/паролю отключен. Доступ определяется сетью источника.")
 
 
 @app.get("/api/auth/me", response_model=UserRead)
-def auth_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def auth_me(current_user: AccessPrincipal | None = Depends(get_optional_current_user)):
+    if current_user is None:
+        return UserRead(username="guest", is_admin=False)
+    return UserRead(username=current_user.username, is_admin=current_user.is_admin)
 
 
 @app.post("/api/auth/register", response_model=UserRead)
 def auth_register(
     payload: AuthRegisterRequest,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin_user),
+    _admin: AccessPrincipal = Depends(require_admin_user),
 ):
     username = payload.username.strip()
     existing = db.scalars(select(User).where(User.username == username).limit(1)).first()
@@ -611,7 +610,7 @@ def export_data(db: Session = Depends(get_db)):
 async def import_data(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: AccessPrincipal = Depends(get_current_user),
 ):
     try:
         raw = await file.read()
@@ -629,7 +628,7 @@ def get_tables(db: Session = Depends(get_db)):
 
 
 @app.post("/api/tables", response_model=AnalystTableRead)
-def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
     ensure_default_table(db)
     total = db.query(AnalystTable).count()
     if total >= 10:
@@ -680,7 +679,7 @@ def update_table(
     table_id: int,
     payload: AnalystTableUpdate,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_current_user),
+    current_user: AccessPrincipal | None = Depends(get_optional_current_user),
 ):
     table = get_table_or_404(db, table_id)
     if payload.analyst_name is not None:
@@ -701,7 +700,7 @@ def update_table(
 
 
 @app.delete("/api/tables/{table_id}")
-def delete_table(table_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def delete_table(table_id: int, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
     table = get_table_or_404(db, table_id)
     primary = get_primary_table(db)
     if primary is not None and primary.id == table.id:
@@ -726,7 +725,7 @@ def get_rows(table_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/rows", response_model=StockRowRead)
-async def create_row(payload: StockRowCreate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+async def create_row(payload: StockRowCreate, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
     table = get_table_or_404(db, payload.table_id)
     ensure_primary_table_for_row_mutation(db, table.id)
     shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
@@ -759,7 +758,7 @@ async def create_row(payload: StockRowCreate, db: Session = Depends(get_db), _us
 
 @app.put("/api/rows/{row_id}", response_model=StockRowRead)
 async def update_row(
-    row_id: int, payload: StockRowUpdate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)
+    row_id: int, payload: StockRowUpdate, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)
 ):
     row = db.get(StockRow, row_id)
     if row is None:
@@ -805,7 +804,7 @@ async def update_row(
 
 
 @app.delete("/api/rows/{row_id}")
-def delete_row(row_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def delete_row(row_id: int, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
     row = db.get(StockRow, row_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Строка не найдена")
@@ -823,13 +822,13 @@ def delete_row(row_id: int, db: Session = Depends(get_db), _user: User = Depends
 
 
 @app.post("/api/rows/refresh", response_model=list[StockRowRead])
-async def refresh_prices(table_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+async def refresh_prices(table_id: int, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
     get_table_or_404(db, table_id)
     return await refresh_all_prices(db, force=True, table_id=table_id)
 
 
 @app.post("/api/tables/{table_id}/make-primary", response_model=list[AnalystTableRead])
-def make_table_primary(table_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def make_table_primary(table_id: int, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
     ensure_sort_order_schema(db)
     if not sort_order_supported:
         raise HTTPException(status_code=400, detail="Переупорядочивание таблиц недоступно: примените миграции БД")
