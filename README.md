@@ -72,6 +72,9 @@
 - Для локальной сети публикуйте мониторинг через ваш локальный reverse-proxy/файрволл или задайте приватный bind IP хоста (например `192.168.x.y`).
 - При необходимости можно переопределить bind-адреса:
   - `MOEX_FRONTEND_BIND`, `MOEX_BACKEND_BIND`, `MOEX_OBSERVABILITY_BIND`.
+- HTTPS для публичного домена настраивается через `scripts/configure-nginx-compose-proxy.sh` автоматически:
+  - домен берётся из `MOEX_PUBLIC_DOMAIN` (или `MOEX_SERVER_NAME`, по умолчанию `moex.ddns.net`);
+  - если найдены сертификаты Let's Encrypt (`MOEX_SSL_CERT_PATH`/`MOEX_SSL_CERT_KEY_PATH`) или включён `MOEX_FORCE_HTTPS`, включается HTTPS-конфиг для `https://moex.ddns.net/`.
 
 ## 2.3 Структура проекта
 - `backend/app/` — API, модели, сервисы.

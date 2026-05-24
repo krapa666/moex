@@ -13,6 +13,11 @@ require_cmd docker
 
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
+SERVER_NAMES="${MOEX_NGINX_SERVER_NAMES:-${PUBLIC_DOMAIN} junibox _}"
+SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
+SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
+FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
 
 COMPOSE_PROJECT="${MOEX_COMPOSE_PROJECT:-moex}"
 BACKEND_BIND="${MOEX_BACKEND_BIND:-0.0.0.0}"
@@ -48,6 +53,27 @@ import_snapshot_into_compose_db() {
   fi
 }
 
+
+build_nginx_args() {
+  local args=("--server-name" "${SERVER_NAMES}")
+  local https_enabled=0
+
+  if [[ "${FORCE_HTTPS}" == "1" || "${FORCE_HTTPS,,}" == "true" || "${FORCE_HTTPS,,}" == "yes" ]]; then
+    https_enabled=1
+  elif [[ -r "${SSL_CERT_PATH}" && -r "${SSL_CERT_KEY_PATH}" ]]; then
+    https_enabled=1
+  fi
+
+  if [[ "${https_enabled}" == "1" ]]; then
+    args+=("--https" "--ssl-cert" "${SSL_CERT_PATH}" "--ssl-key" "${SSL_CERT_KEY_PATH}")
+    echo "[compose-up] nginx HTTPS mode enabled for ${PUBLIC_DOMAIN}" >&2
+  else
+    echo "[compose-up] nginx HTTP mode (cert not found and MOEX_FORCE_HTTPS not enabled)" >&2
+  fi
+
+  printf '%s\n' "${args[@]}"
+}
+
 if command -v minikube >/dev/null 2>&1; then
   log_step "restoring host docker context (if minikube docker-env was enabled)"
   # shellcheck disable=SC2046
@@ -71,9 +97,11 @@ echo "[compose-up] loki (local-only by default): http://${OBSERVABILITY_BIND}:${
 if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
   log_step "switching nginx reverse-proxy to compose mode"
   if [[ -w "/etc/nginx/conf.d" ]]; then
-    ./scripts/configure-nginx-compose-proxy.sh --reload || true
+    mapfile -t nginx_args < <(build_nginx_args)
+    ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
   elif command -v sudo >/dev/null 2>&1; then
-    sudo ./scripts/configure-nginx-compose-proxy.sh --reload || true
+    mapfile -t nginx_args < <(build_nginx_args)
+    sudo ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
   else
     echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
     echo "  sudo ./scripts/configure-nginx-compose-proxy.sh --reload" >&2
