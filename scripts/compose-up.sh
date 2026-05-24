@@ -18,11 +18,11 @@ COMPOSE_PROJECT="${MOEX_COMPOSE_PROJECT:-moex}"
 BACKEND_BIND="${MOEX_BACKEND_BIND:-0.0.0.0}"
 BACKEND_PORT="${MOEX_BACKEND_PORT:-18000}"
 FRONTEND_BIND="${MOEX_FRONTEND_BIND:-0.0.0.0}"
-FRONTEND_PORT="${MOEX_FRONTEND_PORT:-18080}"
-OBSERVABILITY_BIND="${MOEX_OBSERVABILITY_BIND:-0.0.0.0}"
-PROMETHEUS_PORT="${MOEX_PROMETHEUS_PORT:-19090}"
-GRAFANA_PORT="${MOEX_GRAFANA_PORT:-13000}"
-LOKI_PORT="${MOEX_LOKI_PORT:-13100}"
+FRONTEND_PORT="${MOEX_FRONTEND_PORT:-8080}"
+OBSERVABILITY_BIND="${MOEX_OBSERVABILITY_BIND:-127.0.0.1}"
+PROMETHEUS_PORT="${MOEX_PROMETHEUS_PORT:-9090}"
+GRAFANA_PORT="${MOEX_GRAFANA_PORT:-3000}"
+LOKI_PORT="${MOEX_LOKI_PORT:-3100}"
 
 STEP=0
 log_step() {
@@ -62,11 +62,11 @@ import_snapshot_into_compose_db
 
 log_step "compose mode is up"
 echo "[compose-up] compose project: ${COMPOSE_PROJECT}"
-echo "[compose-up] frontend (LAN): http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
-echo "[compose-up] backend API (LAN): http://${BACKEND_BIND}:${BACKEND_PORT}/"
-echo "[compose-up] prometheus (LAN): http://${OBSERVABILITY_BIND}:${PROMETHEUS_PORT}/prometheus/"
-echo "[compose-up] grafana (LAN): http://${OBSERVABILITY_BIND}:${GRAFANA_PORT}/grafana/"
-echo "[compose-up] loki (LAN): http://${OBSERVABILITY_BIND}:${LOKI_PORT}/loki/"
+echo "[compose-up] frontend (internet + LAN): http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
+echo "[compose-up] backend API (direct host access): http://${BACKEND_BIND}:${BACKEND_PORT}/"
+echo "[compose-up] prometheus (local-only by default): http://${OBSERVABILITY_BIND}:${PROMETHEUS_PORT}/prometheus/"
+echo "[compose-up] grafana (local-only by default): http://${OBSERVABILITY_BIND}:${GRAFANA_PORT}/grafana/"
+echo "[compose-up] loki (local-only by default): http://${OBSERVABILITY_BIND}:${LOKI_PORT}/loki/"
 
 if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
   log_step "switching nginx reverse-proxy to compose mode"

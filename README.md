@@ -61,13 +61,15 @@
 - Чтобы не конфликтовать с другими контейнерами на том же сервере:
   - используется отдельное имя проекта Compose: `MOEX_COMPOSE_PROJECT` (по умолчанию `moex`);
   - `container_name` не задаются вручную, Docker Compose сам добавляет префикс проекта.
-- Чтобы сервисы были доступны из локальной сети, по умолчанию bind-адрес — `0.0.0.0`.
-- Порты по умолчанию (специально сдвинуты от типовых):
-  - Frontend: `18080` (`MOEX_FRONTEND_PORT`)
-  - Backend API: `18000` (`MOEX_BACKEND_PORT`)
-  - Prometheus: `19090` (`MOEX_PROMETHEUS_PORT`)
-  - Grafana: `13000` (`MOEX_GRAFANA_PORT`)
-  - Loki: `13100` (`MOEX_LOKI_PORT`)
+- Приложение (frontend) по умолчанию публикуется на `0.0.0.0:8080` и доступно из интернета (через ваш reverse-proxy) и из локальной сети.
+- Порты по умолчанию:
+  - Frontend: `8080` (`MOEX_FRONTEND_PORT`)
+  - Backend API: `18000` (`MOEX_BACKEND_PORT`) (технический порт прямого доступа)
+  - Prometheus: `9090` (`MOEX_PROMETHEUS_PORT`)
+  - Grafana: `3000` (`MOEX_GRAFANA_PORT`)
+  - Loki: `3100` (`MOEX_LOKI_PORT`)
+- Мониторинг по умолчанию ограничен loopback (`MOEX_OBSERVABILITY_BIND=127.0.0.1`), чтобы не публиковаться в интернет напрямую.
+- Для локальной сети публикуйте мониторинг через ваш локальный reverse-proxy/файрволл или задайте приватный bind IP хоста (например `192.168.x.y`).
 - При необходимости можно переопределить bind-адреса:
   - `MOEX_FRONTEND_BIND`, `MOEX_BACKEND_BIND`, `MOEX_OBSERVABILITY_BIND`.
 
