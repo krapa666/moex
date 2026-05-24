@@ -255,6 +255,21 @@ kubectl apply -k k8s
 
 ## 8. Развёртывание на домашнем сервере (junibox)
 
+### 8.0 Диагностика прав доступа по сети
+Если из локальной сети вы всё ещё видите гостевые права, запустите на сервере:
+
+```bash
+./scripts/diagnose-access-scope.sh https://moex.ddns.net http://127.0.0.1
+```
+
+Скрипт проверяет `/api/auth/me` через публичный и локальный URL, с разными заголовками (`X-Moex-Access-Scope`, `X-Forwarded-For`) и выводит активный фрагмент `/etc/nginx/conf.d/moex.conf`.
+
+Ключевая проверка:
+- при `X-Moex-Access-Scope: local` ответ должен быть `{"username":"local-network","is_admin":true}`;
+- если не так — backend запущен не из актуального кода/образа;
+- если так, но без этого заголовка гостевой режим — проблема в nginx proxy-конфиге.
+
+
 ## 8.1 Базовые зависимости
 ```bash
 sudo apt update
