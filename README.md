@@ -75,6 +75,7 @@
 - HTTPS для публичного домена настраивается через `scripts/configure-nginx-compose-proxy.sh` автоматически:
   - домен берётся из `MOEX_PUBLIC_DOMAIN` (или `MOEX_SERVER_NAME`, по умолчанию `moex.ddns.net`);
   - если найдены сертификаты Let's Encrypt (`MOEX_SSL_CERT_PATH`/`MOEX_SSL_CERT_KEY_PATH`) или включён `MOEX_FORCE_HTTPS`, включается HTTPS-конфиг для `https://moex.ddns.net/`.
+  - если `compose-up` запускается не от root, но с `sudo`, скрипт всё равно проверяет сертификаты через `sudo` и включает HTTPS автоматически.
 
 ## 2.3 Структура проекта
 - `backend/app/` — API, модели, сервисы.

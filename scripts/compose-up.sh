@@ -54,13 +54,24 @@ import_snapshot_into_compose_db() {
 }
 
 
+cert_files_accessible() {
+  if [[ -r "${SSL_CERT_PATH}" && -r "${SSL_CERT_KEY_PATH}" ]]; then
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    sudo test -r "${SSL_CERT_PATH}" -a -r "${SSL_CERT_KEY_PATH}"
+    return $?
+  fi
+  return 1
+}
+
 build_nginx_args() {
   local args=("--server-name" "${SERVER_NAMES}")
   local https_enabled=0
 
   if [[ "${FORCE_HTTPS}" == "1" || "${FORCE_HTTPS,,}" == "true" || "${FORCE_HTTPS,,}" == "yes" ]]; then
     https_enabled=1
-  elif [[ -r "${SSL_CERT_PATH}" && -r "${SSL_CERT_KEY_PATH}" ]]; then
+  elif cert_files_accessible; then
     https_enabled=1
   fi
 
@@ -68,7 +79,7 @@ build_nginx_args() {
     args+=("--https" "--ssl-cert" "${SSL_CERT_PATH}" "--ssl-key" "${SSL_CERT_KEY_PATH}")
     echo "[compose-up] nginx HTTPS mode enabled for ${PUBLIC_DOMAIN}" >&2
   else
-    echo "[compose-up] nginx HTTP mode (cert not found and MOEX_FORCE_HTTPS not enabled)" >&2
+    echo "[compose-up] nginx HTTP mode (certs are not accessible and MOEX_FORCE_HTTPS not enabled)" >&2
   fi
 
   printf '%s\n' "${args[@]}"
