@@ -7,7 +7,7 @@ TEMPLATE_PATH_HTTPS="deploy/nginx/home-server-k8s-https.conf"
 OUTPUT_PATH="/etc/nginx/conf.d/moex.conf"
 RELOAD=false
 HTTPS=false
-SERVER_NAME="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
+SERVER_NAME="junibox"
 SSL_CERT_PATH=""
 SSL_CERT_KEY_PATH=""
 
@@ -60,17 +60,7 @@ if [[ "$HTTPS" == "true" ]]; then
   SSL_CERT_PATH="${SSL_CERT_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem}"
   SSL_CERT_KEY_PATH="${SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/privkey.pem}"
 else
-  auto_cert_path="${SSL_CERT_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem}"
-  auto_key_path="${SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/privkey.pem}"
-  if [[ -f "${auto_cert_path}" && -f "${auto_key_path}" ]]; then
-    echo "[nginx-k8s-proxy] detected existing TLS certificate for ${SERVER_NAME}; auto-enabling HTTPS template"
-    HTTPS=true
-    TEMPLATE_PATH="$TEMPLATE_PATH_HTTPS"
-    SSL_CERT_PATH="${auto_cert_path}"
-    SSL_CERT_KEY_PATH="${auto_key_path}"
-  else
-    TEMPLATE_PATH="$TEMPLATE_PATH_HTTP"
-  fi
+  TEMPLATE_PATH="$TEMPLATE_PATH_HTTP"
 fi
 
 if [[ ! -f "$TEMPLATE_PATH" ]]; then

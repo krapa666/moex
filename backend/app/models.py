@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -22,12 +22,6 @@ class StockRow(Base):
     forecast_profit_year2_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_profit_year3_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_profit_year4_billion_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
-    dividends_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
-    dividends_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
-    remaining_dividends_prev_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
-    remaining_dividends_prev_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
-    dividend_year_map: Mapped[dict[str, float | None] | None] = mapped_column(JSON, nullable=True)
-    remaining_dividend_year_map: Mapped[dict[str, float | None] | None] = mapped_column(JSON, nullable=True)
     net_profit_year_map: Mapped[dict[str, float | None] | None] = mapped_column(JSON, nullable=True)
     net_profit_source_comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
@@ -57,4 +51,24 @@ class AnalystTable(Base):
     analyst_name: Mapped[str] = mapped_column(String(100), nullable=False, default="Аналитик 1")
     year_offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

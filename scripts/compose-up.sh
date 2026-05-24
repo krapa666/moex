@@ -13,13 +13,16 @@ require_cmd docker
 
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
-PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
-SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
-SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
-FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
-CONFIGURE_HOST_NGINX="${MOEX_CONFIGURE_HOST_NGINX:-0}"
-FRONTEND_BIND="${MOEX_FRONTEND_BIND:-127.0.0.1}"
-FRONTEND_PORT="${MOEX_FRONTEND_PORT:-8080}"
+
+COMPOSE_PROJECT="${MOEX_COMPOSE_PROJECT:-moex}"
+BACKEND_BIND="${MOEX_BACKEND_BIND:-0.0.0.0}"
+BACKEND_PORT="${MOEX_BACKEND_PORT:-18000}"
+FRONTEND_BIND="${MOEX_FRONTEND_BIND:-0.0.0.0}"
+FRONTEND_PORT="${MOEX_FRONTEND_PORT:-18080}"
+OBSERVABILITY_BIND="${MOEX_OBSERVABILITY_BIND:-0.0.0.0}"
+PROMETHEUS_PORT="${MOEX_PROMETHEUS_PORT:-19090}"
+GRAFANA_PORT="${MOEX_GRAFANA_PORT:-13000}"
+LOKI_PORT="${MOEX_LOKI_PORT:-13100}"
 
 STEP=0
 log_step() {
@@ -45,23 +48,6 @@ import_snapshot_into_compose_db() {
   fi
 }
 
-build_nginx_args() {
-  local args=("--server-name" "${PUBLIC_DOMAIN}")
-  if [[ -n "${MOEX_SSL_CERT_PATH:-}" ]]; then
-    args+=("--ssl-cert" "${SSL_CERT_PATH}")
-  fi
-  if [[ -n "${MOEX_SSL_CERT_KEY_PATH:-}" ]]; then
-    args+=("--ssl-key" "${SSL_CERT_KEY_PATH}")
-  fi
-  if [[ "${FORCE_HTTPS}" == "1" || "${FORCE_HTTPS,,}" == "true" || "${FORCE_HTTPS,,}" == "yes" ]]; then
-    args+=("--https")
-    echo "[compose-up] MOEX_FORCE_HTTPS enabled, forcing HTTPS nginx config" >&2
-  else
-    echo "[compose-up] nginx mode auto-detection delegated to configure-nginx-compose-proxy.sh" >&2
-  fi
-  printf '%s\n' "${args[@]}"
-}
-
 if command -v minikube >/dev/null 2>&1; then
   log_step "restoring host docker context (if minikube docker-env was enabled)"
   # shellcheck disable=SC2046
@@ -75,22 +61,21 @@ log_step "importing shared DB snapshot (if present)"
 import_snapshot_into_compose_db
 
 log_step "compose mode is up"
-echo "[compose-up] frontend is available for host Nginx at http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
-echo "[compose-up] backend, database and monitoring services stay inside the Docker network (no host ports)"
+echo "[compose-up] compose project: ${COMPOSE_PROJECT}"
+echo "[compose-up] frontend (LAN): http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
+echo "[compose-up] backend API (LAN): http://${BACKEND_BIND}:${BACKEND_PORT}/"
+echo "[compose-up] prometheus (LAN): http://${OBSERVABILITY_BIND}:${PROMETHEUS_PORT}/prometheus/"
+echo "[compose-up] grafana (LAN): http://${OBSERVABILITY_BIND}:${GRAFANA_PORT}/grafana/"
+echo "[compose-up] loki (LAN): http://${OBSERVABILITY_BIND}:${LOKI_PORT}/loki/"
 
-if [[ "${CONFIGURE_HOST_NGINX}" == "1" || "${CONFIGURE_HOST_NGINX,,}" == "true" || "${CONFIGURE_HOST_NGINX,,}" == "yes" ]]; then
-  if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
-    log_step "switching nginx reverse-proxy to compose mode"
-    mapfile -t nginx_args < <(build_nginx_args)
-    if [[ -w "/etc/nginx/conf.d" ]]; then
-      ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
-    elif command -v sudo >/dev/null 2>&1; then
-      sudo ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
-    else
-      echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
-      echo "  sudo ./scripts/configure-nginx-compose-proxy.sh ${nginx_args[*]} --reload" >&2
-    fi
+if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
+  log_step "switching nginx reverse-proxy to compose mode"
+  if [[ -w "/etc/nginx/conf.d" ]]; then
+    ./scripts/configure-nginx-compose-proxy.sh --reload || true
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ./scripts/configure-nginx-compose-proxy.sh --reload || true
+  else
+    echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
+    echo "  sudo ./scripts/configure-nginx-compose-proxy.sh --reload" >&2
   fi
-else
-  echo "[compose-up] host nginx auto-configuration skipped (set MOEX_CONFIGURE_HOST_NGINX=1 to opt in)"
 fi

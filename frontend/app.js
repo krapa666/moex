@@ -11,24 +11,26 @@ const shiftYearBtn = document.getElementById('shift-year-btn');
 const exportDataBtn = document.getElementById('export-data-btn');
 const importDataBtn = document.getElementById('import-data-btn');
 const importDataFileInput = document.getElementById('import-data-file-input');
+const authUserLabel = document.getElementById('auth-user-label');
+const authLoginBtn = document.getElementById('auth-login-btn');
+const authRegisterBtn = document.getElementById('auth-register-btn');
+const authLogoutBtn = document.getElementById('auth-logout-btn');
 const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
 const sortMarketCap = document.getElementById('sort-market-cap');
 const sortUpsideYear1 = document.getElementById('sort-upside-year1');
 const sortUpsideYear2 = document.getElementById('sort-upside-year2');
+const sortUpsideYear3 = document.getElementById('sort-upside-year3');
+const sortUpsideYear4 = document.getElementById('sort-upside-year4');
 const headerProfitYear1 = document.getElementById('header-profit-year1');
 const headerProfitYear2 = document.getElementById('header-profit-year2');
+const headerProfitYear3 = document.getElementById('header-profit-year3');
+const headerProfitYear4 = document.getElementById('header-profit-year4');
 const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
-const headerDividendsYear1 = document.getElementById('header-dividends-year1');
-const headerDividendsYear2 = document.getElementById('header-dividends-year2');
-const headerDivYieldYear1 = document.getElementById('header-div-yield-year1');
-const headerDivYieldYear2 = document.getElementById('header-div-yield-year2');
-const headerRemDivYear1 = document.getElementById('header-rem-div-year1');
-const headerRemDivYear2 = document.getElementById('header-rem-div-year2');
-const headerPeYear1 = document.getElementById('header-pe-year1');
-const headerPeYear2 = document.getElementById('header-pe-year2');
+const headerPriceYear3 = document.getElementById('header-price-year3');
+const headerPriceYear4 = document.getElementById('header-price-year4');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -45,8 +47,10 @@ const sortState = { key: null, direction: 'asc' };
 const appState = {
   tables: [],
   activeTableId: null,
-  accessMode: 'guest',
-  clientIp: null,
+};
+const authState = {
+  token: localStorage.getItem('moex_auth_token') || null,
+  user: null,
 };
 const AUTOSAVE_DELAY_MS = 1800;
 const BASE_FORECAST_YEAR = new Date().getFullYear();
@@ -172,9 +176,7 @@ const INPUT_NORMALIZERS = {
   pe_avg_5y: normalizeNumericInput,
   forecast_profit_year1_billion_rub: normalizeNumericInput,
   forecast_profit_year2_billion_rub: normalizeNumericInput,
-  dividends_year1: normalizeNumericInput,
-  dividends_year2: normalizeNumericInput,
-  remaining_dividends_prev_year1: normalizeNumericInput,
+  forecast_profit_year3_billion_rub: normalizeNumericInput,
 };
 
 function normalizeInputByField(field, value) {
@@ -204,14 +206,14 @@ function isPrimaryActiveTable() {
 }
 
 function canEditData() {
-  return appState.accessMode === 'admin';
+  return Boolean(authState.user);
 }
 
-function displayAnalystName(table) {
+function displayAnalystName(tableNumber, analystName) {
   if (canEditData()) {
-    return `№${table.table_number} — ${table.analyst_name}`;
+    return `№${tableNumber} — ${analystName}`;
   }
-  return `Аналитик ${table.table_number}`;
+  return `Аналитик ${tableNumber}`;
 }
 
 function activeYears() {
@@ -219,23 +221,21 @@ function activeYears() {
   return [
     BASE_FORECAST_YEAR + offset,
     BASE_FORECAST_YEAR + offset + 1,
+    BASE_FORECAST_YEAR + offset + 2,
+    BASE_FORECAST_YEAR + offset + 3,
   ];
 }
 
 function applyYearHeaders() {
-  const [y1, y2] = activeYears();
+  const [y1, y2, y3, y4] = activeYears();
   if (headerProfitYear1) headerProfitYear1.textContent = `Прогнозная ЧП (${y1}), млрд ₽`;
   if (headerProfitYear2) headerProfitYear2.textContent = `Прогнозная ЧП (${y2}), млрд ₽`;
+  if (headerProfitYear3) headerProfitYear3.textContent = `Прогнозная ЧП (${y3}), млрд ₽`;
+  if (headerProfitYear4) headerProfitYear4.textContent = `Прогнозная ЧП (${y4}), млрд ₽`;
   if (headerPriceYear1) headerPriceYear1.textContent = `Прогнозная цена (${y1}), ₽`;
   if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
-  if (headerDividendsYear1) headerDividendsYear1.textContent = `Дивиденды (${y1}), ₽`;
-  if (headerDividendsYear2) headerDividendsYear2.textContent = `Дивиденды (${y2}), ₽`;
-  if (headerDivYieldYear1) headerDivYieldYear1.textContent = `Див. доходн. (${y1}), %`;
-  if (headerDivYieldYear2) headerDivYieldYear2.textContent = `Див. доходн. (${y2}), %`;
-  if (headerRemDivYear1) headerRemDivYear1.textContent = `Див. пр. года (остаток, ${y1}), ₽`;
-  if (headerRemDivYear2) headerRemDivYear2.textContent = `Див. пр. года (остаток, ${y2}), ₽`;
-  if (headerPeYear1) headerPeYear1.textContent = `Прогн. P/E (${y1})`;
-  if (headerPeYear2) headerPeYear2.textContent = `Прогн. P/E (${y2})`;
+  if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
+  if (headerPriceYear4) headerPriceYear4.textContent = `Прогнозная цена (${y4}), ₽`;
 }
 
 function yearKeyByIndex(index) {
@@ -255,57 +255,38 @@ function renderTableSelector() {
   appState.tables.forEach((table) => {
     const option = document.createElement('option');
     option.value = String(table.id);
-    option.textContent = displayAnalystName(table);
+    option.textContent = displayAnalystName(table.table_number, table.analyst_name);
     if (table.id === appState.activeTableId) option.selected = true;
     tableSelect.appendChild(option);
   });
   const current = activeTable();
-  const adminMode = canEditData();
+  const canEdit = canEditData();
   if (analystNameInput && current) analystNameInput.value = current.analyst_name;
-  if (analystNameInput) analystNameInput.hidden = !adminMode;
-  if (saveAnalystBtn) {
-    saveAnalystBtn.hidden = !adminMode;
-    saveAnalystBtn.disabled = !adminMode;
-  }
-  if (addTableBtn) {
-    addTableBtn.hidden = !adminMode;
-    addTableBtn.disabled = !adminMode;
-  }
   if (deleteTableBtn) {
-    deleteTableBtn.hidden = !adminMode;
-    deleteTableBtn.disabled = !adminMode || !current || current.table_number === 1;
-    deleteTableBtn.title = !adminMode ? 'Доступно только в локальной сети' : current?.table_number === 1 ? 'Таблица №1 защищена от удаления' : '';
+    deleteTableBtn.disabled = !canEdit || !current || current.table_number === 1;
+    deleteTableBtn.title = !canEdit
+      ? 'Требуется вход для редактирования'
+      : current?.table_number === 1
+        ? 'Таблица №1 защищена от удаления'
+        : '';
   }
   if (makePrimaryTableBtn) {
-    makePrimaryTableBtn.hidden = !adminMode;
-    makePrimaryTableBtn.disabled = !adminMode || !current || current.table_number === 1;
-    makePrimaryTableBtn.title = !adminMode ? 'Доступно только в локальной сети' : current?.table_number === 1 ? 'Эта таблица уже основная' : '';
+    makePrimaryTableBtn.disabled = !canEdit || !current || current.table_number === 1;
+    makePrimaryTableBtn.title = !canEdit
+      ? 'Требуется вход для редактирования'
+      : current?.table_number === 1
+        ? 'Эта таблица уже основная'
+        : '';
   }
   if (addRowBtn) {
     const isPrimary = current?.table_number === 1;
-    addRowBtn.style.display = adminMode && isPrimary ? '' : 'none';
-    addRowBtn.hidden = !adminMode;
-    addRowBtn.disabled = !adminMode || !isPrimary;
-    addRowBtn.title = !adminMode ? 'Доступно только в локальной сети' : isPrimary ? '' : 'Кнопка доступна только в таблице №1';
+    addRowBtn.style.display = canEdit && isPrimary ? '' : 'none';
+    addRowBtn.disabled = !canEdit || !isPrimary;
+    addRowBtn.title = !canEdit ? 'Требуется вход для редактирования' : isPrimary ? '' : 'Кнопка доступна только в таблице №1';
   }
-  if (shiftYearBtn) {
-    shiftYearBtn.hidden = !adminMode;
-    shiftYearBtn.disabled = !adminMode;
-  }
-  if (shiftYearBackBtn) {
-    shiftYearBackBtn.hidden = !adminMode;
-    shiftYearBackBtn.disabled = !adminMode;
-  }
-  if (importDataBtn) importDataBtn.hidden = !adminMode;
-  if (exportDataBtn) exportDataBtn.hidden = !adminMode;
+  applyWriteAccessUi();
   applyYearHeaders();
   updateSortIndicators();
-}
-
-function ensureAdminMode() {
-  if (canEditData()) return true;
-  alert('Гостевой режим: изменение данных доступно только из локальной сети.');
-  return false;
 }
 
 function isEditingInput() {
@@ -321,14 +302,18 @@ function upsideClass(value) {
   return 'upside-flat';
 }
 
-function currentYearUpsideClass(value) {
-  const num = Number(value);
-  return Number.isFinite(num) && num > 35 ? 'upside-current-year-strong' : '';
-}
-
 async function api(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  const hasFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (!hasFormDataBody && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (authState.token) {
+    headers.Authorization = `Bearer ${authState.token}`;
+  }
+
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
   });
 
@@ -344,6 +329,44 @@ async function api(path, options = {}) {
   return res.json();
 }
 
+function updateAuthUi() {
+  const user = authState.user;
+  const isLoggedIn = Boolean(user);
+  if (authUserLabel) {
+    authUserLabel.textContent = isLoggedIn ? `${user.username}${user.is_admin ? ' (админ)' : ''}` : 'Гость (только чтение)';
+  }
+  if (authLoginBtn) authLoginBtn.hidden = isLoggedIn;
+  if (authLogoutBtn) authLogoutBtn.hidden = !isLoggedIn;
+  if (authRegisterBtn) authRegisterBtn.hidden = !Boolean(user?.is_admin);
+  applyWriteAccessUi();
+}
+
+function applyWriteAccessUi() {
+  const canEdit = canEditData();
+  [analystNameInput, saveAnalystBtn, addTableBtn, makePrimaryTableBtn, deleteTableBtn, addRowBtn, exportDataBtn, importDataBtn]
+    .forEach((element) => {
+      if (!element) return;
+      element.hidden = !canEdit;
+      element.disabled = !canEdit;
+    });
+}
+
+async function restoreSession() {
+  if (!authState.token) {
+    authState.user = null;
+    updateAuthUi();
+    return;
+  }
+  try {
+    authState.user = await api('/api/auth/me');
+  } catch (_err) {
+    authState.token = null;
+    authState.user = null;
+    localStorage.removeItem('moex_auth_token');
+  }
+  updateAuthUi();
+}
+
 async function loadTables() {
   const tables = await api('/api/tables');
   appState.tables = tables;
@@ -354,12 +377,6 @@ async function loadTables() {
     appState.activeTableId = tables[0].id;
   }
   renderTableSelector();
-}
-
-async function loadAccessMode() {
-  const mode = await api('/api/access-mode');
-  appState.accessMode = mode.mode === 'admin' ? 'admin' : 'guest';
-  appState.clientIp = mode.client_ip || null;
 }
 
 async function loadRows() {
@@ -412,6 +429,8 @@ function getComparisonYear(item, index) {
 function createInlineComparisonRow(item) {
   const y1 = getComparisonYear(item, 0);
   const y2 = getComparisonYear(item, 1);
+  const y3 = getComparisonYear(item, 2);
+  const y4 = getComparisonYear(item, 3);
   const priceDecimals = detectDecimals(item.current_price);
   const tr = document.createElement('tr');
   tr.className = 'comparison-inline-row ticker-compare-highlight';
@@ -423,20 +442,18 @@ function createInlineComparisonRow(item) {
     <td><input value="${item.pe_avg_5y ?? ''}" disabled /></td>
     <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
-    <td class="readonly-cell ${upsideClass(y1?.upside_percent)} ${currentYearUpsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
-    <td><input value="${y1?.dividends ?? ''}" disabled /></td>
-    <td class="readonly-cell"><span>${formatPercent(y1?.dividend_yield_percent)}</span></td>
-    <td><input value="${y1?.remaining_dividends_prev_year ?? ''}" disabled /></td>
-    <td class="readonly-cell pe-col"><span>${formatNumber(y1?.potential_pe)}</span></td>
+    <td class="readonly-cell ${upsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
-    <td><input value="${y2?.dividends ?? ''}" disabled /></td>
-    <td class="readonly-cell"><span>${formatPercent(y2?.dividend_yield_percent)}</span></td>
-    <td class="readonly-cell"><span>${formatCurrency(y2?.remaining_dividends_prev_year)}</span></td>
-    <td class="readonly-cell pe-col"><span>${formatNumber(y2?.potential_pe)}</span></td>
+    <td><input value="${y3?.forecast_profit_billion_rub ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(y3?.forecast_price, priceDecimals)}</span></td>
+    <td class="readonly-cell ${upsideClass(y3?.upside_percent)}">${formatPercent(y3?.upside_percent)}</td>
+    <td><input value="${y4?.forecast_profit_billion_rub ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(y4?.forecast_price, priceDecimals)}</span></td>
+    <td class="readonly-cell ${upsideClass(y4?.upside_percent)}">${formatPercent(y4?.upside_percent)}</td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
-    <td><span class="comparison-source">${escapeHtml(displayAnalystName(item))}</span></td>
+    <td><span class="comparison-source">${escapeHtml(displayAnalystName(item.table_number, item.analyst_name))}</span></td>
   `;
   applyTickerInputSizing(tr.querySelector('.ticker-input'));
   return tr;
@@ -493,7 +510,7 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
 
   const current = activeTable();
   const currentTableName = current
-    ? escapeHtml(displayAnalystName(current))
+    ? escapeHtml(displayAnalystName(current.table_number, current.analyst_name))
     : 'Текущая таблица';
   const actionCell = anchorTr.lastElementChild;
   const deleteBtn = actionCell?.querySelector('.row-delete-btn');
@@ -536,9 +553,8 @@ function rowToPayload(row) {
     pe_avg_5y: parseInputNumber(row.pe_avg_5y),
     forecast_profit_year1_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(0)]),
     forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
-    dividends_year1: parseInputNumber(row.dividends_year1),
-    dividends_year2: parseInputNumber(row.dividends_year2),
-    remaining_dividends_prev_year1: parseInputNumber(row.remaining_dividends_prev_year1),
+    forecast_profit_year3_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(2)]),
+    forecast_profit_year4_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(3)]),
     net_profit_year_map: profitMap,
   };
 }
@@ -553,28 +569,20 @@ function updateCalculatedCells(tr, row) {
     const cell = tr.querySelector(`[data-cell="${cellName}"]`);
     if (!cell) return;
     cell.textContent = formatPercent(value);
-    cell.classList.remove('upside-up', 'upside-down', 'upside-flat', 'upside-current-year-strong');
+    cell.classList.remove('upside-up', 'upside-down', 'upside-flat');
     cell.classList.add(upsideClass(value));
-    if (cellName === 'upside_year1') {
-      const strongClass = currentYearUpsideClass(value);
-      if (strongClass) cell.classList.add(strongClass);
-    }
   };
 
   setCellText('current_price', formatCurrency(row.current_price, priceDecimals));
   setCellText('market_cap', formatCurrency(row.market_cap_billion_rub));
   setCellText('forecast_price_year1', formatCurrency(row.forecast_price_year1, priceDecimals));
   setCellText('forecast_price_year2', formatCurrency(row.forecast_price_year2, priceDecimals));
+  setCellText('forecast_price_year3', formatCurrency(row.forecast_price_year3, priceDecimals));
+  setCellText('forecast_price_year4', formatCurrency(row.forecast_price_year4, priceDecimals));
   setUpsideCell('upside_year1', row.upside_percent_year1);
   setUpsideCell('upside_year2', row.upside_percent_year2);
-  setCellText('dividends_year1', formatCurrency(row.dividends_year1));
-  setCellText('dividend_yield_year1', formatPercent(row.dividend_yield_percent_year1));
-  setCellText('remaining_dividends_prev_year1', formatCurrency(row.remaining_dividends_prev_year1));
-  setCellText('potential_pe_year1', formatNumber(row.potential_pe_year1));
-  setCellText('dividends_year2', formatCurrency(row.dividends_year2));
-  setCellText('dividend_yield_year2', formatPercent(row.dividend_yield_percent_year2));
-  setCellText('remaining_dividends_prev_year2', formatCurrency(row.remaining_dividends_prev_year2));
-  setCellText('potential_pe_year2', formatNumber(row.potential_pe_year2));
+  setUpsideCell('upside_year3', row.upside_percent_year3);
+  setUpsideCell('upside_year4', row.upside_percent_year4);
   setCellText('price_updated_at', formatDate(row.price_updated_at));
 }
 
@@ -620,12 +628,14 @@ function sortRows(rows) {
 }
 
 function updateSortIndicators() {
-  const [year1, year2] = activeYears();
+  const [year1, year2, year3, year4] = activeYears();
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
     { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Upside (${year1}), %` },
     { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Upside (${year2}), %` },
+    { element: sortUpsideYear3, key: 'upside_percent_year3', label: `Upside (${year3}), %` },
+    { element: sortUpsideYear4, key: 'upside_percent_year4', label: `Upside (${year4}), %` },
   ];
 
   sortableHeaders.forEach(({ element, key, label }) => {
@@ -641,14 +651,14 @@ function updateSortIndicators() {
 function renderRows(rows) {
   const sortedRows = sortRows(rows);
   const isPrimaryTable = isPrimaryActiveTable();
-  const adminMode = canEditData();
+  const canEdit = canEditData();
   tbody.innerHTML = '';
 
   sortedRows.forEach((row) => {
     const priceDecimals = detectDecimals(row.current_price);
     const sharedFieldsEditable = row.shared_fields_editable !== false;
-    const lockSharedFields = !adminMode || !isPrimaryTable || !sharedFieldsEditable;
-    const lockAllFields = !adminMode;
+    const lockSharedFields = !canEdit || !isPrimaryTable || !sharedFieldsEditable;
+    const lockAllFields = !canEdit;
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
@@ -659,21 +669,19 @@ function renderRows(rows) {
       <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year1)} ${currentYearUpsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
-      <td><input data-field="dividends_year1" value="${row.dividends_year1 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell"><span data-cell="dividend_yield_year1">${formatPercent(row.dividend_yield_percent_year1)}</span></td>
-      <td><input data-field="remaining_dividends_prev_year1" value="${row.remaining_dividends_prev_year1 ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell pe-col"><span data-cell="potential_pe_year1">${formatNumber(row.potential_pe_year1)}</span></td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
-      <td><input data-field="dividends_year2" value="${row.dividends_year2 ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell"><span data-cell="dividend_yield_year2">${formatPercent(row.dividend_yield_percent_year2)}</span></td>
-      <td class="readonly-cell"><span data-cell="remaining_dividends_prev_year2">${formatCurrency(row.remaining_dividends_prev_year2)}</span></td>
-      <td class="readonly-cell pe-col"><span data-cell="potential_pe_year2">${formatNumber(row.potential_pe_year2)}</span></td>
+      <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
+      <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
+      <td><input data-field="forecast_profit_year4_billion_rub" value="${mapProfitByYear(row, 3) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
+      <td class="readonly-cell"><span data-cell="forecast_price_year4">${formatCurrency(row.forecast_price_year4, priceDecimals)}</span></td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
-        <button data-action="delete" class="btn-danger row-delete-btn" ${adminMode && isPrimaryTable ? '' : 'disabled title="Доступно только администратору в таблице №1"'}>Удалить</button>
+        <button data-action="delete" class="btn-danger row-delete-btn" ${canEdit && isPrimaryTable ? '' : 'disabled title="Удалять строки можно только из таблицы №1 авторизованным пользователем"'}>Удалить</button>
         ${row.status_message ? `<div class="status-error">${row.status_message}</div>` : ''}
       </td>
     `;
@@ -747,7 +755,7 @@ function renderRows(rows) {
 
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       if (!canEditData()) {
-        alert('Гостевой режим: удаление недоступно.');
+        alert('Требуется вход для удаления строк.');
         return;
       }
       if (!isPrimaryActiveTable()) {
@@ -787,7 +795,10 @@ tableSelect?.addEventListener('change', async () => {
 });
 
 saveAnalystBtn?.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
+  if (!canEditData()) {
+    alert('Требуется вход для редактирования.');
+    return;
+  }
   const current = activeTable();
   if (!current) return;
   const analystName = (analystNameInput?.value || '').trim();
@@ -801,7 +812,10 @@ saveAnalystBtn?.addEventListener('click', async () => {
 });
 
 addTableBtn?.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
+  if (!canEditData()) {
+    alert('Требуется вход для редактирования.');
+    return;
+  }
   const desiredName = prompt('Введите имя аналитика для новой таблицы');
   if (!desiredName) return;
   await api('/api/tables', {
@@ -815,7 +829,10 @@ addTableBtn?.addEventListener('click', async () => {
 });
 
 makePrimaryTableBtn?.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
+  if (!canEditData()) {
+    alert('Требуется вход для редактирования.');
+    return;
+  }
   const current = activeTable();
   if (!current || current.table_number === 1) return;
   await api(`/api/tables/${current.id}/make-primary`, { method: 'POST' });
@@ -826,14 +843,17 @@ makePrimaryTableBtn?.addEventListener('click', async () => {
 });
 
 deleteTableBtn?.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
+  if (!canEditData()) {
+    alert('Требуется вход для редактирования.');
+    return;
+  }
   const current = activeTable();
   if (!current) return;
   if (current.table_number === 1) {
     alert('Таблица №1 является основной и не может быть удалена.');
     return;
   }
-  const approved = confirm(`Удалить таблицу «${displayAnalystName(current)}»?`);
+  const approved = confirm(`Удалить таблицу №${current.table_number} «${current.analyst_name}»?`);
   if (!approved) return;
   await api(`/api/tables/${current.id}`, { method: 'DELETE' });
   await loadTables();
@@ -843,7 +863,6 @@ deleteTableBtn?.addEventListener('click', async () => {
 });
 
 shiftYearBtn?.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
   const current = activeTable();
   if (!current) return;
   await api(`/api/tables/${current.id}`, {
@@ -855,7 +874,6 @@ shiftYearBtn?.addEventListener('click', async () => {
 });
 
 shiftYearBackBtn?.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
   const current = activeTable();
   if (!current) return;
   await api(`/api/tables/${current.id}`, {
@@ -867,7 +885,10 @@ shiftYearBackBtn?.addEventListener('click', async () => {
 });
 
 addRowBtn.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
+  if (!canEditData()) {
+    alert('Требуется вход для редактирования.');
+    return;
+  }
   if (!isPrimaryActiveTable()) {
     alert('Добавлять строки можно только в таблице №1.');
     return;
@@ -882,12 +903,57 @@ addRowBtn.addEventListener('click', async () => {
         pe_avg_5y: null,
         forecast_profit_year1_billion_rub: null,
         forecast_profit_year2_billion_rub: null,
-        dividends_year1: null,
-        dividends_year2: null,
-        remaining_dividends_prev_year1: null,
+        forecast_profit_year3_billion_rub: null,
+        forecast_profit_year4_billion_rub: null,
       }),
     });
     await loadRows();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+authLoginBtn?.addEventListener('click', async () => {
+  const username = prompt('Логин:');
+  if (!username) return;
+  const password = prompt('Пароль:');
+  if (!password) return;
+  try {
+    const response = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    authState.token = response.token;
+    authState.user = response.user;
+    localStorage.setItem('moex_auth_token', authState.token);
+    updateAuthUi();
+    await loadRows();
+    alert(`Вход выполнен: ${response.user.username}`);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+authLogoutBtn?.addEventListener('click', () => {
+  authState.token = null;
+  authState.user = null;
+  localStorage.removeItem('moex_auth_token');
+  updateAuthUi();
+  loadRows().catch((err) => alert(err.message));
+});
+
+authRegisterBtn?.addEventListener('click', async () => {
+  const username = prompt('Новый логин:');
+  if (!username) return;
+  const password = prompt('Новый пароль (минимум 8 символов):');
+  if (!password) return;
+  const makeAdmin = confirm('Выдать права администратора новому пользователю?');
+  try {
+    const user = await api('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, is_admin: makeAdmin }),
+    });
+    alert(`Пользователь создан: ${user.username}`);
   } catch (err) {
     alert(err.message);
   }
@@ -918,7 +984,10 @@ exportDataBtn?.addEventListener('click', async () => {
 });
 
 importDataBtn?.addEventListener('click', async () => {
-  if (!ensureAdminMode()) return;
+  if (!canEditData()) {
+    alert('Требуется вход для импорта.');
+    return;
+  }
   importDataFileInput?.click();
 });
 
@@ -935,15 +1004,10 @@ importDataFileInput?.addEventListener('change', async () => {
   try {
     const formData = new FormData();
     formData.append('file', selectedFile);
-    const res = await fetch('/api/data/import', {
+    const result = await api('/api/data/import', {
       method: 'POST',
       body: formData,
     });
-    if (!res.ok) {
-      const details = await res.text();
-      throw new Error(`Ошибка API: ${res.status}${details ? ` (${details})` : ''}`);
-    }
-    const result = await res.json();
     await loadTables();
     appState.activeTableId = appState.tables[0]?.id ?? null;
     renderTableSelector();
@@ -984,7 +1048,7 @@ sortButtons.forEach((button) => {
 
 async function initApp() {
   try {
-    await loadAccessMode();
+    await restoreSession();
     await loadTables();
     updateSortIndicators();
     await loadRows();

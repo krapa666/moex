@@ -15,10 +15,6 @@ LOKI_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-loki-port-forward.pid"
 LOKI_PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-loki-port-forward.log"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
-PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
-SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
-SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
-FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
 STEP=0
 
 while [[ $# -gt 0 ]]; do
@@ -152,23 +148,6 @@ wait_for_ingress_admission() {
   exit 1
 }
 
-build_nginx_args() {
-  local args=("--server-name" "${PUBLIC_DOMAIN}")
-  if [[ -n "${MOEX_SSL_CERT_PATH:-}" ]]; then
-    args+=("--ssl-cert" "${SSL_CERT_PATH}")
-  fi
-  if [[ -n "${MOEX_SSL_CERT_KEY_PATH:-}" ]]; then
-    args+=("--ssl-key" "${SSL_CERT_KEY_PATH}")
-  fi
-  if [[ "${FORCE_HTTPS}" == "1" || "${FORCE_HTTPS,,}" == "true" || "${FORCE_HTTPS,,}" == "yes" ]]; then
-    args+=("--https")
-    echo "[minikube-up] MOEX_FORCE_HTTPS enabled, forcing HTTPS nginx config" >&2
-  else
-    echo "[minikube-up] nginx mode auto-detection delegated to configure-nginx-k8s-proxy.sh" >&2
-  fi
-  printf '%s\n' "${args[@]}"
-}
-
 log_step "starting minikube (if needed)"
 minikube start
 
@@ -222,23 +201,22 @@ fi
 echo "[minikube-up] fallback URL: http://$(minikube ip):30080/"
 echo "[minikube-up] localhost NodePort URL: http://127.0.0.1:30080/"
 echo "[minikube-up] monitoring URLs via ingress:"
-echo "  - http://${PUBLIC_DOMAIN}/prometheus/"
-echo "  - http://${PUBLIC_DOMAIN}/grafana/"
-echo "  - http://${PUBLIC_DOMAIN}/loki/"
+echo "  - http://junibox/prometheus/"
+echo "  - http://junibox/grafana/"
+echo "  - http://junibox/loki/"
 
-echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://${PUBLIC_DOMAIN}/"
+echo "[minikube-up] home-network URL (via local nginx reverse-proxy): http://junibox/"
 
 if [[ "${SKIP_NGINX}" == "true" ]]; then
   echo "[minikube-up] --skip-nginx set, reverse-proxy regeneration skipped"
 elif [[ -x "./scripts/configure-nginx-k8s-proxy.sh" ]]; then
   echo "[minikube-up] regenerating nginx reverse-proxy config..."
-  mapfile -t nginx_args < <(build_nginx_args)
   if [[ -w "/etc/nginx/conf.d" ]]; then
-    ./scripts/configure-nginx-k8s-proxy.sh "${nginx_args[@]}" --reload || true
+    ./scripts/configure-nginx-k8s-proxy.sh --reload || true
   elif command -v sudo >/dev/null 2>&1; then
-    sudo ./scripts/configure-nginx-k8s-proxy.sh "${nginx_args[@]}" --reload || true
+    sudo ./scripts/configure-nginx-k8s-proxy.sh --reload || true
   else
     echo "[minikube-up] warning: no permissions to reload nginx. Run manually:" >&2
-    echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh ${nginx_args[*]} --reload" >&2
+    echo "  sudo ./scripts/configure-nginx-k8s-proxy.sh --reload" >&2
   fi
 fi

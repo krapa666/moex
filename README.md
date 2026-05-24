@@ -56,6 +56,21 @@
 3. Backend сохраняет данные, пересчитывает производные поля, при необходимости синхронизирует данные в других таблицах.
 4. Frontend обновляет отображение.
 
+
+### 2.4 Порты и изоляция Compose на сервере
+- Чтобы не конфликтовать с другими контейнерами на том же сервере:
+  - используется отдельное имя проекта Compose: `MOEX_COMPOSE_PROJECT` (по умолчанию `moex`);
+  - `container_name` не задаются вручную, Docker Compose сам добавляет префикс проекта.
+- Чтобы сервисы были доступны из локальной сети, по умолчанию bind-адрес — `0.0.0.0`.
+- Порты по умолчанию (специально сдвинуты от типовых):
+  - Frontend: `18080` (`MOEX_FRONTEND_PORT`)
+  - Backend API: `18000` (`MOEX_BACKEND_PORT`)
+  - Prometheus: `19090` (`MOEX_PROMETHEUS_PORT`)
+  - Grafana: `13000` (`MOEX_GRAFANA_PORT`)
+  - Loki: `13100` (`MOEX_LOKI_PORT`)
+- При необходимости можно переопределить bind-адреса:
+  - `MOEX_FRONTEND_BIND`, `MOEX_BACKEND_BIND`, `MOEX_OBSERVABILITY_BIND`.
+
 ## 2.3 Структура проекта
 - `backend/app/` — API, модели, сервисы.
 - `backend/alembic/` — миграции.
@@ -88,12 +103,13 @@
 
 ## 4. API (основное)
 
-## 4.0 Режимы доступа (без авторизации)
-- В системе больше нет логина/пароля.
-- Права определяются по IP клиента:
-  - **Локальная сеть** (`private/loopback` IP) → режим **администратора** (полный доступ).
-  - **Внешняя сеть** (публичный IP) → режим **гостя** (только чтение).
-- Backend определяет режим по `X-Forwarded-For` (через nginx proxy) и блокирует все mutating endpoint’ы для внешних клиентов.
+## 4.0 Авторизация и роли
+- Роли:
+  - **Гость** — ограниченный режим интерфейса: доступно только переключение таблиц и сдвиг года (`-1/+1`), остальные кнопки/поля скрыты. Названия таблиц в UI показываются как `Аналитик 1`, `Аналитик 2`, ...
+  - **Пользователь** — может выполнять операции записи (создание/изменение/удаление, импорт).
+  - **Администратор** — дополнительно может создавать новых пользователей.
+- Авторизация выполняется по Bearer-токену (`Authorization: Bearer <token>`).
+- Сессии хранятся в БД (`user_sessions`) и по умолчанию живут 24 часа.
 
 ## 4.1 Таблицы аналитиков
 - `GET /api/tables` — список таблиц в текущем порядке (основная = №1).
@@ -113,7 +129,9 @@
 - `GET /api/health`
 - `GET /metrics`
 - `GET /api/ticker-comparison?ticker=...`
-- `GET /api/access-mode` — текущий режим доступа (`admin`/`guest`) и IP клиента.
+- `POST /api/auth/login` — вход (получение токена).
+- `GET /api/auth/me` — информация о текущем пользователе по токену.
+- `POST /api/auth/register` — создание пользователя (**только администратор**).
 
 ---
 
@@ -142,9 +160,8 @@
 ```bash
 ./scripts/compose-up.sh
 ```
-Скрипт запускает Compose так, чтобы внутренние сервисы (`db`, `backend`, Prometheus, Grafana, Loki) не публиковались на host и не конфликтовали с уже занятыми портами (`5432`, `8000`, `3000`, `9090`, `3100` и т.д.).
-
-Для совместимости с хостовым Nginx (`https://moex.ddns.net/`) публикуется только frontend на loopback: `127.0.0.1:8080 -> moex-frontend:80`. Это не открывает backend/PostgreSQL/мониторинг наружу, но даёт Nginx рабочий upstream вместо 502. Если `8080` занят, задайте `MOEX_FRONTEND_PORT`, например `MOEX_FRONTEND_PORT=18080 ./scripts/compose-up.sh`, и обновите Nginx upstream.
+Скрипт также автоматически переключает хостовый Nginx reverse-proxy в compose-режим
+(`scripts/configure-nginx-compose-proxy.sh --reload`), чтобы URL в домашней сети оставался тем же: `http://junibox/`.
 
 ## 6.2 Остановка
 ```bash
@@ -154,23 +171,22 @@
 `backups/mode-sync/latest.sql.gz` для последующего переноса между режимами.
 
 ## 6.3 Доступ после старта
-По умолчанию Docker Compose публикует только frontend на `127.0.0.1:8080` для host-Nginx. Backend, БД и мониторинг проверяются внутри Docker-сети, например:
+- Frontend: http://localhost:8080
+- Backend health: http://localhost:8000/api/health
+- Metrics (через proxy): http://localhost:8080/metrics
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000
+- Loki readiness: http://localhost:3100/ready
 
-```bash
-docker compose exec backend curl -s http://127.0.0.1:8000/api/health
-docker compose exec frontend wget -qO- http://127.0.0.1/metrics | head
-docker compose exec prometheus wget -qO- http://127.0.0.1:9090/prometheus/-/ready
-docker compose exec grafana wget -qO- http://127.0.0.1:3000/api/health
-docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
-```
-
-Для доступа из браузера используйте `https://moex.ddns.net/` через host-Nginx, который проксирует корень на `127.0.0.1:8080`.
-
-## 6.5 Определение прав по сети
-- Права пользователя определяются автоматически:
-  - локальная сеть → режим администратора;
-  - внешняя сеть → режим гостя (read-only).
-- Источник IP берётся из `X-Forwarded-For`, поэтому приложение должно работать за корректно настроенным nginx proxy.
+## 6.5 Админ по умолчанию
+- При первом старте backend, если в БД нет администратора, создаётся пользователь-админ.
+- По умолчанию:
+  - `ADMIN_USERNAME=admin`
+  - `ADMIN_PASSWORD=admin12345`
+- Для production обязательно переопределите:
+  - `ADMIN_USERNAME`
+  - `ADMIN_PASSWORD`
+  - `AUTH_PASSWORD_SALT`
 
 ## 6.4 Непрерывность данных между Compose и Minikube
 - При `compose-down` и `minikube-down` выполняется экспорт snapshot БД.
@@ -189,7 +205,7 @@ docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
 ./scripts/minikube-up.sh
 ```
 Скрипт автоматически переключает тот же хостовый Nginx reverse-proxy в Minikube-режим
-(`scripts/configure-nginx-k8s-proxy.sh --reload`), сохраняя единый внешний URL `http://moex.ddns.net/`.
+(`scripts/configure-nginx-k8s-proxy.sh --reload`), сохраняя единый внешний URL `http://junibox/`.
 Также скрипт поднимает `kubectl port-forward` для frontend на `127.0.0.1:30080`
 и пишет PID/лог в:
 - `/tmp/moex-k8s-port-forward.pid`
@@ -203,9 +219,9 @@ docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
 
 В Minikube-режиме также поднимается мониторинг (`prometheus`, `grafana`, `loki`) и
 он доступен через тот же внешний хост:
-- `http://moex.ddns.net/prometheus/`
-- `http://moex.ddns.net/grafana/`
-- `http://moex.ddns.net/loki/`
+- `http://junibox/prometheus/`
+- `http://junibox/grafana/`
+- `http://junibox/loki/`
 
 Опции:
 ```bash
@@ -231,7 +247,7 @@ kubectl apply -k k8s
 
 ---
 
-## 8. Развёртывание на домашнем сервере (moex.ddns.net)
+## 8. Развёртывание на домашнем сервере (junibox)
 
 ## 8.1 Базовые зависимости
 ```bash
@@ -265,7 +281,7 @@ sudo systemctl restart nginx
 
 ## 8.4 Публикация в интернет (port-forward на роутере)
 - Шаблоны `deploy/nginx/home-server.conf` и `deploy/nginx/home-server-k8s.conf` уже подготовлены для внешнего трафика:
-  - `listen 80 default_server;` и `server_name ... _;` — принимают запросы по внешнему IP/домену, даже если Host не `moex.ddns.net`.
+  - `listen 80 default_server;` и `server_name ... _;` — принимают запросы по внешнему IP/домену, даже если Host не `junibox`.
   - Добавлены корректные proxy-заголовки `X-Forwarded-*` и таймауты для стабильной работы через NAT.
   - `client_max_body_size 20m` — чтобы импорт JSON-файла БД не упирался в стандартный лимит Nginx.
 - Для безопасности мониторинг и служебные endpoints ограничены только локальными/приватными сетями:
@@ -290,28 +306,10 @@ sudo ./scripts/configure-nginx-compose-proxy.sh --https --server-name your-domai
 # Minikube
 sudo ./scripts/configure-nginx-k8s-proxy.sh --https --server-name your-domain.example --reload
 ```
-Альтернатива: можно не передавать `--https`, если сертификаты уже лежат в
-`/etc/letsencrypt/live/<domain>/fullchain.pem` и `privkey.pem` — скрипты
-`configure-nginx-*.sh` автоматически переключатся на HTTPS-шаблон.
-
-Переменные окружения (для `compose-up.sh` / `minikube-up.sh` и configure-скриптов):
-- `MOEX_PUBLIC_DOMAIN` (или `MOEX_SERVER_NAME`) — домен для `server_name`.
-- `MOEX_SSL_CERT_PATH` — путь к `fullchain.pem`.
-- `MOEX_SSL_CERT_KEY_PATH` — путь к `privkey.pem`.
-- `MOEX_FORCE_HTTPS=true` — принудительно включить HTTPS-шаблон (даже без локальной проверки файлов в `compose-up.sh` / `minikube-up.sh`).
-
-Важно: `compose-up.sh`/`minikube-up.sh` больше не проверяют сертификаты самостоятельно (это может ломаться из-за прав доступа к `/etc/letsencrypt/*` при запуске без root). Проверка и авто-включение HTTPS выполняется внутри `configure-nginx-*.sh`, который обычно запускается через `sudo`.
-
 3. Проверка:
 ```bash
 curl -I https://your-domain.example
 ```
-
-Если HTTPS по-прежнему не открывается, проверьте:
-1. Что активен именно `moex.conf`: `sudo nginx -T | rg -n 'moex|server_name|listen 443|ssl_certificate'`.
-2. Что сертификат существует и читается nginx-процессом.
-3. Что наружу проброшен порт `443` и открыт в firewall.
-4. Что после генерации конфига выполнен reload (`--reload`) без ошибок `nginx -t`.
 
 ---
 
@@ -322,11 +320,11 @@ curl -I https://your-domain.example
 - Loki + Promtail собирают логи контейнеров.
 - Готовые dashboard/alerts находятся в `monitoring/`.
 
-Полезные проверки в Compose-режиме:
+Полезные проверки:
 ```bash
-docker compose exec loki wget -qO- http://127.0.0.1:3100/ready
-docker compose exec backend curl -s http://127.0.0.1:8000/api/health
-docker compose exec frontend wget -qO- http://127.0.0.1/metrics | head
+curl -s http://localhost:3100/ready
+curl -s http://localhost:8000/api/health
+curl -s http://localhost:8080/metrics | head
 ```
 
 ---
@@ -392,7 +390,7 @@ curl http://localhost:8000/api/health
 Причина: слишком длинный `revision` ID.
 Решение: использовать сокращённый revision (в проекте уже исправлено для миграции `0007`).
 
-## 13.3 После Minikube restart `502 Bad Gateway` через `moex.ddns.net`
+## 13.3 После Minikube restart `502 Bad Gateway` через `junibox`
 Перегенерируйте proxy-конфиг:
 ```bash
 sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
@@ -433,8 +431,8 @@ sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 ## 16. Краткий чеклист первого запуска
 
 1. `./scripts/compose-up.sh`
-2. Проверить frontend upstream для Nginx: `curl -I http://127.0.0.1:8080/`
-3. Открыть `https://moex.ddns.net/`
+2. Открыть `http://localhost:8080`
+3. Проверить `http://localhost:8000/api/health`
 4. Проверить Grafana/Prometheus
 5. Выполнить пробное добавление тикера и проверить авторасчёты
 6. Проверить сравнение между таблицами

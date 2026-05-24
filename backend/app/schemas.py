@@ -12,12 +12,6 @@ class StockRowBase(BaseModel):
     forecast_profit_year2_billion_rub: float | None = Field(default=None)
     forecast_profit_year3_billion_rub: float | None = Field(default=None)
     forecast_profit_year4_billion_rub: float | None = Field(default=None)
-    dividends_year1: float | None = Field(default=None, ge=0)
-    dividends_year2: float | None = Field(default=None, ge=0)
-    remaining_dividends_prev_year1: float | None = Field(default=None, ge=0)
-    remaining_dividends_prev_year2: float | None = Field(default=None, ge=0)
-    dividend_year_map: dict[str, float | None] | None = Field(default=None)
-    remaining_dividend_year_map: dict[str, float | None] | None = Field(default=None)
     net_profit_year_map: dict[str, float | None] | None = Field(default=None)
     net_profit_source_comment: str | None = Field(default=None, max_length=512)
 
@@ -43,14 +37,6 @@ class StockRowRead(StockRowBase):
     upside_percent_year2: float | None
     upside_percent_year3: float | None
     upside_percent_year4: float | None
-    potential_pe_year1: float | None = None
-    potential_pe_year2: float | None = None
-    potential_pe_year3: float | None = None
-    potential_pe_year4: float | None = None
-    dividend_yield_percent_year1: float | None = None
-    dividend_yield_percent_year2: float | None = None
-    dividend_yield_percent_year3: float | None = None
-    dividend_yield_percent_year4: float | None = None
     status_message: str | None
     price_updated_at: datetime | None
     created_at: datetime
@@ -86,10 +72,6 @@ class TickerComparisonYear(BaseModel):
     forecast_profit_billion_rub: float | None
     forecast_price: float | None
     upside_percent: float | None
-    potential_pe: float | None = None
-    dividends: float | None = None
-    dividend_yield_percent: float | None = None
-    remaining_dividends_prev_year: float | None = None
 
 
 class TickerComparisonItem(BaseModel):
@@ -113,3 +95,29 @@ class DataTransferResult(BaseModel):
     tables_count: int
     rows_count: int
     detail: str | None = None
+
+
+class AuthLoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=255)
+
+
+class AuthRegisterRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=8, max_length=255)
+    is_admin: bool = False
+
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    is_admin: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuthLoginResponse(BaseModel):
+    token: str
+    user: UserRead

@@ -1,7 +1,8 @@
+name: ${MOEX_COMPOSE_PROJECT:-moex}
+
 services:
   db:
     image: postgres:16-alpine
-    container_name: moex-db
     environment:
       POSTGRES_DB: fair_price
       POSTGRES_USER: postgres
@@ -9,8 +10,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
-    expose:
-      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d fair_price"]
       interval: 10s
@@ -21,19 +20,17 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: moex-backend
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/fair_price
     depends_on:
       db:
         condition: service_healthy
-    expose:
-      - "8000"
+    ports:
+      - "${MOEX_BACKEND_BIND:-0.0.0.0}:${MOEX_BACKEND_PORT:-18000}:8000"
     restart: unless-stopped
 
   pgbackup:
     image: prodrigestivill/postgres-backup-local:16
-    container_name: moex-pgbackup
     environment:
       POSTGRES_HOST: db
       POSTGRES_DB: fair_price
@@ -54,18 +51,14 @@ services:
   frontend:
     build:
       context: ./frontend
-    container_name: moex-frontend
     depends_on:
       - backend
     ports:
-      # Only the SPA reverse-proxy is bound to loopback for host Nginx.
-      # Backend, Postgres and monitoring remain internal-only.
-      - "${MOEX_FRONTEND_BIND:-127.0.0.1}:${MOEX_FRONTEND_PORT:-8080}:80"
+      - "${MOEX_FRONTEND_BIND:-0.0.0.0}:${MOEX_FRONTEND_PORT:-18080}:80"
     restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:v2.53.4
-    container_name: moex-prometheus
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -73,23 +66,22 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.external-url=http://junibox/prometheus/"
       - "--web.route-prefix=/prometheus"
-    expose:
-      - "9090"
+    ports:
+      - "${MOEX_OBSERVABILITY_BIND:-0.0.0.0}:${MOEX_PROMETHEUS_PORT:-19090}:9090"
     depends_on:
       - backend
     restart: unless-stopped
 
   grafana:
     image: grafana/grafana:11.1.5
-    container_name: moex-grafana
     environment:
       GF_SERVER_ROOT_URL: http://junibox/grafana/
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards-json/moex-home-and-app-overview.json
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    expose:
-      - "3000"
+    ports:
+      - "${MOEX_OBSERVABILITY_BIND:-0.0.0.0}:${MOEX_GRAFANA_PORT:-13000}:3000"
     depends_on:
       - prometheus
       - loki
@@ -97,17 +89,15 @@ services:
 
   loki:
     image: grafana/loki:3.1.1
-    container_name: moex-loki
     command: ["-config.file=/etc/loki/local-config.yml"]
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yml:ro
-    expose:
-      - "3100"
+    ports:
+      - "${MOEX_OBSERVABILITY_BIND:-0.0.0.0}:${MOEX_LOKI_PORT:-13100}:3100"
     restart: unless-stopped
 
   promtail:
     image: grafana/promtail:3.1.1
-    container_name: moex-promtail
     command: ["-config.file=/etc/promtail/config.yml"]
     volumes:
       - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
@@ -119,7 +109,6 @@ services:
 
   node-exporter:
     image: prom/node-exporter:v1.8.2
-    container_name: moex-node-exporter
     command:
       - "--path.rootfs=/host"
     pid: host
