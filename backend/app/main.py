@@ -592,7 +592,12 @@ def auth_login(payload: AuthLoginRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/api/auth/me", response_model=UserRead)
-def auth_me(current_user: AccessPrincipal | None = Depends(get_optional_current_user)):
+def auth_me(request: Request):
+    try:
+        current_user = resolve_network_principal(request)
+    except Exception:
+        return UserRead(username="guest", is_admin=False)
+
     if current_user is None:
         return UserRead(username="guest", is_admin=False)
     return UserRead(username=current_user.username, is_admin=current_user.is_admin)

@@ -26,11 +26,12 @@ echo "LOCAL_HOST_URL=${LOCAL_HOST_URL}"
 auth_me_path="/api/auth/me"
 
 run_curl "Public URL (as-is)" "${BASE_URL}${auth_me_path}"
-run_curl "Local host URL (as-is)" "${LOCAL_HOST_URL}${auth_me_path}"
-run_curl "Local host URL + forced local scope header" -H "X-Moex-Access-Scope: local" "${LOCAL_HOST_URL}${auth_me_path}"
-run_curl "Local host URL + forced internet scope header" -H "X-Moex-Access-Scope: internet" "${LOCAL_HOST_URL}${auth_me_path}"
-run_curl "Local host URL + explicit X-Forwarded-For private IP" -H "X-Forwarded-For: 192.168.1.123" "${LOCAL_HOST_URL}${auth_me_path}"
-run_curl "Local host URL + explicit X-Forwarded-For public IP" -H "X-Forwarded-For: 8.8.8.8" "${LOCAL_HOST_URL}${auth_me_path}"
+run_curl "Local host URL (as-is, may redirect to HTTPS)" "${LOCAL_HOST_URL}${auth_me_path}"
+run_curl "Local host URL (follow redirects)" -L "${LOCAL_HOST_URL}${auth_me_path}"
+run_curl "Local host URL + forced local scope header (follow redirects)" -L -H "X-Moex-Access-Scope: local" "${LOCAL_HOST_URL}${auth_me_path}"
+run_curl "Local host URL + forced internet scope header (follow redirects)" -L -H "X-Moex-Access-Scope: internet" "${LOCAL_HOST_URL}${auth_me_path}"
+run_curl "Local host URL + explicit X-Forwarded-For private IP (follow redirects)" -L -H "X-Forwarded-For: 192.168.1.123" "${LOCAL_HOST_URL}${auth_me_path}"
+run_curl "Local host URL + explicit X-Forwarded-For public IP (follow redirects)" -L -H "X-Forwarded-For: 8.8.8.8" "${LOCAL_HOST_URL}${auth_me_path}"
 
 print_step "Nginx active config excerpt (/etc/nginx/conf.d/moex.conf)"
 if [[ -r /etc/nginx/conf.d/moex.conf ]]; then
