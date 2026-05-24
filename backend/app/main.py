@@ -233,6 +233,10 @@ def is_local_network_ip(ip_text: str) -> bool:
 
 
 def resolve_network_principal(request: Request) -> AccessPrincipal | None:
+    access_scope = (request.headers.get("x-moex-access-scope") or "").strip().lower()
+    if access_scope == "local":
+        return AccessPrincipal(username="local-network", is_admin=True)
+
     client_ip = get_client_ip(request)
     if is_local_network_ip(client_ip):
         return AccessPrincipal(username="local-network", is_admin=True)
