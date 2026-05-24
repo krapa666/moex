@@ -205,7 +205,7 @@ function isPrimaryActiveTable() {
 }
 
 function canEditData() {
-  return Boolean(authState.user);
+  return Boolean(authState.user?.is_admin);
 }
 
 function displayAnalystName(tableNumber, analystName) {
@@ -332,7 +332,7 @@ function updateAuthUi() {
     authUserLabel.textContent = isLoggedIn ? `${user.username}${user.is_admin ? ' (админ)' : ''}` : 'Гость (только чтение)';
   }
   if (authLoginBtn) authLoginBtn.hidden = isLoggedIn;
-  if (authLogoutBtn) authLogoutBtn.hidden = !isLoggedIn;
+  if (authLogoutBtn) authLogoutBtn.hidden = true;
   if (authRegisterBtn) authRegisterBtn.hidden = !Boolean(user?.is_admin);
   applyWriteAccessUi();
 }
