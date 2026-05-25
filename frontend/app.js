@@ -403,8 +403,6 @@ function getComparisonYear(item, index) {
 function createInlineComparisonRow(item) {
   const y1 = getComparisonYear(item, 0);
   const y2 = getComparisonYear(item, 1);
-  const y3 = getComparisonYear(item, 2);
-  const y4 = getComparisonYear(item, 3);
   const priceDecimals = detectDecimals(item.current_price);
   const tr = document.createElement('tr');
   tr.className = 'comparison-inline-row ticker-compare-highlight';
@@ -420,12 +418,6 @@ function createInlineComparisonRow(item) {
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
-    <td><input value="${y3?.forecast_profit_billion_rub ?? ''}" disabled /></td>
-    <td class="readonly-cell"><span>${formatCurrency(y3?.forecast_price, priceDecimals)}</span></td>
-    <td class="readonly-cell ${upsideClass(y3?.upside_percent)}">${formatPercent(y3?.upside_percent)}</td>
-    <td><input value="${y4?.forecast_profit_billion_rub ?? ''}" disabled /></td>
-    <td class="readonly-cell"><span>${formatCurrency(y4?.forecast_price, priceDecimals)}</span></td>
-    <td class="readonly-cell ${upsideClass(y4?.upside_percent)}">${formatPercent(y4?.upside_percent)}</td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">${escapeHtml(displayAnalystName(item.table_number, item.analyst_name))}</span></td>
   `;
@@ -602,8 +594,6 @@ function updateSortIndicators() {
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
     { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Upside (${year1}), %` },
     { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Upside (${year2}), %` },
-    { element: sortUpsideYear3, key: 'upside_percent_year3', label: `Upside (${year3}), %` },
-    { element: sortUpsideYear4, key: 'upside_percent_year4', label: `Upside (${year4}), %` },
   ];
 
   sortableHeaders.forEach(({ element, key, label }) => {
