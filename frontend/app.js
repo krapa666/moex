@@ -13,7 +13,6 @@ const importDataBtn = document.getElementById('import-data-btn');
 const importDataFileInput = document.getElementById('import-data-file-input');
 const authUserLabel = document.getElementById('auth-user-label');
 const authLoginBtn = document.getElementById('auth-login-btn');
-const authRegisterBtn = document.getElementById('auth-register-btn');
 const authLogoutBtn = document.getElementById('auth-logout-btn');
 const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
@@ -21,16 +20,10 @@ const sortTicker = document.getElementById('sort-ticker');
 const sortMarketCap = document.getElementById('sort-market-cap');
 const sortUpsideYear1 = document.getElementById('sort-upside-year1');
 const sortUpsideYear2 = document.getElementById('sort-upside-year2');
-const sortUpsideYear3 = document.getElementById('sort-upside-year3');
-const sortUpsideYear4 = document.getElementById('sort-upside-year4');
 const headerProfitYear1 = document.getElementById('header-profit-year1');
 const headerProfitYear2 = document.getElementById('header-profit-year2');
-const headerProfitYear3 = document.getElementById('header-profit-year3');
-const headerProfitYear4 = document.getElementById('header-profit-year4');
 const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
-const headerPriceYear3 = document.getElementById('header-price-year3');
-const headerPriceYear4 = document.getElementById('header-price-year4');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -175,7 +168,6 @@ const INPUT_NORMALIZERS = {
   pe_avg_5y: normalizeNumericInput,
   forecast_profit_year1_billion_rub: normalizeNumericInput,
   forecast_profit_year2_billion_rub: normalizeNumericInput,
-  forecast_profit_year3_billion_rub: normalizeNumericInput,
 };
 
 function normalizeInputByField(field, value) {
@@ -220,21 +212,15 @@ function activeYears() {
   return [
     BASE_FORECAST_YEAR + offset,
     BASE_FORECAST_YEAR + offset + 1,
-    BASE_FORECAST_YEAR + offset + 2,
-    BASE_FORECAST_YEAR + offset + 3,
   ];
 }
 
 function applyYearHeaders() {
-  const [y1, y2, y3, y4] = activeYears();
+  const [y1, y2] = activeYears();
   if (headerProfitYear1) headerProfitYear1.textContent = `Прогнозная ЧП (${y1}), млрд ₽`;
   if (headerProfitYear2) headerProfitYear2.textContent = `Прогнозная ЧП (${y2}), млрд ₽`;
-  if (headerProfitYear3) headerProfitYear3.textContent = `Прогнозная ЧП (${y3}), млрд ₽`;
-  if (headerProfitYear4) headerProfitYear4.textContent = `Прогнозная ЧП (${y4}), млрд ₽`;
   if (headerPriceYear1) headerPriceYear1.textContent = `Прогнозная цена (${y1}), ₽`;
   if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
-  if (headerPriceYear3) headerPriceYear3.textContent = `Прогнозная цена (${y3}), ₽`;
-  if (headerPriceYear4) headerPriceYear4.textContent = `Прогнозная цена (${y4}), ₽`;
 }
 
 function yearKeyByIndex(index) {
@@ -333,7 +319,6 @@ function updateAuthUi() {
   }
   if (authLoginBtn) authLoginBtn.hidden = isLoggedIn;
   if (authLogoutBtn) authLogoutBtn.hidden = true;
-  if (authRegisterBtn) authRegisterBtn.hidden = !Boolean(user?.is_admin);
   applyWriteAccessUi();
 }
 
@@ -542,8 +527,6 @@ function rowToPayload(row) {
     pe_avg_5y: parseInputNumber(row.pe_avg_5y),
     forecast_profit_year1_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(0)]),
     forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
-    forecast_profit_year3_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(2)]),
-    forecast_profit_year4_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(3)]),
     net_profit_year_map: profitMap,
   };
 }
@@ -566,12 +549,8 @@ function updateCalculatedCells(tr, row) {
   setCellText('market_cap', formatCurrency(row.market_cap_billion_rub));
   setCellText('forecast_price_year1', formatCurrency(row.forecast_price_year1, priceDecimals));
   setCellText('forecast_price_year2', formatCurrency(row.forecast_price_year2, priceDecimals));
-  setCellText('forecast_price_year3', formatCurrency(row.forecast_price_year3, priceDecimals));
-  setCellText('forecast_price_year4', formatCurrency(row.forecast_price_year4, priceDecimals));
   setUpsideCell('upside_year1', row.upside_percent_year1);
   setUpsideCell('upside_year2', row.upside_percent_year2);
-  setUpsideCell('upside_year3', row.upside_percent_year3);
-  setUpsideCell('upside_year4', row.upside_percent_year4);
   setCellText('price_updated_at', formatDate(row.price_updated_at));
 }
 
@@ -617,7 +596,7 @@ function sortRows(rows) {
 }
 
 function updateSortIndicators() {
-  const [year1, year2, year3, year4] = activeYears();
+  const [year1, year2] = activeYears();
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
@@ -662,12 +641,6 @@ function renderRows(rows) {
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
-      <td><input data-field="forecast_profit_year3_billion_rub" value="${mapProfitByYear(row, 2) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell"><span data-cell="forecast_price_year3">${formatCurrency(row.forecast_price_year3, priceDecimals)}</span></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year3)}" data-cell="upside_year3">${formatPercent(row.upside_percent_year3)}</td>
-      <td><input data-field="forecast_profit_year4_billion_rub" value="${mapProfitByYear(row, 3) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell"><span data-cell="forecast_price_year4">${formatCurrency(row.forecast_price_year4, priceDecimals)}</span></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year4)}" data-cell="upside_year4">${formatPercent(row.upside_percent_year4)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
         <button data-action="delete" class="btn-danger row-delete-btn" ${canEdit && isPrimaryTable ? '' : 'disabled title="Удалять строки можно только из таблицы №1 авторизованным пользователем"'}>Удалить</button>
@@ -694,8 +667,6 @@ function renderRows(rows) {
           const yearIndexMap = {
             forecast_profit_year1_billion_rub: 0,
             forecast_profit_year2_billion_rub: 1,
-            forecast_profit_year3_billion_rub: 2,
-            forecast_profit_year4_billion_rub: 3,
           };
           const yearIndex = yearIndexMap[input.dataset.field];
           if (yearIndex !== undefined) {
@@ -892,8 +863,6 @@ addRowBtn.addEventListener('click', async () => {
         pe_avg_5y: null,
         forecast_profit_year1_billion_rub: null,
         forecast_profit_year2_billion_rub: null,
-        forecast_profit_year3_billion_rub: null,
-        forecast_profit_year4_billion_rub: null,
       }),
     });
     await loadRows();
@@ -926,26 +895,6 @@ authLoginBtn?.addEventListener('click', async () => {
 
 authLogoutBtn?.addEventListener('click', () => {
   alert('Выход не требуется: права определяются по сети доступа.');
-});
-
-authRegisterBtn?.addEventListener('click', async () => {
-  alert('Регистрация отключена: доступ определяется вашей сетью.');
-  return;
-
-  const username = prompt('Новый логин:');
-  if (!username) return;
-  const password = prompt('Новый пароль (минимум 8 символов):');
-  if (!password) return;
-  const makeAdmin = confirm('Выдать права администратора новому пользователю?');
-  try {
-    const user = await api('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password, is_admin: makeAdmin }),
-    });
-    alert(`Пользователь создан: ${user.username}`);
-  } catch (err) {
-    alert(err.message);
-  }
 });
 
 exportDataBtn?.addEventListener('click', async () => {
