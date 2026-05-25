@@ -510,7 +510,7 @@ def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
 
 
 def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_number: int) -> TickerComparisonItem:
-    years = [BASE_FORECAST_YEAR + table.year_offset + i for i in range(4)]
+    years = [BASE_FORECAST_YEAR + table.year_offset + i for i in range(2)]
     values = [
         (
             row.forecast_profit_year1_billion_rub,
@@ -521,16 +521,6 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
             row.forecast_profit_year2_billion_rub,
             row.forecast_price_year2,
             row.upside_percent_year2,
-        ),
-        (
-            row.forecast_profit_year3_billion_rub,
-            row.forecast_price_year3,
-            row.upside_percent_year3,
-        ),
-        (
-            row.forecast_profit_year4_billion_rub,
-            row.forecast_price_year4,
-            row.upside_percent_year4,
         ),
     ]
     return TickerComparisonItem(
