@@ -591,16 +591,16 @@ def auth_login(payload: AuthLoginRequest, db: Session = Depends(get_db)):
     raise HTTPException(status_code=403, detail="Вход по логину/паролю отключен. Доступ определяется сетью источника.")
 
 
-@app.get("/api/auth/me", response_model=UserRead)
+@app.get("/api/auth/me")
 def auth_me(request: Request):
     try:
         current_user = resolve_network_principal(request)
     except Exception:
-        return UserRead(username="guest", is_admin=False)
+        return {"username": "guest", "is_admin": False}
 
     if current_user is None:
-        return UserRead(username="guest", is_admin=False)
-    return UserRead(username=current_user.username, is_admin=current_user.is_admin)
+        return {"username": "guest", "is_admin": False}
+    return {"username": current_user.username, "is_admin": bool(current_user.is_admin)}
 
 
 @app.post("/api/auth/register", response_model=UserRead)

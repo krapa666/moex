@@ -53,3 +53,18 @@ cat <<TXT
 - If it returns guest from LOCAL_HOST_URL, nginx likely does not pass X-Moex-Access-Scope or passes internet.
 - If forced header local still returns guest, backend container is not running updated image/code.
 TXT
+
+print_step "Backend container direct probe (if docker compose available)"
+if command -v docker >/dev/null 2>&1; then
+  docker compose ps backend >/dev/null 2>&1 && docker compose exec -T backend python - <<'PY' || true
+import urllib.request
+for url in ["http://127.0.0.1:8000/api/health", "http://127.0.0.1:8000/api/auth/me"]:
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            print(url, r.status, r.read().decode())
+    except Exception as e:
+        print(url, "ERROR", e)
+PY
+else
+  echo "docker command not found"
+fi
