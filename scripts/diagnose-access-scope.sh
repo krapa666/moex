@@ -49,9 +49,9 @@ fi
 
 print_step "Expected interpretation"
 cat <<TXT
-- /api/auth/me should return {"username":"local-network","is_admin":true} for LAN requests.
-- If it returns guest from LOCAL_HOST_URL, nginx likely does not pass X-Moex-Access-Scope or passes internet.
-- If forced header local still returns guest, backend container is not running updated image/code.
+- /api/auth/me should return {"username":"local-network","is_admin":true} only when nginx sends `X-Moex-Access-Scope: local`.
+- Public requests with `X-Moex-Access-Scope: internet` must return guest.
+- If both local and internet return admin, nginx probably sets local scope too broadly.
 TXT
 
 print_step "Backend container direct probe (if docker compose available)"

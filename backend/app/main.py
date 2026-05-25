@@ -213,29 +213,6 @@ def ensure_admin_user(db: Session) -> None:
     db.commit()
 
 
-def forwarded_for_chain(request: Request) -> list[str]:
-    raw = request.headers.get("x-forwarded-for", "")
-    if not raw:
-        return []
-    return [part.strip() for part in raw.split(",") if part.strip()]
-
-
-def has_private_ip_in_chain(ip_chain: list[str]) -> bool:
-    for ip_text in ip_chain:
-        if is_local_network_ip(ip_text):
-            return True
-    return False
-
-
-def get_client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for", "")
-    if forwarded_for:
-        return forwarded_for.split(",", 1)[0].strip()
-    if request.client is not None:
-        return request.client.host
-    return ""
-
-
 def is_local_network_ip(ip_text: str) -> bool:
     if not ip_text:
         return False
@@ -250,12 +227,11 @@ def resolve_network_principal(request: Request) -> AccessPrincipal | None:
     access_scope = (request.headers.get("x-moex-access-scope") or "").strip().lower()
     if access_scope == "local":
         return AccessPrincipal(username="local-network", is_admin=True)
+    if access_scope == "internet":
+        return None
 
-    forwarded_chain = forwarded_for_chain(request)
-    if has_private_ip_in_chain(forwarded_chain):
-        return AccessPrincipal(username="local-network", is_admin=True)
-
-    client_ip = get_client_ip(request)
+    # Fallback for direct (non-nginx) local access in development.
+    client_ip = request.client.host if request.client is not None else ""
     if is_local_network_ip(client_ip):
         return AccessPrincipal(username="local-network", is_admin=True)
     return None
