@@ -45,4 +45,4 @@ def test_fetch_current_price_uses_prevprice_fallback(monkeypatch):
     price, message = asyncio.run(moex.fetch_current_price("reni"))
 
     assert price == 95.45
-    assert message is None
+    assert message == "Использована последняя доступная цена (PREVPRICE)"
