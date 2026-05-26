@@ -279,9 +279,10 @@ function isEditingInput() {
   return Boolean(activeElement && activeElement.tagName === 'INPUT' && tbody.contains(activeElement));
 }
 
-function upsideClass(value) {
+function upsideClass(value, { isNearTerm = false } = {}) {
   const num = Number(value);
   if (!Number.isFinite(num)) return 'upside-flat';
+  if (num > 30 && isNearTerm) return 'upside-up-strong';
   if (num > 0) return 'upside-up';
   if (num < 0) return 'upside-down';
   return 'upside-flat';
@@ -414,7 +415,7 @@ function createInlineComparisonRow(item) {
     <td><input value="${item.pe_avg_5y ?? ''}" disabled /></td>
     <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
-    <td class="readonly-cell ${upsideClass(y1?.upside_percent)}">${formatPercent(y1?.upside_percent)}</td>
+    <td class="readonly-cell ${upsideClass(y1?.upside_percent, { isNearTerm: true })}">${formatPercent(y1?.upside_percent)}</td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
@@ -529,19 +530,19 @@ function updateCalculatedCells(tr, row) {
     const cell = tr.querySelector(`[data-cell="${cellName}"]`);
     if (cell) cell.textContent = value;
   };
-  const setUpsideCell = (cellName, value) => {
+  const setUpsideCell = (cellName, value, options = {}) => {
     const cell = tr.querySelector(`[data-cell="${cellName}"]`);
     if (!cell) return;
     cell.textContent = formatPercent(value);
-    cell.classList.remove('upside-up', 'upside-down', 'upside-flat');
-    cell.classList.add(upsideClass(value));
+    cell.classList.remove('upside-up', 'upside-up-strong', 'upside-down', 'upside-flat');
+    cell.classList.add(upsideClass(value, options));
   };
 
   setCellText('current_price', formatCurrency(row.current_price, priceDecimals));
   setCellText('market_cap', formatCurrency(row.market_cap_billion_rub));
   setCellText('forecast_price_year1', formatCurrency(row.forecast_price_year1, priceDecimals));
   setCellText('forecast_price_year2', formatCurrency(row.forecast_price_year2, priceDecimals));
-  setUpsideCell('upside_year1', row.upside_percent_year1);
+  setUpsideCell('upside_year1', row.upside_percent_year1, { isNearTerm: true });
   setUpsideCell('upside_year2', row.upside_percent_year2);
   setCellText('price_updated_at', formatDate(row.price_updated_at));
 }
@@ -627,7 +628,7 @@ function renderRows(rows) {
       <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year1)}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year1, { isNearTerm: true })}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
