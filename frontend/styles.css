@@ -103,7 +103,8 @@ h1 {
 }
 
 .table-wrap {
-  overflow-x: auto;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
 }
 
 table {
@@ -141,11 +142,11 @@ tbody tr td {
   box-shadow: 0 1px 0 rgba(148, 163, 184, 0.18);
 }
 
-th {
+thead th {
   position: sticky;
   top: 0;
   background: #f9fafb;
-  z-index: 30;
+  z-index: 40;
   color: #374151;
   font-size: 13px;
   box-shadow: 0 2px 0 rgba(148, 163, 184, 0.22);
