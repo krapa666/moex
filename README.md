@@ -12,8 +12,8 @@
   - текущая цена,
   - количество акций (млрд),
   - средний P/E,
-  - прогнозная чистая прибыль на 4 года,
-  - расчёт прогнозной цены и Upside на 4 года.
+  - прогнозная чистая прибыль на 2 года,
+  - расчёт прогнозной цены и Upside на 2 года.
 - Автоматический пересчёт производных полей при изменении входных данных.
 - Автосинхронизация строк с одинаковыми тикерами между таблицами.
 - Поддержка «основной» таблицы:
@@ -96,9 +96,9 @@
   - `id`, `analyst_name`, `year_offset`, `sort_order`, `created_at`.
 - `stock_rows`
   - `table_id`, `ticker`, `current_price`, `shares_billion`, `pe_avg_5y`,
-  - `forecast_profit_year1..4_billion_rub`,
-  - `forecast_price_year1..4`,
-  - `upside_percent_year1..4`,
+  - `forecast_profit_year1..2_billion_rub`,
+  - `forecast_price_year1..2`,
+  - `upside_percent_year1..2`,
   - `net_profit_year_map`, `status_message`, timestamps.
 
 ## 3.2 Миграции
@@ -110,12 +110,10 @@
 ## 4. API (основное)
 
 ## 4.0 Авторизация и роли
-- Роли:
-  - **Гость** — ограниченный режим интерфейса: доступно только переключение таблиц и сдвиг года (`-1/+1`), остальные кнопки/поля скрыты. Названия таблиц в UI показываются как `Аналитик 1`, `Аналитик 2`, ...
-  - **Пользователь** — может выполнять операции записи (создание/изменение/удаление, импорт).
-  - **Администратор** — дополнительно может создавать новых пользователей.
-- Авторизация выполняется по Bearer-токену (`Authorization: Bearer <token>`).
-- Сессии хранятся в БД (`user_sessions`) и по умолчанию живут 24 часа.
+- Права доступа определяются по сети источника запроса:
+  - **Локальная сеть** (`X-Moex-Access-Scope: local`) — админ-доступ (операции записи разрешены).
+  - **Интернет** (`X-Moex-Access-Scope: internet`) — гостевой режим (только чтение).
+- Логин/пароль в интерфейсе не используются для выдачи прав доступа.
 
 ## 4.1 Таблицы аналитиков
 - `GET /api/tables` — список таблиц в текущем порядке (основная = №1).
@@ -135,9 +133,9 @@
 - `GET /api/health`
 - `GET /metrics`
 - `GET /api/ticker-comparison?ticker=...`
-- `POST /api/auth/login` — вход (получение токена).
-- `GET /api/auth/me` — информация о текущем пользователе по токену.
-- `POST /api/auth/register` — создание пользователя (**только администратор**).
+- `POST /api/auth/login` — отключён (возвращает ошибку; права определяются сетью).
+- `GET /api/auth/me` — возвращает вычисленную роль (`guest` или `local-network`).
+- `POST /api/auth/register` — служебный endpoint, в обычном UI не используется.
 
 ---
 
@@ -178,21 +176,17 @@
 
 ## 6.3 Доступ после старта
 - Frontend: http://localhost:8080
-- Backend health: http://localhost:8000/api/health
+- Backend health: http://localhost:18000/api/health
 - Metrics (через proxy): http://localhost:8080/metrics
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000
 - Loki readiness: http://localhost:3100/ready
 
-## 6.5 Админ по умолчанию
-- При первом старте backend, если в БД нет администратора, создаётся пользователь-админ.
-- По умолчанию:
-  - `ADMIN_USERNAME=admin`
-  - `ADMIN_PASSWORD=admin12345`
-- Для production обязательно переопределите:
-  - `ADMIN_USERNAME`
-  - `ADMIN_PASSWORD`
-  - `AUTH_PASSWORD_SALT`
+## 6.5 Режим доступа
+- Права доступа не зависят от логина/пароля.
+- Доступ определяется только сетевым scope, который прокидывает Nginx:
+  - `local` -> админ-доступ,
+  - `internet` -> гостевой режим.
 
 ## 6.4 Непрерывность данных между Compose и Minikube
 - При `compose-down` и `minikube-down` выполняется экспорт snapshot БД.
@@ -311,7 +305,7 @@ sudo systemctl restart nginx
 - Рекомендация перед открытием портов:
   1. Настроить домен + TLS (Let's Encrypt).
   2. Пробрасывать наружу только `80/443`.
-  3. Не публиковать backend напрямую (`:8000`) и внутренние сервисы (`:3000`, `:9090`, `:3100`, `:9091`).
+  3. Не публиковать backend напрямую (`:18000`) и внутренние сервисы (`:3000`, `:9090`, `:3100`, `:9091`).
 
 ### Переход на HTTPS (валидные сертификаты)
 1. Получите сертификат Let's Encrypt для домена (webroot-mode):
@@ -344,7 +338,7 @@ curl -I https://your-domain.example
 Полезные проверки:
 ```bash
 curl -s http://localhost:3100/ready
-curl -s http://localhost:8000/api/health
+curl -s http://localhost:18000/api/health
 curl -s http://localhost:8080/metrics | head
 ```
 
@@ -404,7 +398,7 @@ alembic upgrade head
 ```bash
 docker compose ps
 docker compose logs -f backend
-curl http://localhost:8000/api/health
+curl http://localhost:18000/api/health
 ```
 
 ## 13.2 Ошибка Alembic `value too long for type character varying(32)`
@@ -453,7 +447,7 @@ sudo ./scripts/configure-nginx-k8s-proxy.sh --reload
 
 1. `./scripts/compose-up.sh`
 2. Открыть `http://localhost:8080`
-3. Проверить `http://localhost:8000/api/health`
+3. Проверить `http://localhost:18000/api/health`
 4. Проверить Grafana/Prometheus
 5. Выполнить пробное добавление тикера и проверить авторасчёты
 6. Проверить сравнение между таблицами
