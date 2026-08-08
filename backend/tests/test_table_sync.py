@@ -1,5 +1,7 @@
 import pytest
 from app.main import (
+    BASE_FORECAST_YEAR,
+    apply_net_profit_projection,
     build_database_snapshot,
     delete_row,
     ensure_primary_table_for_row_mutation,
@@ -157,3 +159,47 @@ def test_export_and_import_database_snapshot() -> None:
 
         tickers = [row.ticker for row in db.scalars(select(StockRow).order_by(StockRow.ticker.asc())).all()]
         assert tickers == ["GAZP", "SBER"]
+
+
+def test_projection_keeps_dividends_bound_to_calendar_year_when_years_shift() -> None:
+    first_year = str(BASE_FORECAST_YEAR)
+    second_year = str(BASE_FORECAST_YEAR + 1)
+    third_year = str(BASE_FORECAST_YEAR + 2)
+    row = StockRow(
+        ticker="SBER",
+        current_price=300.0,
+        shares_billion=20.0,
+        pe_avg_5y=5.0,
+        net_profit_year_map={first_year: 1_200.0, second_year: 1_400.0, third_year: 1_500.0},
+        dividend_year_map={first_year: 20.0, second_year: 30.0, third_year: 40.0},
+    )
+
+    apply_net_profit_projection(row, 0)
+    assert row.dividends_year1 == 20.0
+    assert row.dividends_year2 == 30.0
+
+    apply_net_profit_projection(row, 1)
+    assert row.dividends_year1 == 30.0
+    assert row.dividends_year2 == 40.0
+    assert row.forecast_price_year1 == 350.0
+    assert row.forecast_price_year2 == 375.0
+    assert round(row.upside_percent_year1 or 0, 2) == round(((350.0 - 300.0 + 20.0 + 30.0) / 300.0) * 100, 2)
+    assert round(row.upside_percent_year2 or 0, 2) == round(
+        ((375.0 - 300.0 + 20.0 + 30.0 + 40.0) / 300.0) * 100, 2
+    )
+
+
+def test_projection_backfills_legacy_dividend_columns_into_year_map() -> None:
+    row = StockRow(
+        ticker="SBER",
+        dividends_year1=20.0,
+        dividends_year2=30.0,
+        dividend_year_map=None,
+    )
+
+    apply_net_profit_projection(row, 0)
+
+    assert row.dividend_year_map == {
+        str(BASE_FORECAST_YEAR): 20.0,
+        str(BASE_FORECAST_YEAR + 1): 30.0,
+    }

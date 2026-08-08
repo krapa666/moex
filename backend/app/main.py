@@ -314,6 +314,9 @@ def build_database_snapshot(db: Session) -> dict:
                 "forecast_profit_year4_billion_rub": row.forecast_profit_year4_billion_rub,
                 "net_profit_year_map": row.net_profit_year_map,
                 "net_profit_source_comment": row.net_profit_source_comment,
+                "dividends_year1": row.dividends_year1,
+                "dividends_year2": row.dividends_year2,
+                "dividend_year_map": row.dividend_year_map,
                 "forecast_price_year1": row.forecast_price_year1,
                 "forecast_price_year2": row.forecast_price_year2,
                 "forecast_price_year3": row.forecast_price_year3,
@@ -384,6 +387,9 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
             forecast_profit_year4_billion_rub=row_data.get("forecast_profit_year4_billion_rub"),
             net_profit_year_map=row_data.get("net_profit_year_map"),
             net_profit_source_comment=row_data.get("net_profit_source_comment"),
+            dividends_year1=row_data.get("dividends_year1"),
+            dividends_year2=row_data.get("dividends_year2"),
+            dividend_year_map=row_data.get("dividend_year_map"),
             forecast_price_year1=row_data.get("forecast_price_year1"),
             forecast_price_year2=row_data.get("forecast_price_year2"),
             forecast_price_year3=row_data.get("forecast_price_year3"),
@@ -405,11 +411,27 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
 def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
     years = [BASE_FORECAST_YEAR + year_offset + i for i in range(4)]
     profit_map = row.net_profit_year_map or {}
+    dividend_map = dict(row.dividend_year_map or {})
+    if row.dividend_year_map is None:
+        if row.dividends_year1 is not None:
+            dividend_map[str(years[0])] = row.dividends_year1
+        if row.dividends_year2 is not None:
+            dividend_map[str(years[1])] = row.dividends_year2
+        row.dividend_year_map = dividend_map
     row.forecast_profit_year1_billion_rub = profit_map.get(str(years[0]))
     row.forecast_profit_year2_billion_rub = profit_map.get(str(years[1]))
     row.forecast_profit_year3_billion_rub = profit_map.get(str(years[2]))
     row.forecast_profit_year4_billion_rub = profit_map.get(str(years[3]))
-    recalculate_fields(row)
+    row.dividends_year1 = dividend_map.get(str(years[0]))
+    row.dividends_year2 = dividend_map.get(str(years[1]))
+    dividend_totals_by_year_index: dict[int, float] = {}
+    for index, target_year in enumerate(years, start=1):
+        first_dividend_year = BASE_FORECAST_YEAR if target_year >= BASE_FORECAST_YEAR else target_year
+        dividend_totals_by_year_index[index] = sum(
+            float(dividend_map.get(str(dividend_year)) or 0.0)
+            for dividend_year in range(first_dividend_year, target_year + 1)
+        )
+    recalculate_fields(row, dividend_totals_by_year_index)
 
 
 def merge_payload_profit_map(payload: StockRowCreate | StockRowUpdate, year_offset: int) -> dict[str, float | None]:
@@ -422,12 +444,23 @@ def merge_payload_profit_map(payload: StockRowCreate | StockRowUpdate, year_offs
     return merged
 
 
+def merge_payload_dividend_map(payload: StockRowCreate | StockRowUpdate, year_offset: int) -> dict[str, float | None]:
+    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(2)]
+    merged = dict(payload.dividend_year_map or {})
+    merged[str(years[0])] = payload.dividends_year1
+    merged[str(years[1])] = payload.dividends_year2
+    return merged
+
+
 def reset_net_profit_fields(row: StockRow) -> None:
     row.forecast_profit_year1_billion_rub = None
     row.forecast_profit_year2_billion_rub = None
     row.forecast_profit_year3_billion_rub = None
     row.forecast_profit_year4_billion_rub = None
     row.net_profit_year_map = {}
+    row.dividends_year1 = None
+    row.dividends_year2 = None
+    row.dividend_year_map = {}
     row.forecast_price_year1 = None
     row.forecast_price_year2 = None
     row.forecast_price_year3 = None
@@ -515,11 +548,13 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
         (
             row.forecast_profit_year1_billion_rub,
             row.forecast_price_year1,
+            row.dividends_year1,
             row.upside_percent_year1,
         ),
         (
             row.forecast_profit_year2_billion_rub,
             row.forecast_price_year2,
+            row.dividends_year2,
             row.upside_percent_year2,
         ),
     ]
@@ -540,9 +575,10 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
                 year=years[idx],
                 forecast_profit_billion_rub=profit,
                 forecast_price=price,
+                dividends_per_share=dividends,
                 upside_percent=upside,
             )
-            for idx, (profit, price, upside) in enumerate(values)
+            for idx, (profit, price, dividends, upside) in enumerate(values)
         ],
     )
 
@@ -649,6 +685,9 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db), _us
                     forecast_profit_year3_billion_rub=None,
                     forecast_profit_year4_billion_rub=None,
                     net_profit_year_map={},
+                    dividends_year1=None,
+                    dividends_year2=None,
+                    dividend_year_map={},
                     forecast_price_year1=None,
                     forecast_price_year2=None,
                     forecast_price_year3=None,
@@ -734,11 +773,13 @@ async def create_row(payload: StockRowCreate, db: Session = Depends(get_db), _us
         shares_billion=payload.shares_billion,
         pe_avg_5y=payload.pe_avg_5y,
         net_profit_year_map=merge_payload_profit_map(payload, table.year_offset),
+        dividend_year_map=merge_payload_dividend_map(payload, table.year_offset),
         net_profit_source_comment=payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None,
     )
     apply_net_profit_projection(row, table.year_offset)
 
     await refresh_row_price(row, force=True)
+    apply_net_profit_projection(row, table.year_offset)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -781,12 +822,14 @@ async def update_row(
         row.shares_billion = primary_row.shares_billion
         row.pe_avg_5y = primary_row.pe_avg_5y
     row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
+    row.dividend_year_map = merge_payload_dividend_map(payload, table.year_offset)
     apply_net_profit_projection(row, table.year_offset)
     row.net_profit_source_comment = (
         payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None
     )
 
     await refresh_row_price(row, force=bool(row.ticker))
+    apply_net_profit_projection(row, table.year_offset)
     if shared_fields_editable:
         sync_row_to_other_tables(db, row, old_ticker=old_ticker if old_ticker != row.ticker else None)
     sync_primary_table_multipliers(db, row)
@@ -816,8 +859,12 @@ def delete_row(row_id: int, db: Session = Depends(get_db), _user: AccessPrincipa
 
 @app.post("/api/rows/refresh", response_model=list[StockRowRead])
 async def refresh_prices(table_id: int, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
-    get_table_or_404(db, table_id)
-    return await refresh_all_prices(db, force=True, table_id=table_id)
+    table = get_table_or_404(db, table_id)
+    rows = await refresh_all_prices(db, force=True, table_id=table_id)
+    for row in rows:
+        apply_net_profit_projection(row, table.year_offset)
+    db.commit()
+    return rows
 
 
 @app.post("/api/tables/{table_id}/make-primary", response_model=list[AnalystTableRead])
