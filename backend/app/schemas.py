@@ -14,6 +14,9 @@ class StockRowBase(BaseModel):
     forecast_profit_year4_billion_rub: float | None = Field(default=None)
     net_profit_year_map: dict[str, float | None] | None = Field(default=None)
     net_profit_source_comment: str | None = Field(default=None, max_length=512)
+    dividends_year1: float | None = Field(default=None, ge=0)
+    dividends_year2: float | None = Field(default=None, ge=0)
+    dividend_year_map: dict[str, float | None] | None = Field(default=None)
 
 
 class StockRowCreate(StockRowBase):
@@ -71,6 +74,7 @@ class TickerComparisonYear(BaseModel):
     year: int
     forecast_profit_billion_rub: float | None
     forecast_price: float | None
+    dividends_per_share: float | None
     upside_percent: float | None
 
 

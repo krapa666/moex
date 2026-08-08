@@ -24,6 +24,8 @@ const headerProfitYear1 = document.getElementById('header-profit-year1');
 const headerProfitYear2 = document.getElementById('header-profit-year2');
 const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
+const headerDividendsYear1 = document.getElementById('header-dividends-year1');
+const headerDividendsYear2 = document.getElementById('header-dividends-year2');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -168,6 +170,8 @@ const INPUT_NORMALIZERS = {
   pe_avg_5y: normalizeNumericInput,
   forecast_profit_year1_billion_rub: normalizeNumericInput,
   forecast_profit_year2_billion_rub: normalizeNumericInput,
+  dividends_year1: normalizeNumericInput,
+  dividends_year2: normalizeNumericInput,
 };
 
 function normalizeInputByField(field, value) {
@@ -221,6 +225,8 @@ function applyYearHeaders() {
   if (headerProfitYear2) headerProfitYear2.textContent = `Прогнозная ЧП (${y2}), млрд ₽`;
   if (headerPriceYear1) headerPriceYear1.textContent = `Прогнозная цена (${y1}), ₽`;
   if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
+  if (headerDividendsYear1) headerDividendsYear1.textContent = `Дивиденды (${y1}), ₽/акцию`;
+  if (headerDividendsYear2) headerDividendsYear2.textContent = `Дивиденды (${y2}), ₽/акцию`;
 }
 
 function yearKeyByIndex(index) {
@@ -231,6 +237,12 @@ function yearKeyByIndex(index) {
 function mapProfitByYear(row, index) {
   const key = yearKeyByIndex(index);
   const map = row.net_profit_year_map || {};
+  return map[key] ?? null;
+}
+
+function mapDividendsByYear(row, index) {
+  const key = yearKeyByIndex(index);
+  const map = row.dividend_year_map || {};
   return map[key] ?? null;
 }
 
@@ -415,9 +427,11 @@ function createInlineComparisonRow(item) {
     <td><input value="${item.pe_avg_5y ?? ''}" disabled /></td>
     <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
+    <td><input value="${y1?.dividends_per_share ?? ''}" disabled /></td>
     <td class="readonly-cell ${upsideClass(y1?.upside_percent, { isNearTerm: true })}">${formatPercent(y1?.upside_percent)}</td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
+    <td><input value="${y2?.dividends_per_share ?? ''}" disabled /></td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">${escapeHtml(displayAnalystName(item.table_number, item.analyst_name))}</span></td>
@@ -513,6 +527,7 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
 
 function rowToPayload(row) {
   const profitMap = row.net_profit_year_map || {};
+  const dividendMap = row.dividend_year_map || {};
   return {
     table_id: appState.activeTableId,
     ticker: row.ticker || '',
@@ -521,6 +536,9 @@ function rowToPayload(row) {
     forecast_profit_year1_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(0)]),
     forecast_profit_year2_billion_rub: parseInputNumber(profitMap[yearKeyByIndex(1)]),
     net_profit_year_map: profitMap,
+    dividends_year1: parseInputNumber(dividendMap[yearKeyByIndex(0)]),
+    dividends_year2: parseInputNumber(dividendMap[yearKeyByIndex(1)]),
+    dividend_year_map: dividendMap,
   };
 }
 
@@ -628,9 +646,11 @@ function renderRows(rows) {
       <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
+      <td><input data-field="dividends_year1" value="${mapDividendsByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1, { isNearTerm: true })}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
+      <td><input data-field="dividends_year2" value="${mapDividendsByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
       <td>
@@ -663,6 +683,18 @@ function renderRows(rows) {
           if (yearIndex !== undefined) {
             map[yearKeyByIndex(yearIndex)] = parseInputNumber(normalizedValue);
             updated.net_profit_year_map = map;
+          }
+        }
+        if (input.dataset.field.startsWith('dividends_year')) {
+          const map = { ...(updated.dividend_year_map || {}) };
+          const yearIndexMap = {
+            dividends_year1: 0,
+            dividends_year2: 1,
+          };
+          const yearIndex = yearIndexMap[input.dataset.field];
+          if (yearIndex !== undefined) {
+            map[yearKeyByIndex(yearIndex)] = parseInputNumber(normalizedValue);
+            updated.dividend_year_map = map;
           }
         }
         rowDrafts.set(row.id, updated);
@@ -854,6 +886,8 @@ addRowBtn.addEventListener('click', async () => {
         pe_avg_5y: null,
         forecast_profit_year1_billion_rub: null,
         forecast_profit_year2_billion_rub: null,
+        dividends_year1: null,
+        dividends_year2: null,
       }),
     });
     await loadRows();
