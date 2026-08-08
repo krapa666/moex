@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .calculations import recalculate_fields
 from .models import StockRow
 from .moex import fetch_current_price
 
@@ -16,7 +15,6 @@ async def refresh_row_price(row: StockRow, force: bool = False) -> None:
         row.current_price = None
         row.status_message = "Введите тикер"
         row.price_updated_at = None
-        recalculate_fields(row)
         return
 
     if (
@@ -24,7 +22,6 @@ async def refresh_row_price(row: StockRow, force: bool = False) -> None:
         and row.price_updated_at is not None
         and row.price_updated_at >= datetime.now(timezone.utc) - PRICE_REFRESH_INTERVAL
     ):
-        recalculate_fields(row)
         return
 
     fetched_price, fetch_message = await fetch_current_price(row.ticker)
@@ -34,7 +31,6 @@ async def refresh_row_price(row: StockRow, force: bool = False) -> None:
         row.current_price = fetched_price
         row.status_message = fetch_message
         row.price_updated_at = now
-        recalculate_fields(row)
         return
 
     can_keep_last_price = (
@@ -44,13 +40,15 @@ async def refresh_row_price(row: StockRow, force: bool = False) -> None:
     )
     if can_keep_last_price:
         row.status_message = "MOEX временно недоступна, используем последнюю сохранённую цену"
-        recalculate_fields(row)
+        return
+
+    if row.current_price is not None and row.price_updated_at is not None:
+        row.status_message = "MOEX недоступна, сохранённая цена устарела более чем на 24 часа"
         return
 
     row.current_price = None
     row.status_message = fetch_message or "Не удалось получить цену от MOEX ISS"
-    row.price_updated_at = now
-    recalculate_fields(row)
+    row.price_updated_at = None
 
 
 async def refresh_all_prices(db: Session, force: bool = False, table_id: int | None = None) -> list[StockRow]:
@@ -58,9 +56,25 @@ async def refresh_all_prices(db: Session, force: bool = False, table_id: int | N
     if table_id is not None:
         query = query.where(StockRow.table_id == table_id)
     rows = db.scalars(query.order_by(StockRow.id.asc())).all()
+    rows_by_ticker: dict[str, list[StockRow]] = {}
     for row in rows:
-        await refresh_row_price(row, force=force)
-    db.commit()
-    for row in rows:
-        db.refresh(row)
+        rows_by_ticker.setdefault(row.ticker.strip().upper(), []).append(row)
+
+    for ticker, ticker_rows in rows_by_ticker.items():
+        if not ticker:
+            for row in ticker_rows:
+                await refresh_row_price(row, force=force)
+            continue
+
+        representative = max(
+            ticker_rows,
+            key=lambda item: item.price_updated_at.timestamp() if item.price_updated_at else float("-inf"),
+        )
+        await refresh_row_price(representative, force=force)
+        for row in ticker_rows:
+            if row is representative:
+                continue
+            row.current_price = representative.current_price
+            row.status_message = representative.status_message
+            row.price_updated_at = representative.price_updated_at
     return rows

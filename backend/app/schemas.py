@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StockRowBase(BaseModel):
     table_id: int
-    ticker: str = Field(default="", max_length=32)
+    ticker: str = Field(default="", max_length=32, pattern=r"^[A-Za-z0-9._-]*$")
     shares_billion: float | None = Field(default=None, ge=0)
     pe_avg_5y: float | None = Field(default=None, ge=0)
     forecast_profit_year1_billion_rub: float | None = Field(default=None)
@@ -28,6 +28,8 @@ class StockRowUpdate(StockRowBase):
 
 
 class StockRowRead(StockRowBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     shared_fields_editable: bool = True
     current_price: float | None
@@ -45,10 +47,6 @@ class StockRowRead(StockRowBase):
     created_at: datetime
     updated_at: datetime | None
 
-    class Config:
-        from_attributes = True
-
-
 class AnalystTableCreate(BaseModel):
     analyst_name: str = Field(min_length=1, max_length=100)
     source_table_id: int | None = Field(default=None, ge=1)
@@ -57,17 +55,18 @@ class AnalystTableCreate(BaseModel):
 class AnalystTableUpdate(BaseModel):
     analyst_name: str | None = Field(default=None, min_length=1, max_length=100)
     year_offset: int | None = Field(default=None, ge=-20, le=20)
+    forecast_start_year: int | None = Field(default=None, ge=2000, le=2100)
 
 
 class AnalystTableRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     table_number: int
     analyst_name: str
     year_offset: int
+    forecast_start_year: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class TickerComparisonYear(BaseModel):
@@ -83,6 +82,7 @@ class TickerComparisonItem(BaseModel):
     table_number: int
     analyst_name: str
     year_offset: int
+    forecast_start_year: int
     ticker: str
     current_price: float | None
     shares_billion: float | None
@@ -99,29 +99,3 @@ class DataTransferResult(BaseModel):
     tables_count: int
     rows_count: int
     detail: str | None = None
-
-
-class AuthLoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=1, max_length=255)
-
-
-class AuthRegisterRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=8, max_length=255)
-    is_admin: bool = False
-
-
-class UserRead(BaseModel):
-    id: int
-    username: str
-    is_admin: bool
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class AuthLoginResponse(BaseModel):
-    token: str
-    user: UserRead

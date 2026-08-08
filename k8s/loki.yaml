@@ -19,6 +19,9 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3100
+          volumeMounts:
+            - name: data
+              mountPath: /tmp/loki
           readinessProbe:
             httpGet:
               path: /ready
@@ -31,6 +34,10 @@ spec:
               port: 3100
             initialDelaySeconds: 30
             periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: loki-data
 ---
 apiVersion: v1
 kind: Service

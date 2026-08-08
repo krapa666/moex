@@ -13,6 +13,7 @@ require_cmd docker
 
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+RESTORE_SYNC_SNAPSHOT="${MOEX_RESTORE_SYNC_SNAPSHOT:-auto}"
 PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
 SERVER_NAMES="${MOEX_NGINX_SERVER_NAMES:-${PUBLIC_DOMAIN} junibox _}"
 SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
@@ -20,9 +21,9 @@ SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMA
 FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
 
 COMPOSE_PROJECT="${MOEX_COMPOSE_PROJECT:-moex}"
-BACKEND_BIND="${MOEX_BACKEND_BIND:-0.0.0.0}"
+BACKEND_BIND="${MOEX_BACKEND_BIND:-127.0.0.1}"
 BACKEND_PORT="${MOEX_BACKEND_PORT:-18000}"
-FRONTEND_BIND="${MOEX_FRONTEND_BIND:-0.0.0.0}"
+FRONTEND_BIND="${MOEX_FRONTEND_BIND:-127.0.0.1}"
 FRONTEND_PORT="${MOEX_FRONTEND_PORT:-8080}"
 OBSERVABILITY_BIND="${MOEX_OBSERVABILITY_BIND:-127.0.0.1}"
 PROMETHEUS_PORT="${MOEX_PROMETHEUS_PORT:-9090}"
@@ -42,6 +43,23 @@ import_snapshot_into_compose_db() {
   fi
   if ! docker compose ps db --status running >/dev/null 2>&1; then
     echo "[compose-up] db container is not running, import skipped" >&2
+    return
+  fi
+
+  local relation=""
+  local row_count="0"
+  relation="$(docker compose exec -T db psql -Atq -U postgres -d fair_price -c "SELECT to_regclass('public.analyst_tables')" 2>/dev/null || true)"
+  if [[ -n "${relation}" ]]; then
+    row_count="$(docker compose exec -T db psql -Atq -U postgres -d fair_price -c "SELECT COUNT(*) FROM analyst_tables" 2>/dev/null || echo 0)"
+  fi
+
+  if [[ "${RESTORE_SYNC_SNAPSHOT}" == "auto" && "${row_count:-0}" -gt 0 ]]; then
+    echo "[compose-up] existing application data found; automatic snapshot restore skipped"
+    echo "[compose-up] set MOEX_RESTORE_SYNC_SNAPSHOT=force only when an intentional restore is required"
+    return
+  fi
+  if [[ "${RESTORE_SYNC_SNAPSHOT}" != "auto" && "${RESTORE_SYNC_SNAPSHOT}" != "force" ]]; then
+    echo "[compose-up] snapshot restore disabled (MOEX_RESTORE_SYNC_SNAPSHOT=${RESTORE_SYNC_SNAPSHOT})"
     return
   fi
 
@@ -92,15 +110,23 @@ if command -v minikube >/dev/null 2>&1; then
   eval "$(minikube docker-env -u 2>/dev/null || true)"
 fi
 
-log_step "starting docker compose stack"
-docker compose up -d --build "$@"
-log_step "importing shared DB snapshot (if present)"
+log_step "starting PostgreSQL before optional restore"
+docker compose up -d db
+for _ in $(seq 1 30); do
+  if docker compose exec -T db pg_isready -U postgres -d fair_price >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+log_step "restoring shared DB snapshot only when safe"
 import_snapshot_into_compose_db
+log_step "starting docker compose application stack"
+docker compose up -d --build "$@"
 
 log_step "compose mode is up"
 echo "[compose-up] compose project: ${COMPOSE_PROJECT}"
-echo "[compose-up] frontend (internet + LAN): http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
-echo "[compose-up] backend API (direct host access): http://${BACKEND_BIND}:${BACKEND_PORT}/"
+echo "[compose-up] frontend loopback endpoint: http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
+echo "[compose-up] backend loopback endpoint: http://${BACKEND_BIND}:${BACKEND_PORT}/"
 echo "[compose-up] prometheus (local-only by default): http://${OBSERVABILITY_BIND}:${PROMETHEUS_PORT}/prometheus/"
 echo "[compose-up] grafana (local-only by default): http://${OBSERVABILITY_BIND}:${GRAFANA_PORT}/grafana/"
 echo "[compose-up] loki (local-only by default): http://${OBSERVABILITY_BIND}:${LOKI_PORT}/loki/"

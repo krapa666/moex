@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -53,6 +53,11 @@ class AnalystTable(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     analyst_name: Mapped[str] = mapped_column(String(100), nullable=False, default="Аналитик 1")
     year_offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    forecast_start_year: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).year,
+    )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

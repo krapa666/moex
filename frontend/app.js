@@ -8,12 +8,11 @@ const analystNameInput = document.getElementById('analyst-name-input');
 const saveAnalystBtn = document.getElementById('save-analyst-btn');
 const shiftYearBackBtn = document.getElementById('shift-year-back-btn');
 const shiftYearBtn = document.getElementById('shift-year-btn');
+const refreshPricesBtn = document.getElementById('refresh-prices-btn');
 const exportDataBtn = document.getElementById('export-data-btn');
 const importDataBtn = document.getElementById('import-data-btn');
 const importDataFileInput = document.getElementById('import-data-file-input');
 const authUserLabel = document.getElementById('auth-user-label');
-const authLoginBtn = document.getElementById('auth-login-btn');
-const authLogoutBtn = document.getElementById('auth-logout-btn');
 const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
@@ -26,6 +25,8 @@ const headerPriceYear1 = document.getElementById('header-price-year1');
 const headerPriceYear2 = document.getElementById('header-price-year2');
 const headerDividendsYear1 = document.getElementById('header-dividends-year1');
 const headerDividendsYear2 = document.getElementById('header-dividends-year2');
+const headerYear1Group = document.getElementById('header-year1-group');
+const headerYear2Group = document.getElementById('header-year2-group');
 
 const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
   dateStyle: 'short',
@@ -34,6 +35,8 @@ const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
 const saveTimers = new Map();
 const rowDrafts = new Map();
 const dirtyRows = new Set();
+const rowDraftVersions = new Map();
+const rowSaveInFlight = new Map();
 const comparisonCache = new Map();
 let comparisonHoverHideTimer = null;
 let activeComparisonRowId = null;
@@ -47,7 +50,6 @@ const authState = {
   user: null,
 };
 const AUTOSAVE_DELAY_MS = 1800;
-const BASE_FORECAST_YEAR = new Date().getFullYear();
 const RU_TO_EN_LAYOUT_MAP = {
   й: 'q',
   ц: 'w',
@@ -154,7 +156,8 @@ function normalizeTickerInput(value) {
       return char === lower ? mapped : mapped.toUpperCase();
     })
     .join('')
-    .toUpperCase();
+    .toUpperCase()
+    .replace(/[^A-Z0-9._-]/g, '');
 }
 
 function applyTickerInputSizing(input) {
@@ -186,6 +189,18 @@ function formatDate(value) {
   return dateFormatter.format(dt);
 }
 
+function formatPriceUpdated(value) {
+  if (!value) return '—';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.valueOf())) return '—';
+  const ageMinutes = Math.max(0, Math.floor((Date.now() - dt.valueOf()) / 60000));
+  let ageText = 'сейчас';
+  if (ageMinutes >= 24 * 60) ageText = `${Math.floor(ageMinutes / (24 * 60))} дн. назад`;
+  else if (ageMinutes >= 60) ageText = `${Math.floor(ageMinutes / 60)} ч. назад`;
+  else if (ageMinutes >= 1) ageText = `${ageMinutes} мин. назад`;
+  return `${dateFormatter.format(dt)} · ${ageText}`;
+}
+
 function setGlobalStatus(text) {
   if (globalStatus) {
     globalStatus.textContent = text;
@@ -212,21 +227,23 @@ function displayAnalystName(tableNumber, analystName) {
 }
 
 function activeYears() {
-  const offset = activeTable()?.year_offset ?? 0;
+  const startYear = activeTable()?.forecast_start_year ?? new Date().getFullYear();
   return [
-    BASE_FORECAST_YEAR + offset,
-    BASE_FORECAST_YEAR + offset + 1,
+    startYear,
+    startYear + 1,
   ];
 }
 
 function applyYearHeaders() {
   const [y1, y2] = activeYears();
-  if (headerProfitYear1) headerProfitYear1.textContent = `Прогнозная ЧП (${y1}), млрд ₽`;
-  if (headerProfitYear2) headerProfitYear2.textContent = `Прогнозная ЧП (${y2}), млрд ₽`;
-  if (headerPriceYear1) headerPriceYear1.textContent = `Прогнозная цена (${y1}), ₽`;
-  if (headerPriceYear2) headerPriceYear2.textContent = `Прогнозная цена (${y2}), ₽`;
-  if (headerDividendsYear1) headerDividendsYear1.textContent = `Дивиденды (${y1}), ₽/акцию`;
-  if (headerDividendsYear2) headerDividendsYear2.textContent = `Дивиденды (${y2}), ₽/акцию`;
+  if (headerYear1Group) headerYear1Group.textContent = String(y1);
+  if (headerYear2Group) headerYear2Group.textContent = String(y2);
+  if (headerProfitYear1) headerProfitYear1.textContent = 'Прогнозная ЧП, млрд ₽';
+  if (headerProfitYear2) headerProfitYear2.textContent = 'Прогнозная ЧП, млрд ₽';
+  if (headerPriceYear1) headerPriceYear1.textContent = 'Прогнозная цена, ₽';
+  if (headerPriceYear2) headerPriceYear2.textContent = 'Прогнозная цена, ₽';
+  if (headerDividendsYear1) headerDividendsYear1.textContent = 'Остаток дивидендов к выплате, ₽/акцию';
+  if (headerDividendsYear2) headerDividendsYear2.textContent = 'Остаток дивидендов к выплате, ₽/акцию';
 }
 
 function yearKeyByIndex(index) {
@@ -262,7 +279,7 @@ function renderTableSelector() {
   if (deleteTableBtn) {
     deleteTableBtn.disabled = !canEdit || !current || current.table_number === 1;
     deleteTableBtn.title = !canEdit
-      ? 'Требуется вход для редактирования'
+      ? 'Редактирование доступно только из локальной сети'
       : current?.table_number === 1
         ? 'Таблица №1 защищена от удаления'
         : '';
@@ -270,7 +287,7 @@ function renderTableSelector() {
   if (makePrimaryTableBtn) {
     makePrimaryTableBtn.disabled = !canEdit || !current || current.table_number === 1;
     makePrimaryTableBtn.title = !canEdit
-      ? 'Требуется вход для редактирования'
+      ? 'Редактирование доступно только из локальной сети'
       : current?.table_number === 1
         ? 'Эта таблица уже основная'
         : '';
@@ -279,7 +296,7 @@ function renderTableSelector() {
     const isPrimary = current?.table_number === 1;
     addRowBtn.style.display = canEdit && isPrimary ? '' : 'none';
     addRowBtn.disabled = !canEdit || !isPrimary;
-    addRowBtn.title = !canEdit ? 'Требуется вход для редактирования' : isPrimary ? '' : 'Кнопка доступна только в таблице №1';
+    addRowBtn.title = !canEdit ? 'Редактирование доступно только из локальной сети' : isPrimary ? '' : 'Кнопка доступна только в таблице №1';
   }
   applyWriteAccessUi();
   applyYearHeaders();
@@ -326,18 +343,29 @@ async function api(path, options = {}) {
 
 function updateAuthUi() {
   const user = authState.user;
-  const isLoggedIn = Boolean(user);
   if (authUserLabel) {
-    authUserLabel.textContent = isLoggedIn ? `${user.username}${user.is_admin ? ' (админ)' : ''}` : 'Гость (только чтение)';
+    authUserLabel.textContent = user?.is_admin
+      ? 'Локальная сеть · редактирование'
+      : 'Гость · только чтение';
   }
-  if (authLoginBtn) authLoginBtn.hidden = isLoggedIn;
-  if (authLogoutBtn) authLogoutBtn.hidden = true;
   applyWriteAccessUi();
 }
 
 function applyWriteAccessUi() {
   const canEdit = canEditData();
-  [analystNameInput, saveAnalystBtn, addTableBtn, makePrimaryTableBtn, deleteTableBtn, addRowBtn, exportDataBtn, importDataBtn]
+  [
+    analystNameInput,
+    saveAnalystBtn,
+    addTableBtn,
+    makePrimaryTableBtn,
+    deleteTableBtn,
+    shiftYearBackBtn,
+    shiftYearBtn,
+    refreshPricesBtn,
+    addRowBtn,
+    exportDataBtn,
+    importDataBtn,
+  ]
     .forEach((element) => {
       if (!element) return;
       element.hidden = !canEdit;
@@ -409,18 +437,19 @@ function clearInlineComparisonRows({ invalidatePending = true } = {}) {
   activeComparisonRowId = null;
 }
 
-function getComparisonYear(item, index) {
-  return (item.years || [])[index] || null;
+function getComparisonYear(item, year) {
+  return (item.years || []).find((entry) => entry.year === year) || null;
 }
 
 function createInlineComparisonRow(item) {
-  const y1 = getComparisonYear(item, 0);
-  const y2 = getComparisonYear(item, 1);
+  const [activeYear1, activeYear2] = activeYears();
+  const y1 = getComparisonYear(item, activeYear1);
+  const y2 = getComparisonYear(item, activeYear2);
   const priceDecimals = detectDecimals(item.current_price);
   const tr = document.createElement('tr');
   tr.className = 'comparison-inline-row ticker-compare-highlight';
   tr.innerHTML = `
-    <td><input class="ticker-input" value="${item.ticker ?? ''}" disabled /></td>
+    <td><input class="ticker-input" value="${escapeHtml(item.ticker ?? '')}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(item.current_price, priceDecimals)}</span></td>
     <td><input value="${item.shares_billion ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(item.market_cap_billion_rub)}</span></td>
@@ -435,6 +464,51 @@ function createInlineComparisonRow(item) {
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">${escapeHtml(displayAnalystName(item.table_number, item.analyst_name))}</span></td>
+  `;
+  applyTickerInputSizing(tr.querySelector('.ticker-input'));
+  return tr;
+}
+
+function median(values) {
+  const numbers = values
+    .filter((value) => value !== null && value !== undefined && value !== '')
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  if (!numbers.length) return null;
+  const middle = Math.floor(numbers.length / 2);
+  return numbers.length % 2 ? numbers[middle] : (numbers[middle - 1] + numbers[middle]) / 2;
+}
+
+function medianComparisonYear(items, year, field) {
+  return median(
+    items
+      .map((item) => getComparisonYear(item, year)?.[field])
+      .filter((value) => value !== null && value !== undefined),
+  );
+}
+
+function createConsensusComparisonRow(items, ticker) {
+  const [year1, year2] = activeYears();
+  const priceDecimals = detectDecimals(median(items.map((item) => item.current_price)));
+  const tr = document.createElement('tr');
+  tr.className = 'comparison-inline-row consensus-row';
+  tr.innerHTML = `
+    <td><input class="ticker-input" value="${escapeHtml(ticker)}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(median(items.map((item) => item.current_price)), priceDecimals)}</span></td>
+    <td><input value="${median(items.map((item) => item.shares_billion)) ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(median(items.map((item) => item.market_cap_billion_rub)))}</span></td>
+    <td><input value="${median(items.map((item) => item.pe_avg_5y)) ?? ''}" disabled /></td>
+    <td><input value="${medianComparisonYear(items, year1, 'forecast_profit_billion_rub') ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(medianComparisonYear(items, year1, 'forecast_price'), priceDecimals)}</span></td>
+    <td><input value="${medianComparisonYear(items, year1, 'dividends_per_share') ?? ''}" disabled /></td>
+    <td class="readonly-cell ${upsideClass(medianComparisonYear(items, year1, 'upside_percent'), { isNearTerm: true })}">${formatPercent(medianComparisonYear(items, year1, 'upside_percent'))}</td>
+    <td><input value="${medianComparisonYear(items, year2, 'forecast_profit_billion_rub') ?? ''}" disabled /></td>
+    <td class="readonly-cell"><span>${formatCurrency(medianComparisonYear(items, year2, 'forecast_price'), priceDecimals)}</span></td>
+    <td><input value="${medianComparisonYear(items, year2, 'dividends_per_share') ?? ''}" disabled /></td>
+    <td class="readonly-cell ${upsideClass(medianComparisonYear(items, year2, 'upside_percent'))}">${formatPercent(medianComparisonYear(items, year2, 'upside_percent'))}</td>
+    <td class="readonly-cell">—</td>
+    <td><span class="comparison-source">Медиана (${items.length})</span></td>
   `;
   applyTickerInputSizing(tr.querySelector('.ticker-input'));
   return tr;
@@ -491,7 +565,7 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
 
   const current = activeTable();
   const currentTableName = current
-    ? escapeHtml(displayAnalystName(current.table_number, current.analyst_name))
+    ? displayAnalystName(current.table_number, current.analyst_name)
     : 'Текущая таблица';
   const actionCell = anchorTr.lastElementChild;
   const deleteBtn = actionCell?.querySelector('.row-delete-btn');
@@ -523,13 +597,17 @@ async function showInlineComparisonRows(anchorTr, ticker, rowId) {
     insertAfter.insertAdjacentElement('afterend', row);
     insertAfter = row;
   });
+  if ((items || []).length >= 2) {
+    const consensusRow = createConsensusComparisonRow(items, normalizedTicker);
+    insertAfter.insertAdjacentElement('afterend', consensusRow);
+  }
 }
 
 function rowToPayload(row) {
   const profitMap = row.net_profit_year_map || {};
   const dividendMap = row.dividend_year_map || {};
   return {
-    table_id: appState.activeTableId,
+    table_id: row.table_id ?? appState.activeTableId,
     ticker: row.ticker || '',
     shares_billion: parseInputNumber(row.shares_billion),
     pe_avg_5y: parseInputNumber(row.pe_avg_5y),
@@ -539,7 +617,15 @@ function rowToPayload(row) {
     dividends_year1: parseInputNumber(dividendMap[yearKeyByIndex(0)]),
     dividends_year2: parseInputNumber(dividendMap[yearKeyByIndex(1)]),
     dividend_year_map: dividendMap,
+    net_profit_source_comment: row.net_profit_source_comment || null,
   };
+}
+
+function setRowSaveStatus(tr, text, isError = false) {
+  const status = tr?.querySelector('[data-cell="row_save_status"]');
+  if (!status) return;
+  status.textContent = text;
+  status.classList.toggle('save-error', isError);
 }
 
 function updateCalculatedCells(tr, row) {
@@ -562,25 +648,55 @@ function updateCalculatedCells(tr, row) {
   setCellText('forecast_price_year2', formatCurrency(row.forecast_price_year2, priceDecimals));
   setUpsideCell('upside_year1', row.upside_percent_year1, { isNearTerm: true });
   setUpsideCell('upside_year2', row.upside_percent_year2);
-  setCellText('price_updated_at', formatDate(row.price_updated_at));
+  setCellText('price_updated_at', formatPriceUpdated(row.price_updated_at));
 }
 
 async function saveRowChanges(row, tr, { force = false } = {}) {
   if (!force && !dirtyRows.has(row.id)) return;
+  const existingSave = rowSaveInFlight.get(row.id);
+  if (existingSave) {
+    await existingSave;
+    if (dirtyRows.has(row.id)) {
+      return saveRowChanges(row, tr, { force });
+    }
+    return;
+  }
+
   const draft = rowDrafts.get(row.id) || row;
-  const savedRow = await api(`/api/rows/${row.id}`, {
+  const draftVersion = rowDraftVersions.get(row.id) || 0;
+  setRowSaveStatus(tr, 'Сохраняется…');
+
+  const operation = api(`/api/rows/${row.id}`, {
     method: 'PUT',
     body: JSON.stringify(rowToPayload(draft)),
   });
-  Object.assign(row, savedRow);
-  rowDrafts.set(row.id, { ...savedRow });
-  dirtyRows.delete(row.id);
+  rowSaveInFlight.set(row.id, operation);
 
-  if (!isEditingInput()) {
-    await loadRows();
-  } else {
+  try {
+    const savedRow = await operation;
+    Object.assign(row, savedRow);
+    if ((rowDraftVersions.get(row.id) || 0) === draftVersion) {
+      rowDrafts.set(row.id, { ...savedRow });
+      dirtyRows.delete(row.id);
+      setRowSaveStatus(tr, 'Сохранено');
+    } else {
+      setRowSaveStatus(tr, 'Есть новые изменения');
+    }
     updateCalculatedCells(tr, row);
     setGlobalStatus('Изменения сохранены');
+  } finally {
+    if (rowSaveInFlight.get(row.id) === operation) {
+      rowSaveInFlight.delete(row.id);
+    }
+  }
+}
+
+async function waitForPendingSaves() {
+  if (rowSaveInFlight.size) {
+    await Promise.allSettled([...rowSaveInFlight.values()]);
+  }
+  if (dirtyRows.size) {
+    throw new Error('Есть несохранённые изменения. Дождитесь завершения автосохранения.');
   }
 }
 
@@ -611,8 +727,8 @@ function updateSortIndicators() {
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
-    { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Upside (${year1}), %` },
-    { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Upside (${year2}), %` },
+    { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Доходность (${year1}), %` },
+    { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Доходность (${year2}), %` },
   ];
 
   sortableHeaders.forEach(({ element, key, label }) => {
@@ -632,6 +748,9 @@ function renderRows(rows) {
   tbody.innerHTML = '';
 
   sortedRows.forEach((row) => {
+    if (!dirtyRows.has(row.id) && !rowSaveInFlight.has(row.id)) {
+      rowDrafts.set(row.id, { ...row });
+    }
     const priceDecimals = detectDecimals(row.current_price);
     const sharedFieldsEditable = row.shared_fields_editable !== false;
     const lockSharedFields = !canEdit || !isPrimaryTable || !sharedFieldsEditable;
@@ -639,23 +758,26 @@ function renderRows(rows) {
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td><input class="ticker-input" data-field="ticker" value="${row.ticker ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell"><span data-cell="current_price">${formatCurrency(row.current_price, priceDecimals)}</span></td>
+      <td class="sticky-col-1"><input class="ticker-input" data-field="ticker" value="${escapeHtml(row.ticker ?? '')}" ${lockSharedFields ? 'readonly' : ''} /></td>
+      <td class="readonly-cell sticky-col-2"><span data-cell="current_price">${formatCurrency(row.current_price, priceDecimals)}</span></td>
       <td><input data-field="shares_billion" value="${row.shares_billion ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="market_cap">${formatCurrency(row.market_cap_billion_rub)}</span></td>
       <td><input data-field="pe_avg_5y" value="${row.pe_avg_5y ?? ''}" ${lockSharedFields ? 'readonly' : ''} /></td>
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td><input data-field="dividends_year1" value="${mapDividendsByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year1, { isNearTerm: true })}" data-cell="upside_year1">${formatPercent(row.upside_percent_year1)}</td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year1, { isNearTerm: true })}" data-cell="upside_year1" title="Доходность от текущей цены с учётом всех оставшихся дивидендов до выбранного года">${formatPercent(row.upside_percent_year1)}</td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td><input data-field="dividends_year2" value="${mapDividendsByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
-      <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2">${formatPercent(row.upside_percent_year2)}</td>
-      <td class="readonly-cell"><span data-cell="price_updated_at">${formatDate(row.price_updated_at)}</span></td>
+      <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2" title="Доходность от текущей цены с учётом всех оставшихся дивидендов до выбранного года">${formatPercent(row.upside_percent_year2)}</td>
+      <td class="readonly-cell"><span data-cell="price_updated_at">${formatPriceUpdated(row.price_updated_at)}</span></td>
       <td>
-        <button data-action="delete" class="btn-danger row-delete-btn" ${canEdit && isPrimaryTable ? '' : 'disabled title="Удалять строки можно только из таблицы №1 авторизованным пользователем"'}>Удалить</button>
-        ${row.status_message ? `<div class="status-error">${row.status_message}</div>` : ''}
+        <button data-action="delete" class="btn-danger row-delete-btn" ${canEdit && isPrimaryTable ? '' : 'disabled title="Удалять строки можно только из таблицы №1 из локальной сети"'}>Удалить</button>
+        ${canEdit ? '<button data-action="comment" class="btn-note">Заметка</button>' : ''}
+        <div class="row-save-status" data-cell="row_save_status"></div>
+        ${row.net_profit_source_comment ? `<div class="source-note" data-cell="source_note">${escapeHtml(row.net_profit_source_comment)}</div>` : '<div class="source-note" data-cell="source_note"></div>'}
+        ${row.status_message ? `<div class="status-error">${escapeHtml(row.status_message)}</div>` : ''}
       </td>
     `;
 
@@ -699,6 +821,8 @@ function renderRows(rows) {
         }
         rowDrafts.set(row.id, updated);
         dirtyRows.add(row.id);
+        rowDraftVersions.set(row.id, (rowDraftVersions.get(row.id) || 0) + 1);
+        setRowSaveStatus(tr, 'Не сохранено');
 
         if (saveTimers.has(row.id)) {
           clearTimeout(saveTimers.get(row.id));
@@ -707,7 +831,8 @@ function renderRows(rows) {
           try {
             await saveRowChanges(row, tr);
           } catch (err) {
-            alert(err.message);
+            setRowSaveStatus(tr, 'Ошибка сохранения', true);
+            setGlobalStatus(err.message);
           }
         }, AUTOSAVE_DELAY_MS));
       });
@@ -720,7 +845,8 @@ function renderRows(rows) {
         try {
           await saveRowChanges(row, tr, { force: false });
         } catch (err) {
-          alert(err.message);
+          setRowSaveStatus(tr, 'Ошибка сохранения', true);
+          setGlobalStatus(err.message);
         }
       });
     });
@@ -738,7 +864,7 @@ function renderRows(rows) {
 
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       if (!canEditData()) {
-        alert('Требуется вход для удаления строк.');
+        alert('Удаление доступно только из локальной сети.');
         return;
       }
       if (!isPrimaryActiveTable()) {
@@ -753,33 +879,52 @@ function renderRows(rows) {
       }
     });
 
+    tr.querySelector('[data-action="comment"]')?.addEventListener('click', async () => {
+      const draft = rowDrafts.get(row.id) || row;
+      const nextValue = prompt(
+        'Источник / комментарий к прогнозу:',
+        draft.net_profit_source_comment || '',
+      );
+      if (nextValue === null) return;
+      const updated = {
+        ...draft,
+        net_profit_source_comment: nextValue.trim() || null,
+      };
+      rowDrafts.set(row.id, updated);
+      dirtyRows.add(row.id);
+      rowDraftVersions.set(row.id, (rowDraftVersions.get(row.id) || 0) + 1);
+      const note = tr.querySelector('[data-cell="source_note"]');
+      if (note) note.textContent = updated.net_profit_source_comment || '';
+      try {
+        await saveRowChanges(row, tr);
+      } catch (err) {
+        setRowSaveStatus(tr, 'Ошибка сохранения', true);
+        setGlobalStatus(err.message);
+      }
+    });
+
     tbody.appendChild(tr);
   });
 }
-
-tbody.addEventListener('focusout', () => {
-  setTimeout(() => {
-    if (!isEditingInput()) {
-      loadRows().catch((err) => {
-        console.error(err);
-        setGlobalStatus('Ошибка загрузки');
-      });
-    }
-  }, 0);
-});
 
 document.addEventListener('click', clearInlineComparisonRows, true);
 window.addEventListener('blur', clearInlineComparisonRows);
 
 tableSelect?.addEventListener('change', async () => {
-  appState.activeTableId = Number(tableSelect.value);
-  renderTableSelector();
-  await loadRows();
+  try {
+    await waitForPendingSaves();
+    appState.activeTableId = Number(tableSelect.value);
+    renderTableSelector();
+    await loadRows();
+  } catch (err) {
+    renderTableSelector();
+    setGlobalStatus(err.message);
+  }
 });
 
 saveAnalystBtn?.addEventListener('click', async () => {
   if (!canEditData()) {
-    alert('Требуется вход для редактирования.');
+    alert('Редактирование доступно только из локальной сети.');
     return;
   }
   const current = activeTable();
@@ -796,7 +941,7 @@ saveAnalystBtn?.addEventListener('click', async () => {
 
 addTableBtn?.addEventListener('click', async () => {
   if (!canEditData()) {
-    alert('Требуется вход для редактирования.');
+    alert('Редактирование доступно только из локальной сети.');
     return;
   }
   const desiredName = prompt('Введите имя аналитика для новой таблицы');
@@ -813,7 +958,7 @@ addTableBtn?.addEventListener('click', async () => {
 
 makePrimaryTableBtn?.addEventListener('click', async () => {
   if (!canEditData()) {
-    alert('Требуется вход для редактирования.');
+    alert('Редактирование доступно только из локальной сети.');
     return;
   }
   const current = activeTable();
@@ -827,7 +972,7 @@ makePrimaryTableBtn?.addEventListener('click', async () => {
 
 deleteTableBtn?.addEventListener('click', async () => {
   if (!canEditData()) {
-    alert('Требуется вход для редактирования.');
+    alert('Редактирование доступно только из локальной сети.');
     return;
   }
   const current = activeTable();
@@ -846,30 +991,49 @@ deleteTableBtn?.addEventListener('click', async () => {
 });
 
 shiftYearBtn?.addEventListener('click', async () => {
+  if (!canEditData()) return;
   const current = activeTable();
   if (!current) return;
+  await waitForPendingSaves();
   await api(`/api/tables/${current.id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ year_offset: (current.year_offset ?? 0) + 1 }),
+    body: JSON.stringify({ forecast_start_year: current.forecast_start_year + 1 }),
   });
   await loadTables();
   await loadRows();
 });
 
 shiftYearBackBtn?.addEventListener('click', async () => {
+  if (!canEditData()) return;
   const current = activeTable();
   if (!current) return;
+  await waitForPendingSaves();
   await api(`/api/tables/${current.id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ year_offset: (current.year_offset ?? 0) - 1 }),
+    body: JSON.stringify({ forecast_start_year: current.forecast_start_year - 1 }),
   });
   await loadTables();
   await loadRows();
 });
 
+refreshPricesBtn?.addEventListener('click', async () => {
+  if (!canEditData() || !appState.activeTableId) return;
+  try {
+    await waitForPendingSaves();
+    setGlobalStatus('Обновляем котировки MOEX…');
+    const rows = await api(`/api/rows/refresh?table_id=${appState.activeTableId}`, {
+      method: 'POST',
+    });
+    renderRows(rows);
+    setGlobalStatus(`Котировки обновлены: ${new Date().toLocaleTimeString('ru-RU')}`);
+  } catch (err) {
+    setGlobalStatus(err.message);
+  }
+});
+
 addRowBtn.addEventListener('click', async () => {
   if (!canEditData()) {
-    alert('Требуется вход для редактирования.');
+    alert('Редактирование доступно только из локальной сети.');
     return;
   }
   if (!isPrimaryActiveTable()) {
@@ -894,32 +1058,6 @@ addRowBtn.addEventListener('click', async () => {
   } catch (err) {
     alert(err.message);
   }
-});
-
-authLoginBtn?.addEventListener('click', async () => {
-  alert('Вход по логину/паролю отключён. Доступ определяется вашей сетью.');
-  return;
-
-  const username = prompt('Логин:');
-  if (!username) return;
-  const password = prompt('Пароль:');
-  if (!password) return;
-  try {
-    const response = await api('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
-    authState.user = response.user;
-    updateAuthUi();
-    await loadRows();
-    alert(`Вход выполнен: ${response.user.username}`);
-  } catch (err) {
-    alert(err.message);
-  }
-});
-
-authLogoutBtn?.addEventListener('click', () => {
-  alert('Выход не требуется: права определяются по сети доступа.');
 });
 
 exportDataBtn?.addEventListener('click', async () => {
@@ -948,7 +1086,7 @@ exportDataBtn?.addEventListener('click', async () => {
 
 importDataBtn?.addEventListener('click', async () => {
   if (!canEditData()) {
-    alert('Требуется вход для импорта.');
+    alert('Импорт доступен только из локальной сети.');
     return;
   }
   importDataFileInput?.click();

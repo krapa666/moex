@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - secret.yaml
   - postgres-pvc.yaml
+  - monitoring-pvcs.yaml
   - postgres.yaml
   - backend.yaml
   - frontend.yaml

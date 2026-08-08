@@ -5,9 +5,8 @@ Revises: 0010_remaining_dividends
 Create Date: 2026-04-28
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "0011_dividend_year_maps"
 down_revision = "0010_remaining_dividends"

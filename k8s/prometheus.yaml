@@ -49,6 +49,8 @@ spec:
             - name: config
               mountPath: /etc/prometheus/prometheus.yml
               subPath: prometheus.yml
+            - name: data
+              mountPath: /prometheus
           readinessProbe:
             httpGet:
               path: /prometheus/-/ready
@@ -65,6 +67,9 @@ spec:
         - name: config
           configMap:
             name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
 ---
 apiVersion: v1
 kind: Service

@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from app.models import StockRow
 from app.services import refresh_row_price
 
@@ -23,7 +22,7 @@ async def test_refresh_row_price_keeps_recent_last_price_when_moex_unavailable(m
 
 
 @pytest.mark.asyncio
-async def test_refresh_row_price_clears_too_old_price_when_moex_unavailable(monkeypatch):
+async def test_refresh_row_price_keeps_too_old_price_with_explicit_warning(monkeypatch):
     row = StockRow(ticker="SBER", current_price=250.0)
     row.price_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
 
@@ -34,5 +33,5 @@ async def test_refresh_row_price_clears_too_old_price_when_moex_unavailable(monk
 
     await refresh_row_price(row, force=True)
 
-    assert row.current_price is None
-    assert row.status_message == "Не удалось получить цену от MOEX ISS"
+    assert row.current_price == 250.0
+    assert row.status_message == "MOEX недоступна, сохранённая цена устарела более чем на 24 часа"
