@@ -5,9 +5,8 @@ Revises: 0009_add_dividend_columns
 Create Date: 2026-04-24
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "0010_remaining_dividends"
 down_revision = "0009_add_dividend_columns"

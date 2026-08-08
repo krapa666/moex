@@ -15,6 +15,7 @@ LOKI_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-loki-port-forward.pid"
 LOKI_PORT_FORWARD_LOG_FILE="/tmp/moex-k8s-loki-port-forward.log"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
+RESTORE_SYNC_SNAPSHOT="${MOEX_RESTORE_SYNC_SNAPSHOT:-auto}"
 STEP=0
 
 while [[ $# -gt 0 ]]; do
@@ -122,6 +123,22 @@ import_snapshot_into_k8s_db() {
     return
   fi
 
+  local relation=""
+  local row_count="0"
+  relation="$(kubectl -n "${NAMESPACE}" exec "${pg_pod}" -- psql -Atq -U postgres -d fair_price -c "SELECT to_regclass('public.analyst_tables')" 2>/dev/null || true)"
+  if [[ -n "${relation}" ]]; then
+    row_count="$(kubectl -n "${NAMESPACE}" exec "${pg_pod}" -- psql -Atq -U postgres -d fair_price -c "SELECT COUNT(*) FROM analyst_tables" 2>/dev/null || echo 0)"
+  fi
+  if [[ "${RESTORE_SYNC_SNAPSHOT}" == "auto" && "${row_count:-0}" -gt 0 ]]; then
+    echo "[minikube-up] existing application data found; automatic snapshot restore skipped"
+    echo "[minikube-up] set MOEX_RESTORE_SYNC_SNAPSHOT=force only for an intentional restore"
+    return
+  fi
+  if [[ "${RESTORE_SYNC_SNAPSHOT}" != "auto" && "${RESTORE_SYNC_SNAPSHOT}" != "force" ]]; then
+    echo "[minikube-up] snapshot restore disabled (MOEX_RESTORE_SYNC_SNAPSHOT=${RESTORE_SYNC_SNAPSHOT})"
+    return
+  fi
+
   echo "[minikube-up] importing shared snapshot into k8s postgres (${pg_pod})..."
   if gunzip -c "${SYNC_BACKUP_FILE}" | kubectl -n "${NAMESPACE}" exec -i "${pg_pod}" -- psql -v ON_ERROR_STOP=1 -U postgres -d fair_price >/dev/null; then
     echo "[minikube-up] snapshot import completed"
@@ -166,11 +183,18 @@ docker build -t "${BACKEND_IMAGE}" backend
 log_step "building frontend image: ${FRONTEND_IMAGE}"
 docker build -t "${FRONTEND_IMAGE}" frontend
 
-log_step "applying core manifests (without ingress)"
+log_step "applying PostgreSQL manifests"
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/secret.yaml
 kubectl apply -f k8s/postgres-pvc.yaml
+kubectl apply -f k8s/monitoring-pvcs.yaml
 kubectl apply -f k8s/postgres.yaml
+
+log_step "waiting for PostgreSQL and restoring snapshot only when safe"
+kubectl -n "${NAMESPACE}" rollout status deploy/postgres --timeout=180s
+import_snapshot_into_k8s_db
+
+log_step "applying application and monitoring manifests"
 kubectl apply -f k8s/backend.yaml
 kubectl apply -f k8s/frontend.yaml
 kubectl apply -f k8s/prometheus.yaml
@@ -180,9 +204,7 @@ kubectl apply -f k8s/grafana.yaml
 log_step "applying ingress"
 kubectl apply -f k8s/ingress.yaml
 
-log_step "waiting for deployments and importing snapshot"
-kubectl -n "${NAMESPACE}" rollout status deploy/postgres --timeout=180s
-import_snapshot_into_k8s_db
+log_step "waiting for application deployments"
 kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/prometheus --timeout=180s

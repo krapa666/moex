@@ -5,9 +5,8 @@ Revises: 0002_three_year_forecast
 Create Date: 2026-03-30
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0003_net_profit_source"

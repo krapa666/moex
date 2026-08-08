@@ -125,6 +125,8 @@ spec:
             - name: dashboards-json
               mountPath: /etc/grafana/provisioning/dashboards-json/moex-home-and-app-overview.json
               subPath: moex-home-and-app-overview.json
+            - name: data
+              mountPath: /var/lib/grafana
           readinessProbe:
             httpGet:
               path: /api/health
@@ -141,6 +143,9 @@ spec:
         - name: dashboards-json
           configMap:
             name: grafana-dashboard-moex
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
 ---
 apiVersion: v1
 kind: Service

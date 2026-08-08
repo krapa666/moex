@@ -11,7 +11,7 @@
       <header class="header">
         <div>
           <h1>Оценка справедливой цены акций (MOEX)</h1>
-          <p class="subtitle">Динамическая таблица оценки с прогнозом на 4 года.</p>
+          <p class="subtitle">Двухлетняя оценка полной доходности от текущей цены с учётом будущих дивидендов.</p>
         </div>
         <div class="toolbar">
           <span class="status-pill" id="global-status">Инициализация...</span>
@@ -24,14 +24,12 @@
           <button class="btn btn-danger" id="delete-table-btn">Удалить таблицу</button>
           <button class="btn" id="shift-year-back-btn">Сдвиг -1 год</button>
           <button class="btn" id="shift-year-btn">Сдвиг +1 год</button>
+          <button class="btn" id="refresh-prices-btn">Обновить цены</button>
           <button class="btn btn-primary" id="add-row-btn">Добавить строку</button>
           <button class="btn" id="export-data-btn">Выгрузить БД</button>
           <button class="btn" id="import-data-btn">Загрузить в БД</button>
           <input id="import-data-file-input" type="file" accept="application/json,.json" hidden />
           <span class="auth-user" id="auth-user-label">Гость</span>
-          <button class="btn" id="auth-login-btn">Войти</button>
-          
-          <button class="btn btn-danger" id="auth-logout-btn" hidden>Выйти</button>
         </div>
       </header>
 
@@ -39,22 +37,26 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th><button class="th-sort" id="sort-ticker" data-sort="ticker">Тикер ⇅</button></th>
-                <th>Текущая цена, ₽</th>
-                <th>Кол-во акций, млрд шт</th>
-                <th><button class="th-sort" id="sort-market-cap" data-sort="market_cap_billion_rub">Капитализация, млрд ₽ ⇅</button></th>
-                <th>Средний P/E (5 лет)</th>
-                <th id="header-profit-year1">Прогнозная ЧП (2026), млрд ₽</th>
-                <th id="header-price-year1">Прогнозная цена (2026), ₽</th>
-                <th id="header-dividends-year1">Дивиденды (2026), ₽/акцию</th>
-                <th><button class="th-sort" id="sort-upside-year1" data-sort="upside_percent_year1">Upside (2026), % ⇅</button></th>
-                <th id="header-profit-year2">Прогнозная ЧП (2027), млрд ₽</th>
-                <th id="header-price-year2">Прогнозная цена (2027), ₽</th>
-                <th id="header-dividends-year2">Дивиденды (2027), ₽/акцию</th>
-                <th><button class="th-sort" id="sort-upside-year2" data-sort="upside_percent_year2">Upside (2027), % ⇅</button></th>
-                <th>Обновлено</th>
-                <th>Действия</th>
+              <tr class="year-group-row">
+                <th rowspan="2" class="sticky-col-1"><button class="th-sort" id="sort-ticker" data-sort="ticker">Тикер ⇅</button></th>
+                <th rowspan="2" class="sticky-col-2">Текущая цена, ₽</th>
+                <th rowspan="2">Кол-во акций, млрд шт</th>
+                <th rowspan="2"><button class="th-sort" id="sort-market-cap" data-sort="market_cap_billion_rub">Капитализация, млрд ₽ ⇅</button></th>
+                <th rowspan="2">Средний P/E (5 лет)</th>
+                <th colspan="4" class="forecast-year-group" id="header-year1-group">2026</th>
+                <th colspan="4" class="forecast-year-group" id="header-year2-group">2027</th>
+                <th rowspan="2">Котировка обновлена</th>
+                <th rowspan="2">Действия</th>
+              </tr>
+              <tr class="year-columns-row">
+                <th id="header-profit-year1">Прогнозная ЧП, млрд ₽</th>
+                <th id="header-price-year1">Прогнозная цена, ₽</th>
+                <th id="header-dividends-year1">Остаток дивидендов к выплате, ₽/акцию</th>
+                <th><button class="th-sort" id="sort-upside-year1" data-sort="upside_percent_year1">Доходность, % ⇅</button></th>
+                <th id="header-profit-year2">Прогнозная ЧП, млрд ₽</th>
+                <th id="header-price-year2">Прогнозная цена, ₽</th>
+                <th id="header-dividends-year2">Остаток дивидендов к выплате, ₽/акцию</th>
+                <th><button class="th-sort" id="sort-upside-year2" data-sort="upside_percent_year2">Доходность, % ⇅</button></th>
               </tr>
             </thead>
             <tbody id="rows-table-body"></tbody>

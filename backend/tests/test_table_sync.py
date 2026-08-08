@@ -1,18 +1,22 @@
 import pytest
 from app.main import (
-    BASE_FORECAST_YEAR,
     apply_net_profit_projection,
     build_database_snapshot,
+    current_calendar_year,
     delete_row,
     ensure_primary_table_for_row_mutation,
     import_database_snapshot,
     is_shared_fields_editable_for_table,
+    merge_payload_profit_map,
     sync_row_to_other_tables,
 )
 from app.models import AnalystTable, Base, StockRow
+from app.schemas import StockRowUpdate
 from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+
+CURRENT_YEAR = current_calendar_year()
 
 
 def test_sync_row_to_other_tables_copies_shared_fields_without_net_profit() -> None:
@@ -22,7 +26,11 @@ def test_sync_row_to_other_tables_copies_shared_fields_without_net_profit() -> N
     with Session(engine) as db:
         table1 = AnalystTable(analyst_name="Аналитик 1", year_offset=0)
         table2 = AnalystTable(analyst_name="Аналитик 2", year_offset=0)
-        table3 = AnalystTable(analyst_name="Аналитик 3", year_offset=1)
+        table3 = AnalystTable(
+            analyst_name="Аналитик 3",
+            year_offset=1,
+            forecast_start_year=CURRENT_YEAR + 1,
+        )
         db.add_all([table1, table2, table3])
         db.commit()
         db.refresh(table1)
@@ -132,7 +140,12 @@ def test_export_and_import_database_snapshot() -> None:
 
     with Session(engine) as db:
         table1 = AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1)
-        table2 = AnalystTable(analyst_name="Аналитик 2", year_offset=1, sort_order=2)
+        table2 = AnalystTable(
+            analyst_name="Аналитик 2",
+            year_offset=1,
+            forecast_start_year=CURRENT_YEAR + 1,
+            sort_order=2,
+        )
         db.add_all([table1, table2])
         db.commit()
         db.refresh(table1)
@@ -159,12 +172,14 @@ def test_export_and_import_database_snapshot() -> None:
 
         tickers = [row.ticker for row in db.scalars(select(StockRow).order_by(StockRow.ticker.asc())).all()]
         assert tickers == ["GAZP", "SBER"]
+        imported_tables = db.scalars(select(AnalystTable).order_by(AnalystTable.sort_order.asc())).all()
+        assert imported_tables[1].forecast_start_year == CURRENT_YEAR + 1
 
 
 def test_projection_keeps_dividends_bound_to_calendar_year_when_years_shift() -> None:
-    first_year = str(BASE_FORECAST_YEAR)
-    second_year = str(BASE_FORECAST_YEAR + 1)
-    third_year = str(BASE_FORECAST_YEAR + 2)
+    first_year = str(CURRENT_YEAR)
+    second_year = str(CURRENT_YEAR + 1)
+    third_year = str(CURRENT_YEAR + 2)
     row = StockRow(
         ticker="SBER",
         current_price=300.0,
@@ -174,11 +189,11 @@ def test_projection_keeps_dividends_bound_to_calendar_year_when_years_shift() ->
         dividend_year_map={first_year: 20.0, second_year: 30.0, third_year: 40.0},
     )
 
-    apply_net_profit_projection(row, 0)
+    apply_net_profit_projection(row, CURRENT_YEAR)
     assert row.dividends_year1 == 20.0
     assert row.dividends_year2 == 30.0
 
-    apply_net_profit_projection(row, 1)
+    apply_net_profit_projection(row, CURRENT_YEAR + 1)
     assert row.dividends_year1 == 30.0
     assert row.dividends_year2 == 40.0
     assert row.forecast_price_year1 == 350.0
@@ -197,9 +212,29 @@ def test_projection_backfills_legacy_dividend_columns_into_year_map() -> None:
         dividend_year_map=None,
     )
 
-    apply_net_profit_projection(row, 0)
+    apply_net_profit_projection(row, CURRENT_YEAR)
 
     assert row.dividend_year_map == {
-        str(BASE_FORECAST_YEAR): 20.0,
-        str(BASE_FORECAST_YEAR + 1): 30.0,
+        str(CURRENT_YEAR): 20.0,
+        str(CURRENT_YEAR + 1): 30.0,
     }
+
+
+def test_visible_profit_edit_does_not_erase_hidden_future_year() -> None:
+    payload = StockRowUpdate(
+        table_id=1,
+        ticker="SBER",
+        forecast_profit_year1_billion_rub=1_200.0,
+        forecast_profit_year2_billion_rub=1_400.0,
+        net_profit_year_map={
+            str(CURRENT_YEAR): 1_100.0,
+            str(CURRENT_YEAR + 1): 1_300.0,
+            str(CURRENT_YEAR + 2): 1_500.0,
+        },
+    )
+
+    merged = merge_payload_profit_map(payload, CURRENT_YEAR)
+
+    assert merged[str(CURRENT_YEAR)] == 1_200.0
+    assert merged[str(CURRENT_YEAR + 1)] == 1_400.0
+    assert merged[str(CURRENT_YEAR + 2)] == 1_500.0

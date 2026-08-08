@@ -1,45 +1,51 @@
 import asyncio
 import contextlib
-import hashlib
-import hmac
 import json
-import os
-import secrets
+import logging
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-import ipaddress
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session, load_only
 
 from .calculations import recalculate_fields
 from .database import SessionLocal, get_db
-from .models import AnalystTable, StockRow, User, UserSession
+from .models import AnalystTable, StockRow
 from .schemas import (
     AnalystTableCreate,
     AnalystTableRead,
     AnalystTableUpdate,
-    AuthLoginRequest,
-    AuthLoginResponse,
-    AuthRegisterRequest,
     DataTransferResult,
     StockRowCreate,
     StockRowRead,
     StockRowUpdate,
     TickerComparisonItem,
     TickerComparisonYear,
-    UserRead,
 )
 from .services import refresh_all_prices, refresh_row_price
 
-app = FastAPI(title="MOEX Fair Price", version="1.0.0")
+logger = logging.getLogger(__name__)
 price_refresh_task: asyncio.Task | None = None
 BACKGROUND_REFRESH_SECONDS = 10 * 60
-BASE_FORECAST_YEAR = datetime.now(timezone.utc).year
-SESSION_TTL_HOURS = 24
+MAX_IMPORT_BYTES = 20 * 1024 * 1024
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global price_refresh_task
+    price_refresh_task = asyncio.create_task(periodic_price_refresh())
+    try:
+        yield
+    finally:
+        price_refresh_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await price_refresh_task
+
+
+app = FastAPI(title="MOEX Fair Price", version="1.1.0", lifespan=lifespan)
 
 
 @dataclass
@@ -47,45 +53,33 @@ class AccessPrincipal:
     username: str
     is_admin: bool
 
+
+def current_calendar_year() -> int:
+    return datetime.now(timezone.utc).year
+
+
 sort_order_schema_ready = False
 sort_order_supported = True
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    db = SessionLocal()
-    try:
-        ensure_admin_user(db)
-    finally:
-        db.close()
-    global price_refresh_task
-    price_refresh_task = asyncio.create_task(periodic_price_refresh())
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    global price_refresh_task
-    if price_refresh_task:
-        price_refresh_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await price_refresh_task
-
 
 async def periodic_price_refresh() -> None:
     while True:
         db = SessionLocal()
         try:
-            await refresh_all_prices(db, force=True)
+            rows = await refresh_all_prices(db, force=True)
+            tables = {table.id: table for table in get_tables_ordered(db)}
+            for row in rows:
+                table = tables.get(row.table_id)
+                if table is not None:
+                    apply_net_profit_projection(row, table.forecast_start_year)
+            db.commit()
+        except asyncio.CancelledError:
+            db.rollback()
+            raise
+        except Exception:
+            db.rollback()
+            logger.exception("Background MOEX price refresh failed; retrying on the next cycle")
         finally:
             db.close()
         await asyncio.sleep(BACKGROUND_REFRESH_SECONDS)
@@ -103,6 +97,7 @@ def ensure_default_table(db: Session) -> None:
                     AnalystTable.id,
                     AnalystTable.analyst_name,
                     AnalystTable.year_offset,
+                    AnalystTable.forecast_start_year,
                     AnalystTable.created_at,
                 )
             )
@@ -110,7 +105,14 @@ def ensure_default_table(db: Session) -> None:
             .limit(1)
         ).first()
     if first_table is None:
-        db.add(AnalystTable(analyst_name="Аналитик 1", year_offset=0, sort_order=1))
+        db.add(
+            AnalystTable(
+                analyst_name="Аналитик 1",
+                year_offset=0,
+                forecast_start_year=current_calendar_year(),
+                sort_order=1,
+            )
+        )
         db.commit()
 
 
@@ -145,6 +147,7 @@ def get_table_or_404(db: Session, table_id: int) -> AnalystTable:
                     AnalystTable.id,
                     AnalystTable.analyst_name,
                     AnalystTable.year_offset,
+                    AnalystTable.forecast_start_year,
                     AnalystTable.created_at,
                 )
             )
@@ -167,6 +170,7 @@ def get_tables_ordered(db: Session) -> list[AnalystTable]:
                 AnalystTable.id,
                 AnalystTable.analyst_name,
                 AnalystTable.year_offset,
+                AnalystTable.forecast_start_year,
                 AnalystTable.created_at,
             )
         )
@@ -192,48 +196,13 @@ def ensure_primary_table_for_row_mutation(db: Session, table_id: int) -> None:
         )
 
 
-def hash_password(password: str) -> str:
-    salt = os.getenv("AUTH_PASSWORD_SALT", "moex-dev-salt").encode("utf-8")
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
-    return digest.hex()
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    return hmac.compare_digest(hash_password(password), password_hash)
-
-
-def ensure_admin_user(db: Session) -> None:
-    existing_admin = db.scalars(select(User).where(User.is_admin == True).limit(1)).first()  # noqa: E712
-    if existing_admin is not None:
-        return
-
-    admin_username = os.getenv("ADMIN_USERNAME", "admin").strip() or "admin"
-    admin_password = os.getenv("ADMIN_PASSWORD", "admin12345")
-    db.add(User(username=admin_username, password_hash=hash_password(admin_password), is_admin=True))
-    db.commit()
-
-
-def is_local_network_ip(ip_text: str) -> bool:
-    if not ip_text:
-        return False
-    try:
-        ip_obj = ipaddress.ip_address(ip_text)
-    except ValueError:
-        return False
-    return ip_obj.is_private or ip_obj.is_loopback
-
-
 def resolve_network_principal(request: Request) -> AccessPrincipal | None:
     access_scope = (request.headers.get("x-moex-access-scope") or "").strip().lower()
     if access_scope == "local":
         return AccessPrincipal(username="local-network", is_admin=True)
-    if access_scope == "internet":
-        return None
-
-    # Fallback for direct (non-nginx) local access in development.
-    client_ip = request.client.host if request.client is not None else ""
-    if is_local_network_ip(client_ip):
-        return AccessPrincipal(username="local-network", is_admin=True)
+    # Missing, malformed and explicit internet scopes are all read-only. This is
+    # intentional: backend usually sees the private IP of the frontend proxy, so
+    # request.client cannot safely distinguish an internet user from a LAN user.
     return None
 
 
@@ -242,16 +211,6 @@ def get_current_user(request: Request) -> AccessPrincipal:
     if principal is None:
         raise HTTPException(status_code=403, detail="Доступ только из локальной сети")
     return principal
-
-
-def get_optional_current_user(request: Request) -> AccessPrincipal | None:
-    return resolve_network_principal(request)
-
-
-def require_admin_user(current_user: AccessPrincipal = Depends(get_current_user)) -> AccessPrincipal:
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Только администратор может регистрировать пользователей")
-    return current_user
 
 
 def get_primary_row_by_ticker(db: Session, ticker: str) -> StockRow | None:
@@ -272,12 +231,36 @@ def is_shared_fields_editable_for_table(db: Session, table_id: int, ticker: str)
     return get_primary_row_by_ticker(db, normalized_ticker) is None
 
 
+def ensure_ticker_unique(
+    db: Session,
+    table_id: int,
+    ticker: str,
+    *,
+    exclude_row_id: int | None = None,
+) -> None:
+    normalized_ticker = ticker.strip().upper()
+    if not normalized_ticker:
+        return
+    query = select(StockRow.id).where(
+        StockRow.table_id == table_id,
+        StockRow.ticker == normalized_ticker,
+    )
+    if exclude_row_id is not None:
+        query = query.where(StockRow.id != exclude_row_id)
+    if db.scalar(query.limit(1)) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Тикер {normalized_ticker} уже есть в этой таблице",
+        )
+
+
 def serialize_table(table: AnalystTable, table_number: int) -> dict:
     return {
         "id": table.id,
         "table_number": table_number,
         "analyst_name": table.analyst_name,
         "year_offset": table.year_offset,
+        "forecast_start_year": table.forecast_start_year,
         "created_at": table.created_at,
     }
 
@@ -296,6 +279,7 @@ def build_database_snapshot(db: Session) -> dict:
                 "id": table.id,
                 "analyst_name": table.analyst_name,
                 "year_offset": table.year_offset,
+                "forecast_start_year": table.forecast_start_year,
                 "sort_order": table.sort_order,
             }
             for table in tables
@@ -349,9 +333,14 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
 
     table_id_map: dict[int, int] = {}
     for table_data in tables_data:
+        legacy_offset = int(table_data.get("year_offset") or 0)
+        forecast_start_year = int(
+            table_data.get("forecast_start_year") or current_calendar_year() + legacy_offset
+        )
         new_table = AnalystTable(
             analyst_name=str(table_data.get("analyst_name") or "Аналитик"),
-            year_offset=int(table_data.get("year_offset") or 0),
+            year_offset=legacy_offset,
+            forecast_start_year=forecast_start_year,
             sort_order=int(table_data.get("sort_order") or 0),
         )
         db.add(new_table)
@@ -408,8 +397,8 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
     return {"tables_count": len(tables_data), "rows_count": imported_rows}
 
 
-def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
-    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(4)]
+def apply_net_profit_projection(row: StockRow, forecast_start_year: int) -> None:
+    years = [forecast_start_year + i for i in range(4)]
     profit_map = row.net_profit_year_map or {}
     dividend_map = dict(row.dividend_year_map or {})
     if row.dividend_year_map is None:
@@ -425,27 +414,32 @@ def apply_net_profit_projection(row: StockRow, year_offset: int) -> None:
     row.dividends_year1 = dividend_map.get(str(years[0]))
     row.dividends_year2 = dividend_map.get(str(years[1]))
     dividend_totals_by_year_index: dict[int, float] = {}
+    today_year = current_calendar_year()
     for index, target_year in enumerate(years, start=1):
-        first_dividend_year = BASE_FORECAST_YEAR if target_year >= BASE_FORECAST_YEAR else target_year
-        dividend_totals_by_year_index[index] = sum(
-            float(dividend_map.get(str(dividend_year)) or 0.0)
-            for dividend_year in range(first_dividend_year, target_year + 1)
-        )
+        if target_year < today_year:
+            dividend_totals_by_year_index[index] = 0.0
+        else:
+            dividend_totals_by_year_index[index] = sum(
+                float(dividend_map.get(str(dividend_year)) or 0.0)
+                for dividend_year in range(today_year, target_year + 1)
+            )
     recalculate_fields(row, dividend_totals_by_year_index)
 
 
-def merge_payload_profit_map(payload: StockRowCreate | StockRowUpdate, year_offset: int) -> dict[str, float | None]:
-    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(4)]
+def merge_payload_profit_map(
+    payload: StockRowCreate | StockRowUpdate, forecast_start_year: int
+) -> dict[str, float | None]:
+    years = [forecast_start_year + i for i in range(2)]
     merged = dict(payload.net_profit_year_map or {})
     merged[str(years[0])] = payload.forecast_profit_year1_billion_rub
     merged[str(years[1])] = payload.forecast_profit_year2_billion_rub
-    merged[str(years[2])] = payload.forecast_profit_year3_billion_rub
-    merged[str(years[3])] = payload.forecast_profit_year4_billion_rub
     return merged
 
 
-def merge_payload_dividend_map(payload: StockRowCreate | StockRowUpdate, year_offset: int) -> dict[str, float | None]:
-    years = [BASE_FORECAST_YEAR + year_offset + i for i in range(2)]
+def merge_payload_dividend_map(
+    payload: StockRowCreate | StockRowUpdate, forecast_start_year: int
+) -> dict[str, float | None]:
+    years = [forecast_start_year + i for i in range(2)]
     merged = dict(payload.dividend_year_map or {})
     merged[str(years[0])] = payload.dividends_year1
     merged[str(years[1])] = payload.dividends_year2
@@ -517,7 +511,7 @@ def sync_row_to_other_tables(
         if target.net_profit_year_map is None:
             reset_net_profit_fields(target)
         else:
-            apply_net_profit_projection(target, table.year_offset)
+            apply_net_profit_projection(target, table.forecast_start_year)
 
 
 def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
@@ -539,11 +533,11 @@ def sync_primary_table_multipliers(db: Session, row: StockRow) -> None:
             continue
         target.shares_billion = row.shares_billion
         target.pe_avg_5y = row.pe_avg_5y
-        apply_net_profit_projection(target, table.year_offset)
+        apply_net_profit_projection(target, table.forecast_start_year)
 
 
 def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_number: int) -> TickerComparisonItem:
-    years = [BASE_FORECAST_YEAR + table.year_offset + i for i in range(2)]
+    years = [table.forecast_start_year + i for i in range(2)]
     values = [
         (
             row.forecast_profit_year1_billion_rub,
@@ -563,6 +557,7 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
         table_number=table_number,
         analyst_name=table.analyst_name,
         year_offset=table.year_offset,
+        forecast_start_year=table.forecast_start_year,
         ticker=row.ticker,
         current_price=row.current_price,
         shares_billion=row.shares_billion,
@@ -584,13 +579,17 @@ def build_ticker_comparison_item(table: AnalystTable, row: StockRow, table_numbe
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
+def health(db: Session = Depends(get_db)) -> dict[str, str]:
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database is unavailable") from exc
     return {"status": "ok"}
 
 
-@app.post("/api/auth/login", response_model=AuthLoginResponse)
-def auth_login(payload: AuthLoginRequest, db: Session = Depends(get_db)):
-    raise HTTPException(status_code=403, detail="Вход по логину/паролю отключен. Доступ определяется сетью источника.")
+@app.get("/api/live")
+def live() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.get("/api/auth/me")
@@ -603,24 +602,6 @@ def auth_me(request: Request):
     if current_user is None:
         return {"username": "guest", "is_admin": False}
     return {"username": current_user.username, "is_admin": bool(current_user.is_admin)}
-
-
-@app.post("/api/auth/register", response_model=UserRead)
-def auth_register(
-    payload: AuthRegisterRequest,
-    db: Session = Depends(get_db),
-    _admin: AccessPrincipal = Depends(require_admin_user),
-):
-    username = payload.username.strip()
-    existing = db.scalars(select(User).where(User.username == username).limit(1)).first()
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="Пользователь уже существует")
-
-    user = User(username=username, password_hash=hash_password(payload.password), is_admin=payload.is_admin)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
 
 
 @app.get("/api/data/export")
@@ -642,8 +623,12 @@ async def import_data(
     _user: AccessPrincipal = Depends(get_current_user),
 ):
     try:
-        raw = await file.read()
+        raw = await file.read(MAX_IMPORT_BYTES + 1)
+        if len(raw) > MAX_IMPORT_BYTES:
+            raise HTTPException(status_code=413, detail="JSON-файл превышает лимит 20 МБ")
         payload = json.loads(raw.decode("utf-8"))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Не удалось прочитать JSON-файл") from exc
     result = import_database_snapshot(db, payload)
@@ -662,9 +647,21 @@ def create_table(payload: AnalystTableCreate, db: Session = Depends(get_db), _us
     total = db.query(AnalystTable).count()
     if total >= 10:
         raise HTTPException(status_code=400, detail="Можно создать не более 10 таблиц")
-    source_table = get_primary_table(db)
+    source_table = (
+        get_table_or_404(db, payload.source_table_id)
+        if payload.source_table_id is not None
+        else get_primary_table(db)
+    )
     next_sort_order = (db.query(func.max(AnalystTable.sort_order)).scalar() or 0) + 1 if sort_order_supported else 0
-    table = AnalystTable(analyst_name=payload.analyst_name.strip(), year_offset=0, sort_order=next_sort_order)
+    forecast_start_year = (
+        source_table.forecast_start_year if source_table is not None else current_calendar_year()
+    )
+    table = AnalystTable(
+        analyst_name=payload.analyst_name.strip(),
+        year_offset=forecast_start_year - current_calendar_year(),
+        forecast_start_year=forecast_start_year,
+        sort_order=next_sort_order,
+    )
     db.add(table)
     db.commit()
     db.refresh(table)
@@ -711,19 +708,22 @@ def update_table(
     table_id: int,
     payload: AnalystTableUpdate,
     db: Session = Depends(get_db),
-    current_user: AccessPrincipal | None = Depends(get_optional_current_user),
+    _user: AccessPrincipal = Depends(get_current_user),
 ):
     table = get_table_or_404(db, table_id)
     if payload.analyst_name is not None:
-        if current_user is None:
-            raise HTTPException(status_code=401, detail="Для изменения имени таблицы требуется авторизация")
         table.analyst_name = payload.analyst_name.strip()
-    if payload.year_offset is not None:
-        table.year_offset = payload.year_offset
+    if payload.forecast_start_year is not None:
+        table.forecast_start_year = payload.forecast_start_year
+    elif payload.year_offset is not None:
+        # Backward compatibility for old API clients. The persisted year itself
+        # remains absolute and therefore cannot drift after a server restart.
+        table.forecast_start_year = current_calendar_year() + payload.year_offset
+    table.year_offset = table.forecast_start_year - current_calendar_year()
     db.commit()
     rows = db.scalars(select(StockRow).where(StockRow.table_id == table.id)).all()
     for row in rows:
-        apply_net_profit_projection(row, table.year_offset)
+        apply_net_profit_projection(row, table.forecast_start_year)
     db.commit()
     db.refresh(table)
     tables = get_tables_ordered(db)
@@ -750,7 +750,7 @@ def get_rows(table_id: int, db: Session = Depends(get_db)):
     table = get_table_or_404(db, table_id)
     rows = db.scalars(select(StockRow).where(StockRow.table_id == table_id).order_by(StockRow.id.asc())).all()
     for row in rows:
-        apply_net_profit_projection(row, table.year_offset)
+        apply_net_profit_projection(row, table.forecast_start_year)
         row.shared_fields_editable = is_shared_fields_editable_for_table(db, row.table_id, row.ticker)
     db.commit()
     return rows
@@ -760,6 +760,7 @@ def get_rows(table_id: int, db: Session = Depends(get_db)):
 async def create_row(payload: StockRowCreate, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
     table = get_table_or_404(db, payload.table_id)
     ensure_primary_table_for_row_mutation(db, table.id)
+    ensure_ticker_unique(db, table.id, payload.ticker)
     shared_fields_editable = is_shared_fields_editable_for_table(db, payload.table_id, payload.ticker)
     if not shared_fields_editable:
         primary_row = get_primary_row_by_ticker(db, payload.ticker)
@@ -772,14 +773,14 @@ async def create_row(payload: StockRowCreate, db: Session = Depends(get_db), _us
         ticker=payload.ticker.strip().upper(),
         shares_billion=payload.shares_billion,
         pe_avg_5y=payload.pe_avg_5y,
-        net_profit_year_map=merge_payload_profit_map(payload, table.year_offset),
-        dividend_year_map=merge_payload_dividend_map(payload, table.year_offset),
+        net_profit_year_map=merge_payload_profit_map(payload, table.forecast_start_year),
+        dividend_year_map=merge_payload_dividend_map(payload, table.forecast_start_year),
         net_profit_source_comment=payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None,
     )
-    apply_net_profit_projection(row, table.year_offset)
+    apply_net_profit_projection(row, table.forecast_start_year)
 
     await refresh_row_price(row, force=True)
-    apply_net_profit_projection(row, table.year_offset)
+    apply_net_profit_projection(row, table.forecast_start_year)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -807,6 +808,8 @@ async def update_row(
     shared_fields_editable = is_primary_row
     old_ticker = row.ticker.strip().upper()
     new_ticker = payload.ticker.strip().upper()
+    if is_primary_row:
+        ensure_ticker_unique(db, row.table_id, new_ticker, exclude_row_id=row.id)
     row.table_id = payload.table_id
     row.ticker = new_ticker if is_primary_row else old_ticker
     if shared_fields_editable:
@@ -821,15 +824,16 @@ async def update_row(
             )
         row.shares_billion = primary_row.shares_billion
         row.pe_avg_5y = primary_row.pe_avg_5y
-    row.net_profit_year_map = merge_payload_profit_map(payload, table.year_offset)
-    row.dividend_year_map = merge_payload_dividend_map(payload, table.year_offset)
-    apply_net_profit_projection(row, table.year_offset)
+    row.net_profit_year_map = merge_payload_profit_map(payload, table.forecast_start_year)
+    row.dividend_year_map = merge_payload_dividend_map(payload, table.forecast_start_year)
+    apply_net_profit_projection(row, table.forecast_start_year)
     row.net_profit_source_comment = (
         payload.net_profit_source_comment.strip() if payload.net_profit_source_comment else None
     )
 
-    await refresh_row_price(row, force=bool(row.ticker))
-    apply_net_profit_projection(row, table.year_offset)
+    if new_ticker != old_ticker or row.current_price is None:
+        await refresh_row_price(row, force=new_ticker != old_ticker)
+    apply_net_profit_projection(row, table.forecast_start_year)
     if shared_fields_editable:
         sync_row_to_other_tables(db, row, old_ticker=old_ticker if old_ticker != row.ticker else None)
     sync_primary_table_multipliers(db, row)
@@ -859,12 +863,15 @@ def delete_row(row_id: int, db: Session = Depends(get_db), _user: AccessPrincipa
 
 @app.post("/api/rows/refresh", response_model=list[StockRowRead])
 async def refresh_prices(table_id: int, db: Session = Depends(get_db), _user: AccessPrincipal = Depends(get_current_user)):
-    table = get_table_or_404(db, table_id)
-    rows = await refresh_all_prices(db, force=True, table_id=table_id)
+    get_table_or_404(db, table_id)
+    rows = await refresh_all_prices(db, force=True)
+    tables = {table.id: table for table in get_tables_ordered(db)}
     for row in rows:
-        apply_net_profit_projection(row, table.year_offset)
+        table = tables.get(row.table_id)
+        if table is not None:
+            apply_net_profit_projection(row, table.forecast_start_year)
     db.commit()
-    return rows
+    return [row for row in rows if row.table_id == table_id]
 
 
 @app.post("/api/tables/{table_id}/make-primary", response_model=list[AnalystTableRead])
@@ -906,7 +913,7 @@ def ticker_comparison(ticker: str, db: Session = Depends(get_db)):
         ).first()
         if row is None:
             continue
-        apply_net_profit_projection(row, table.year_offset)
+        apply_net_profit_projection(row, table.forecast_start_year)
         result.append(build_ticker_comparison_item(table, row, table_number_map[table.id]))
 
     return result

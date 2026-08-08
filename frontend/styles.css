@@ -11,6 +11,8 @@
   --up: #00a63e;
   --down: #ef1d1d;
   --flat: #6b7280;
+  --ticker-col-width: 108px;
+  --price-col-width: 118px;
 }
 
 * {
@@ -109,7 +111,7 @@ h1 {
 
 table {
   width: 100%;
-  min-width: 1600px;
+  min-width: 1780px;
   border-collapse: separate;
   border-spacing: 0 3px;
   background: #f4f7fb;
@@ -150,6 +152,49 @@ thead th {
   color: #374151;
   font-size: 13px;
   box-shadow: 0 2px 0 rgba(148, 163, 184, 0.22);
+}
+
+.year-group-row th {
+  top: 0;
+  min-height: 38px;
+}
+
+.year-columns-row th {
+  top: 38px;
+}
+
+.forecast-year-group {
+  text-align: center;
+  font-size: 15px;
+  color: #1e3a8a;
+  background: #eef2ff;
+  border-left: 2px solid #93c5fd;
+  border-right: 2px solid #93c5fd;
+}
+
+.sticky-col-1,
+.sticky-col-2 {
+  position: sticky;
+}
+
+.sticky-col-1 {
+  left: 0;
+  width: var(--ticker-col-width);
+  min-width: var(--ticker-col-width);
+  max-width: var(--ticker-col-width);
+  z-index: 25;
+}
+
+.sticky-col-2 {
+  left: var(--ticker-col-width);
+  width: var(--price-col-width);
+  min-width: var(--price-col-width);
+  z-index: 24;
+}
+
+thead .sticky-col-1,
+thead .sticky-col-2 {
+  z-index: 60;
 }
 
 .th-sort {
@@ -263,10 +308,41 @@ input[readonly] {
   background: var(--danger-hover);
 }
 
+.btn-note {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.source-note {
+  color: #475569;
+  font-size: 11px;
+  margin-top: 5px;
+  max-width: 180px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .status-error {
   color: var(--danger);
   font-size: 12px;
   margin-top: 6px;
+}
+
+.row-save-status {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+  min-height: 14px;
+}
+
+.row-save-status.save-error {
+  color: var(--danger);
+  font-weight: 700;
 }
 
 .hidden {
@@ -294,4 +370,14 @@ input[readonly] {
 .comparison-source {
   font-weight: 700;
   color: #92400e;
+}
+
+.consensus-row td {
+  background: #e0f2fe;
+  border-top-color: #38bdf8;
+  border-bottom-color: #38bdf8;
+}
+
+.consensus-row .comparison-source {
+  color: #075985;
 }
