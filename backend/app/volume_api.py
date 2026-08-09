@@ -76,6 +76,7 @@ def _serialize_run(run: VolumeCollectionRun | None) -> dict | None:
         "imoex_anomalies_found": run.imoex_anomalies_found,
         "notifications_suppressed": run.notifications_suppressed,
         "notifications_sent": run.notifications_sent,
+        "history_securities_refreshed": run.history_securities_refreshed,
         "error_message": run.error_message,
     }
 

@@ -24,28 +24,44 @@ def _startup_notifications_allowed(local_now: datetime, settings: VolumeSettings
     )
 
 
-def _collection_trigger(settings: VolumeSettings, timezone: ZoneInfo) -> CronTrigger:
+def _collection_trigger(
+    settings: VolumeSettings,
+    timezone: ZoneInfo,
+    minute: int,
+) -> CronTrigger:
     return CronTrigger(
         day_of_week="mon-fri",
         hour=settings.schedule_hour,
-        minute=",".join(str(minute) for minute in settings.schedule_minutes),
+        minute=minute,
         timezone=timezone,
     )
+
+
+def _scheduled_collection_modes(settings: VolumeSettings) -> list[tuple[int, bool]]:
+    return [
+        (minute, index == 0)
+        for index, minute in enumerate(settings.schedule_minutes)
+    ]
 
 
 async def main() -> None:
     settings = get_volume_settings()
     timezone = ZoneInfo(settings.schedule_timezone)
     scheduler = AsyncIOScheduler(timezone=timezone)
-    scheduler.add_job(
-        collect_once,
-        _collection_trigger(settings, timezone),
-        kwargs={"settings": settings, "allow_notifications": True},
-        id="daily-moex-volume-collection",
-        coalesce=True,
-        max_instances=1,
-        misfire_grace_time=900,
-    )
+    for minute, refresh_history in _scheduled_collection_modes(settings):
+        scheduler.add_job(
+            collect_once,
+            _collection_trigger(settings, timezone, minute),
+            kwargs={
+                "settings": settings,
+                "allow_notifications": True,
+                "refresh_history": refresh_history,
+            },
+            id=f"daily-moex-volume-collection-{minute:02d}",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=900,
+        )
     scheduler.start()
     logger.info(
         "Volume worker scheduled at %s %s on weekdays",
@@ -56,7 +72,11 @@ async def main() -> None:
     if settings.run_on_startup:
         local_now = datetime.now(timezone)
         notification_window = _startup_notifications_allowed(local_now, settings)
-        await collect_once(settings, allow_notifications=notification_window)
+        await collect_once(
+            settings,
+            allow_notifications=notification_window,
+            refresh_history=True,
+        )
 
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()

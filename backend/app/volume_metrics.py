@@ -58,6 +58,10 @@ NOTIFICATIONS_SENT = Gauge(
     "moex_volume_notifications_sent",
     "Number of security notifications included in the latest email digest",
 )
+HISTORY_SECURITIES_REFRESHED = Gauge(
+    "moex_volume_history_securities_refreshed",
+    "Number of securities whose MOEX history was refreshed in the latest collection",
+)
 COLLECTION_STATUS = Gauge(
     "moex_volume_collection_status",
     "One-hot status of the latest volume collection",
@@ -118,6 +122,7 @@ def refresh_volume_metrics(db: Session) -> None:
     IMOEX_ANOMALIES_FOUND.set(latest.imoex_anomalies_found if latest else 0)
     NOTIFICATIONS_SUPPRESSED.set(latest.notifications_suppressed if latest else 0)
     NOTIFICATIONS_SENT.set(latest.notifications_sent if latest else 0)
+    HISTORY_SECURITIES_REFRESHED.set(latest.history_securities_refreshed if latest else 0)
     ACTIVE_SECURITIES.set(active_count or 0)
     IMOEX_SECURITIES.set(imoex_count or 0)
     baseline_sessions = (

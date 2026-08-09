@@ -2,7 +2,11 @@ from dataclasses import replace
 from datetime import datetime
 
 from app.volume_config import VolumeSettings
-from app.volume_worker import _collection_trigger, _startup_notifications_allowed
+from app.volume_worker import (
+    _collection_trigger,
+    _scheduled_collection_modes,
+    _startup_notifications_allowed,
+)
 from zoneinfo import ZoneInfo
 
 
@@ -39,17 +43,25 @@ def test_collection_trigger_runs_three_times_on_weekdays() -> None:
         schedule_minutes=(20, 35, 45),
     )
     timezone = ZoneInfo("Europe/Moscow")
-    trigger = _collection_trigger(settings, timezone)
+    first = _collection_trigger(settings, timezone, 20)
+    second = _collection_trigger(settings, timezone, 35)
+    third = _collection_trigger(settings, timezone, 45)
 
-    assert trigger.get_next_fire_time(
+    assert first.get_next_fire_time(
         None,
         datetime(2026, 8, 10, 18, 19, tzinfo=timezone),
     ) == datetime(2026, 8, 10, 18, 20, tzinfo=timezone)
-    assert trigger.get_next_fire_time(
+    assert second.get_next_fire_time(
         None,
         datetime(2026, 8, 10, 18, 21, tzinfo=timezone),
     ) == datetime(2026, 8, 10, 18, 35, tzinfo=timezone)
-    assert trigger.get_next_fire_time(
+    assert third.get_next_fire_time(
         None,
         datetime(2026, 8, 10, 18, 36, tzinfo=timezone),
     ) == datetime(2026, 8, 10, 18, 45, tzinfo=timezone)
+
+    assert _scheduled_collection_modes(settings) == [
+        (20, True),
+        (35, False),
+        (45, False),
+    ]

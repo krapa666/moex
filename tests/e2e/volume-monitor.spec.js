@@ -94,6 +94,7 @@ async function mockVolumeApi(page) {
           imoex_anomalies_found: 1,
           notifications_sent: 1,
           notifications_suppressed: 0,
+          history_securities_refreshed: 2,
           error_message: null,
         },
       });

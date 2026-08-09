@@ -175,7 +175,8 @@ function renderLastRun(run) {
   detail.textContent =
     `Обновлено ${run.securities_updated} из ${run.securities_total}; аномалий: ${run.signals_found}; ` +
     `IMOEX: ${run.imoex_anomalies_found || 0}; отправлено: ${run.notifications_sent || 0}; ` +
-    `подавлено: ${run.notifications_suppressed || 0}.`;
+    `подавлено: ${run.notifications_suppressed || 0}; история обновлена для ` +
+    `${run.history_securities_refreshed || 0} бумаг.`;
   if (run.error_message) detail.textContent += ` Ошибка: ${run.error_message}`;
 }
 

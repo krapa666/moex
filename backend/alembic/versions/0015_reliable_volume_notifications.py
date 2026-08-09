@@ -27,9 +27,19 @@ def upgrade() -> None:
         "volume_collection_runs",
         sa.Column("notifications_sent", sa.Integer(), nullable=False, server_default="0"),
     )
+    op.add_column(
+        "volume_collection_runs",
+        sa.Column(
+            "history_securities_refreshed",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
+        ),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("volume_collection_runs", "history_securities_refreshed")
     op.drop_column("volume_collection_runs", "notifications_sent")
     op.drop_column("volume_collection_runs", "notifications_suppressed")
     op.drop_column("volume_collection_runs", "imoex_anomalies_found")
