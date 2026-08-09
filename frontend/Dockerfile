@@ -6,7 +6,7 @@ COPY volumes ./volumes
 COPY nginx.conf /tmp/nginx.conf
 
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 
 COPY --from=assets /assets/index.html /usr/share/nginx/html/index.html
 COPY --from=assets /assets/app.js /usr/share/nginx/html/app.js
