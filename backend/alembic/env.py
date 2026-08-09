@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
 from logging.config import fileConfig
 
 from alembic import context
 from app import models  # noqa: F401
-from app.database import Base
+from app.database import DATABASE_URL, Base
 from sqlalchemy import engine_from_config, pool
 
 config = context.config
@@ -13,8 +12,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-if os.getenv("DATABASE_URL"):
-    config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+database_url = (
+    DATABASE_URL.render_as_string(hide_password=False)
+    if hasattr(DATABASE_URL, "render_as_string")
+    else str(DATABASE_URL)
+)
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

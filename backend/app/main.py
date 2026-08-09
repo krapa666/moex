@@ -26,26 +26,34 @@ from .schemas import (
     TickerComparisonYear,
 )
 from .services import refresh_all_prices, refresh_row_price
+from .volume_api import router as volume_router
+from .volume_metrics import refresh_volume_metrics
 
 logger = logging.getLogger(__name__)
 price_refresh_task: asyncio.Task | None = None
+volume_metrics_task: asyncio.Task | None = None
 BACKGROUND_REFRESH_SECONDS = 10 * 60
 MAX_IMPORT_BYTES = 20 * 1024 * 1024
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    global price_refresh_task
+    global price_refresh_task, volume_metrics_task
     price_refresh_task = asyncio.create_task(periodic_price_refresh())
+    volume_metrics_task = asyncio.create_task(periodic_volume_metrics_refresh())
     try:
         yield
     finally:
-        price_refresh_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await price_refresh_task
+        tasks = [task for task in (price_refresh_task, volume_metrics_task) if task is not None]
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
-app = FastAPI(title="MOEX Fair Price", version="1.1.0", lifespan=lifespan)
+app = FastAPI(title="MOEX Fair Price", version="1.2.0", lifespan=lifespan)
+app.include_router(volume_router)
 
 
 @dataclass
@@ -83,6 +91,20 @@ async def periodic_price_refresh() -> None:
         finally:
             db.close()
         await asyncio.sleep(BACKGROUND_REFRESH_SECONDS)
+
+
+async def periodic_volume_metrics_refresh() -> None:
+    while True:
+        db = SessionLocal()
+        try:
+            refresh_volume_metrics(db)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Failed to refresh volume monitor metrics")
+        finally:
+            db.close()
+        await asyncio.sleep(60)
 
 
 def ensure_default_table(db: Session) -> None:

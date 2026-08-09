@@ -74,11 +74,25 @@ h1 {
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 8px;
   padding: 7px 10px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-nav {
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.btn-nav:hover {
+  background: #dbeafe;
 }
 
 .btn-primary {

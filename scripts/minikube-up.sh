@@ -196,6 +196,7 @@ import_snapshot_into_k8s_db
 
 log_step "applying application and monitoring manifests"
 kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/volume-worker.yaml
 kubectl apply -f k8s/frontend.yaml
 kubectl apply -f k8s/prometheus.yaml
 kubectl apply -f k8s/loki.yaml
@@ -206,6 +207,7 @@ kubectl apply -f k8s/ingress.yaml
 
 log_step "waiting for application deployments"
 kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deploy/volume-worker --timeout=300s
 kubectl -n "${NAMESPACE}" rollout status deploy/frontend --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/prometheus --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/loki --timeout=180s
