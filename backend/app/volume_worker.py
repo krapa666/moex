@@ -8,46 +8,75 @@ from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
 
 from .volume_collector import collect_once
-from .volume_config import get_volume_settings
+from .volume_config import VolumeSettings, get_volume_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _startup_notifications_allowed(local_now: datetime, settings: VolumeSettings) -> bool:
+    current_minutes = local_now.hour * 60 + local_now.minute
+    return local_now.weekday() < 5 and any(
+        0
+        <= current_minutes - (settings.schedule_hour * 60 + scheduled_minute)
+        <= 15
+        for scheduled_minute in settings.schedule_minutes
+    )
+
+
+def _collection_trigger(
+    settings: VolumeSettings,
+    timezone: ZoneInfo,
+    minute: int,
+) -> CronTrigger:
+    return CronTrigger(
+        day_of_week="mon-fri",
+        hour=settings.schedule_hour,
+        minute=minute,
+        timezone=timezone,
+    )
+
+
+def _scheduled_collection_modes(settings: VolumeSettings) -> list[tuple[int, bool]]:
+    return [
+        (minute, index == 0)
+        for index, minute in enumerate(settings.schedule_minutes)
+    ]
 
 
 async def main() -> None:
     settings = get_volume_settings()
     timezone = ZoneInfo(settings.schedule_timezone)
     scheduler = AsyncIOScheduler(timezone=timezone)
-    scheduler.add_job(
-        collect_once,
-        CronTrigger(
-            day_of_week="mon-fri",
-            hour=settings.schedule_hour,
-            minute=settings.schedule_minute,
-            timezone=timezone,
-        ),
-        kwargs={"settings": settings, "allow_notifications": True},
-        id="daily-moex-volume-collection",
-        coalesce=True,
-        max_instances=1,
-        misfire_grace_time=900,
-    )
+    for minute, refresh_history in _scheduled_collection_modes(settings):
+        scheduler.add_job(
+            collect_once,
+            _collection_trigger(settings, timezone, minute),
+            kwargs={
+                "settings": settings,
+                "allow_notifications": True,
+                "refresh_history": refresh_history,
+            },
+            id=f"daily-moex-volume-collection-{minute:02d}",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=900,
+        )
     scheduler.start()
     logger.info(
-        "Volume worker scheduled at %02d:%02d %s",
-        settings.schedule_hour,
-        settings.schedule_minute,
+        "Volume worker scheduled at %s %s on weekdays",
+        settings.schedule_label,
         settings.schedule_timezone,
     )
 
     if settings.run_on_startup:
         local_now = datetime.now(timezone)
-        scheduled_minutes = settings.schedule_hour * 60 + settings.schedule_minute
-        current_minutes = local_now.hour * 60 + local_now.minute
-        notification_window = (
-            local_now.weekday() < 5 and 0 <= current_minutes - scheduled_minutes <= 15
+        notification_window = _startup_notifications_allowed(local_now, settings)
+        await collect_once(
+            settings,
+            allow_notifications=notification_window,
+            refresh_history=True,
         )
-        await collect_once(settings, allow_notifications=notification_window)
 
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()

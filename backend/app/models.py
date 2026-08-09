@@ -189,6 +189,10 @@ class VolumeCollectionRun(Base):
     securities_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     securities_updated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     signals_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    imoex_anomalies_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    notifications_suppressed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    notifications_sent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    history_securities_refreshed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

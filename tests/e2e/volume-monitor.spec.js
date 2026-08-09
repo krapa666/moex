@@ -63,8 +63,9 @@ async function mockVolumeApi(page) {
           display_sessions: 60,
           signal_min_ratio: 3.6,
           signal_max_ratio: 6.5,
+          broad_market_signal_threshold: 10,
           schedule_hour: 18,
-          schedule_minute: 40,
+          schedule_minutes: [20, 35, 45],
           schedule_timezone: 'Europe/Moscow',
           smtp_configured: true,
         },
@@ -77,7 +78,7 @@ async function mockVolumeApi(page) {
           baseline_sessions: 60,
           smtp_configured: true,
           notifications_enabled: true,
-          schedule: '18:40 Europe/Moscow',
+          schedule: '18:20, 18:35, 18:45 Europe/Moscow',
         },
       });
     }
@@ -90,6 +91,10 @@ async function mockVolumeApi(page) {
           securities_total: 2,
           securities_updated: 2,
           signals_found: 1,
+          imoex_anomalies_found: 1,
+          notifications_sent: 1,
+          notifications_suppressed: 0,
+          history_securities_refreshed: 2,
           error_message: null,
         },
       });
@@ -133,6 +138,7 @@ test.beforeEach(async ({ page }) => {
 test('navigates from forecasts and shows the integrated volume table', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Прогнозы и потенциалы' })).toHaveAttribute('href', '/');
   await expect(page.getByText('3,6×–6,5×', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Сбор по будням в 18:20, 18:35, 18:45/)).toBeVisible();
   await expect(page.locator('#notification-scope')).toHaveValue('imoex');
   await expect(page.locator('#baseline-sessions')).toHaveValue('60');
   await expect(page.getByText('Сигнал', { exact: true })).toBeVisible();

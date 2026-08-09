@@ -20,10 +20,15 @@ def _float_env(name: str, default: float) -> float:
     return float(os.getenv(name, str(default)))
 
 
+def _int_list_env(name: str, default: str) -> tuple[int, ...]:
+    raw = os.getenv(name, default)
+    return tuple(int(value.strip()) for value in raw.split(",") if value.strip())
+
+
 @dataclass(frozen=True)
 class VolumeSettings:
     schedule_hour: int
-    schedule_minute: int
+    schedule_minutes: tuple[int, ...]
     schedule_timezone: str
     run_on_startup: bool
     baseline_sessions: int
@@ -31,6 +36,7 @@ class VolumeSettings:
     min_baseline_sessions: int
     signal_min_ratio: float
     signal_max_ratio: float
+    broad_market_signal_threshold: int
     moex_timeout_seconds: float
     moex_concurrency: int
     moex_history_rows: int
@@ -49,11 +55,17 @@ class VolumeSettings:
     def smtp_configured(self) -> bool:
         return bool(self.smtp_enabled and self.smtp_host and self.smtp_from)
 
+    @property
+    def schedule_label(self) -> str:
+        return ", ".join(
+            f"{self.schedule_hour:02d}:{minute:02d}" for minute in self.schedule_minutes
+        )
+
     @classmethod
     def from_env(cls) -> "VolumeSettings":
         settings = cls(
             schedule_hour=_int_env("VOLUME_SCHEDULE_HOUR", 18),
-            schedule_minute=_int_env("VOLUME_SCHEDULE_MINUTE", 40),
+            schedule_minutes=_int_list_env("VOLUME_SCHEDULE_MINUTES", "20,35,45"),
             schedule_timezone=os.getenv("VOLUME_SCHEDULE_TIMEZONE", "Europe/Moscow"),
             run_on_startup=_bool_env("VOLUME_RUN_ON_STARTUP", True),
             baseline_sessions=_int_env("VOLUME_BASELINE_SESSIONS", 60),
@@ -61,6 +73,10 @@ class VolumeSettings:
             min_baseline_sessions=_int_env("VOLUME_MIN_BASELINE_SESSIONS", 60),
             signal_min_ratio=_float_env("VOLUME_SIGNAL_MIN_RATIO", 3.6),
             signal_max_ratio=_float_env("VOLUME_SIGNAL_MAX_RATIO", 6.5),
+            broad_market_signal_threshold=_int_env(
+                "VOLUME_BROAD_MARKET_SIGNAL_THRESHOLD",
+                10,
+            ),
             moex_timeout_seconds=_float_env("VOLUME_MOEX_TIMEOUT_SECONDS", 20.0),
             moex_concurrency=_int_env("VOLUME_MOEX_CONCURRENCY", 8),
             moex_history_rows=_int_env("VOLUME_MOEX_HISTORY_ROWS", 140),
@@ -79,8 +95,14 @@ class VolumeSettings:
         return settings
 
     def validate(self) -> None:
-        if not 0 <= self.schedule_hour <= 23 or not 0 <= self.schedule_minute <= 59:
-            raise ValueError("VOLUME_SCHEDULE_HOUR/MINUTE contain an invalid time")
+        if not 0 <= self.schedule_hour <= 23:
+            raise ValueError("VOLUME_SCHEDULE_HOUR contains an invalid time")
+        if (
+            not self.schedule_minutes
+            or any(not 0 <= minute <= 59 for minute in self.schedule_minutes)
+            or len(set(self.schedule_minutes)) != len(self.schedule_minutes)
+        ):
+            raise ValueError("VOLUME_SCHEDULE_MINUTES must contain unique minutes from 0 to 59")
         if not 5 <= self.baseline_sessions <= 250:
             raise ValueError("VOLUME_BASELINE_SESSIONS must be between 5 and 250")
         if not 10 <= self.display_sessions <= 250:
@@ -93,6 +115,8 @@ class VolumeSettings:
             raise ValueError("Volume signal ratios must be greater than 1")
         if self.signal_min_ratio >= self.signal_max_ratio:
             raise ValueError("VOLUME_SIGNAL_MIN_RATIO must be less than the maximum")
+        if not 1 <= self.broad_market_signal_threshold <= 100:
+            raise ValueError("VOLUME_BROAD_MARKET_SIGNAL_THRESHOLD must be between 1 and 100")
         if not 1 <= self.moex_concurrency <= 32:
             raise ValueError("VOLUME_MOEX_CONCURRENCY must be between 1 and 32")
         if not 0 < self.moex_timeout_seconds <= 120:

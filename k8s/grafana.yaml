@@ -110,11 +110,17 @@ data:
         },
         {
           "type": "stat",
-          "title": "Volume signals",
+          "title": "Volume notification decisions",
           "id": 8,
           "gridPos": {"h": 6, "w": 6, "x": 18, "y": 17},
           "datasource": {"type": "prometheus", "uid": "prometheus"},
-          "targets": [{"expr": "moex_volume_signals_found", "refId": "A"}]
+          "targets": [
+            {"expr": "moex_volume_signals_found", "legendFormat": "anomalies", "refId": "A"},
+            {"expr": "moex_volume_imoex_anomalies_found", "legendFormat": "IMOEX", "refId": "B"},
+            {"expr": "moex_volume_notifications_sent", "legendFormat": "sent", "refId": "C"},
+            {"expr": "moex_volume_notifications_suppressed", "legendFormat": "suppressed", "refId": "D"},
+            {"expr": "moex_volume_history_securities_refreshed", "legendFormat": "history refreshed", "refId": "E"}
+          ]
         },
         {
           "type": "stat",

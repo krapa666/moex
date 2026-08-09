@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select, text, update
@@ -88,15 +88,66 @@ def _notification_matches_scope(scope: str, is_imoex: bool) -> bool:
     return scope == "all" or is_imoex
 
 
+def _select_notification_candidates(
+    candidates: list[dict],
+    *,
+    imoex_anomalies: int,
+    broad_market_threshold: int,
+) -> tuple[list[dict], int]:
+    broad_market = imoex_anomalies > broad_market_threshold
+    if not broad_market:
+        return candidates, 0
+    selected = [item for item in candidates if item["status"] != "above_range"]
+    return selected, len(candidates) - len(selected)
+
+
+async def _fetch_security_snapshot(
+    moex: VolumeMoexClient,
+    ticker: str,
+    history_rows: int,
+    *,
+    refresh_history: bool,
+):
+    if refresh_history:
+        return await asyncio.gather(
+            moex.fetch_history(ticker, history_rows),
+            moex.fetch_current(ticker),
+        )
+    return [], await moex.fetch_current(ticker)
+
+
+def _stored_baseline(
+    security_id: int,
+    *,
+    before_date: date,
+    baseline_sessions: int,
+) -> list[Decimal]:
+    with SessionLocal() as session:
+        return list(
+            session.scalars(
+                select(VolumeObservation.turnover_rub)
+                .where(
+                    VolumeObservation.security_id == security_id,
+                    VolumeObservation.trade_date < before_date,
+                    VolumeObservation.is_final.is_(True),
+                )
+                .order_by(VolumeObservation.trade_date.desc())
+                .limit(baseline_sessions)
+            ).all()
+        )
+
+
 async def collect_once(
     settings: VolumeSettings,
     *,
     allow_notifications: bool = True,
+    refresh_history: bool = True,
 ) -> dict[str, int | str | None]:
     recipient, notification_scope, baseline_sessions = _monitor_preferences(settings)
     logger.info(
-        "Starting TQBR equity volume collection; notifications_allowed=%s notification_scope=%s baseline_sessions=%d",
+        "Starting TQBR equity volume collection; notifications_allowed=%s refresh_history=%s notification_scope=%s baseline_sessions=%d",
         allow_notifications,
+        refresh_history,
         notification_scope,
         baseline_sessions,
     )
@@ -134,7 +185,12 @@ async def collect_once(
 
     errors: list[str] = []
     signals: list[dict] = []
+    notification_candidates: list[dict] = []
     signals_detected = 0
+    imoex_anomalies_found = 0
+    notifications_suppressed = 0
+    notifications_sent = 0
+    history_securities_refreshed = 0
     updated = 0
     total = 0
 
@@ -187,11 +243,12 @@ async def collect_once(
                         settings.moex_history_rows,
                         baseline_sessions + settings.display_sessions,
                     )
-                    history, current = await asyncio.gather(
-                        moex.fetch_history(ticker, history_rows),
-                        moex.fetch_current(ticker),
+                    return await _fetch_security_snapshot(
+                        moex,
+                        ticker,
+                        history_rows,
+                        refresh_history=refresh_history,
                     )
-                    return history, current
 
                 results = await asyncio.gather(
                     *(fetch_all(item["ticker"]) for item in securities),
@@ -207,6 +264,31 @@ async def collect_once(
 
                     history, current = fetched
                     security_id = security_ids[ticker]
+                    stored_baseline: list[Decimal] = []
+                    if refresh_history:
+                        history_securities_refreshed += 1
+                    elif current is not None:
+                        stored_baseline = _stored_baseline(
+                            security_id,
+                            before_date=current["trade_date"],
+                            baseline_sessions=baseline_sessions,
+                        )
+                        if len(stored_baseline) < baseline_sessions:
+                            try:
+                                history_rows = max(
+                                    settings.moex_history_rows,
+                                    baseline_sessions + settings.display_sessions,
+                                )
+                                history = await moex.fetch_history(ticker, history_rows)
+                                history_securities_refreshed += 1
+                            except Exception as exc:
+                                errors.append(f"{ticker}: {exc}")
+                                logger.error(
+                                    "Failed to refresh fallback history for %s: %s",
+                                    ticker,
+                                    exc,
+                                )
+                                continue
                     baseline: list[Decimal] = []
                     market_today = datetime.now(ZoneInfo(settings.schedule_timezone)).date()
                     with SessionLocal() as session:
@@ -228,11 +310,15 @@ async def collect_once(
                             baseline.append(item["turnover_rub"])
 
                         if current is not None:
-                            completed = [
-                                item["turnover_rub"]
-                                for item in history
-                                if item["trade_date"] < current["trade_date"]
-                            ]
+                            completed = (
+                                [
+                                    item["turnover_rub"]
+                                    for item in history
+                                    if item["trade_date"] < current["trade_date"]
+                                ]
+                                if history
+                                else stored_baseline
+                            )
                             result = _status_values(
                                 settings,
                                 current["turnover_rub"],
@@ -247,8 +333,10 @@ async def collect_once(
                                 is_final=False,
                                 source="intraday",
                             )
-                            if result.status == "signal":
+                            if result.status in {"signal", "above_range"}:
                                 signals_detected += 1
+                                if security["is_imoex"]:
+                                    imoex_anomalies_found += 1
                                 if _notification_matches_scope(
                                     notification_scope,
                                     security["is_imoex"],
@@ -260,7 +348,7 @@ async def collect_once(
                                         )
                                     )
                                     if already_sent is None:
-                                        signals.append(
+                                        notification_candidates.append(
                                             {
                                                 "security_id": security_id,
                                                 "ticker": ticker,
@@ -268,10 +356,24 @@ async def collect_once(
                                                 "turnover_rub": current["turnover_rub"],
                                                 "average_rub": result.average,
                                                 "ratio": result.ratio,
+                                                "status": result.status,
                                             }
                                         )
                         session.commit()
                     updated += 1
+
+            signals, notifications_suppressed = _select_notification_candidates(
+                notification_candidates,
+                imoex_anomalies=imoex_anomalies_found,
+                broad_market_threshold=settings.broad_market_signal_threshold,
+            )
+            if imoex_anomalies_found > settings.broad_market_signal_threshold:
+                logger.info(
+                    "Broad-market volume condition detected; imoex_anomalies=%d threshold=%d high_ratio_notifications_suppressed=%d",
+                    imoex_anomalies_found,
+                    settings.broad_market_signal_threshold,
+                    notifications_suppressed,
+                )
 
             if allow_notifications and settings.smtp_configured and recipient and signals:
                 await asyncio.to_thread(send_signal_digest, settings, recipient, signals)
@@ -293,6 +395,7 @@ async def collect_once(
                         )
                         session.execute(statement)
                     session.commit()
+                notifications_sent = len(signals)
 
             status = "partial" if errors else "success"
             error_message = "\n".join(errors[:20]) or None
@@ -309,14 +412,22 @@ async def collect_once(
                 run.securities_total = total
                 run.securities_updated = updated
                 run.signals_found = signals_detected
+                run.imoex_anomalies_found = imoex_anomalies_found
+                run.notifications_suppressed = notifications_suppressed
+                run.notifications_sent = notifications_sent
+                run.history_securities_refreshed = history_securities_refreshed
                 run.error_message = error_message
                 session.commit()
         logger.info(
-            "Finished TQBR equity volume collection; status=%s total=%d updated=%d signals=%d errors=%d",
+            "Finished TQBR equity volume collection; status=%s total=%d updated=%d history_refreshed=%d anomalies=%d imoex_anomalies=%d notifications_sent=%d notifications_suppressed=%d errors=%d",
             status,
             total,
             updated,
+            history_securities_refreshed,
             signals_detected,
+            imoex_anomalies_found,
+            notifications_sent,
+            notifications_suppressed,
             len(errors),
         )
         return {
@@ -324,6 +435,10 @@ async def collect_once(
             "securities_total": total,
             "securities_updated": updated,
             "signals_found": signals_detected,
+            "imoex_anomalies_found": imoex_anomalies_found,
+            "notifications_sent": notifications_sent,
+            "notifications_suppressed": notifications_suppressed,
+            "history_securities_refreshed": history_securities_refreshed,
             "detail": error_message,
         }
     finally:

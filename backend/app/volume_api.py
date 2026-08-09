@@ -73,12 +73,16 @@ def _serialize_run(run: VolumeCollectionRun | None) -> dict | None:
         "securities_total": run.securities_total,
         "securities_updated": run.securities_updated,
         "signals_found": run.signals_found,
+        "imoex_anomalies_found": run.imoex_anomalies_found,
+        "notifications_suppressed": run.notifications_suppressed,
+        "notifications_sent": run.notifications_sent,
+        "history_securities_refreshed": run.history_securities_refreshed,
         "error_message": run.error_message,
     }
 
 
 @router.get("/config")
-def get_public_config(db: Session = Depends(get_db)) -> dict[str, int | float | str | bool]:
+def get_public_config(db: Session = Depends(get_db)) -> dict[str, object]:
     settings = get_volume_settings()
     stored = db.get(VolumeMonitorSettings, 1)
     baseline_sessions = stored.baseline_sessions if stored else settings.baseline_sessions
@@ -87,8 +91,9 @@ def get_public_config(db: Session = Depends(get_db)) -> dict[str, int | float | 
         "display_sessions": settings.display_sessions,
         "signal_min_ratio": settings.signal_min_ratio,
         "signal_max_ratio": settings.signal_max_ratio,
+        "broad_market_signal_threshold": settings.broad_market_signal_threshold,
         "schedule_hour": settings.schedule_hour,
-        "schedule_minute": settings.schedule_minute,
+        "schedule_minutes": settings.schedule_minutes,
         "schedule_timezone": settings.schedule_timezone,
         "smtp_configured": settings.smtp_configured,
     }
@@ -177,10 +182,7 @@ def _settings_response(stored: VolumeMonitorSettings | None) -> VolumeSettingsRe
         baseline_sessions=baseline_sessions,
         smtp_configured=settings.smtp_configured,
         notifications_enabled=bool(settings.smtp_configured and settings.notification_email),
-        schedule=(
-            f"{settings.schedule_hour:02d}:{settings.schedule_minute:02d} "
-            f"{settings.schedule_timezone}"
-        ),
+        schedule=f"{settings.schedule_label} {settings.schedule_timezone}",
     )
 
 

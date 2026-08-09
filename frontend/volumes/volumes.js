@@ -172,7 +172,11 @@ function renderLastRun(run) {
   }
   const when = new Date(run.finished_at || run.started_at);
   label.textContent = `${run.status === 'success' ? 'Успешно' : run.status} · ${dateTimeFormatter.format(when)}`;
-  detail.textContent = `Обновлено ${run.securities_updated} из ${run.securities_total}; сигналов: ${run.signals_found}.`;
+  detail.textContent =
+    `Обновлено ${run.securities_updated} из ${run.securities_total}; аномалий: ${run.signals_found}; ` +
+    `IMOEX: ${run.imoex_anomalies_found || 0}; отправлено: ${run.notifications_sent || 0}; ` +
+    `подавлено: ${run.notifications_suppressed || 0}; история обновлена для ` +
+    `${run.history_securities_refreshed || 0} бумаг.`;
   if (run.error_message) detail.textContent += ` Ошибка: ${run.error_message}`;
 }
 
@@ -186,10 +190,17 @@ async function loadConfig() {
   state.config = await api('/api/volume/config');
   const min = formatNumber(state.config.signal_min_ratio, 1);
   const max = formatNumber(state.config.signal_max_ratio, 1);
+  const schedule = (state.config.schedule_minutes || [])
+    .map((minute) => `${String(state.config.schedule_hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`)
+    .join(', ');
+  const broadMarketThreshold = state.config.broad_market_signal_threshold || 10;
   document.getElementById('signal-range-label').textContent = `${min}×–${max}×`;
+  document.getElementById('signal-policy-label').textContent =
+    `Коэффициенты выше ${max}× отправляются, кроме случаев, когда аномалии одновременно есть более чем у ` +
+    `${broadMarketThreshold} акций IMOEX.`;
   document.getElementById('volume-subtitle').textContent =
     `Текущий оборот сравнивается с ${state.config.baseline_sessions} предыдущими торговыми сессиями. ` +
-    `Сбор по будням в ${String(state.config.schedule_hour).padStart(2, '0')}:${String(state.config.schedule_minute).padStart(2, '0')} ` +
+    `Сбор по будням в ${schedule} ` +
     `${state.config.schedule_timezone}.`;
 }
 
