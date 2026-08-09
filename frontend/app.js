@@ -238,12 +238,12 @@ function applyYearHeaders() {
   const [y1, y2] = activeYears();
   if (headerYear1Group) headerYear1Group.textContent = String(y1);
   if (headerYear2Group) headerYear2Group.textContent = String(y2);
-  if (headerProfitYear1) headerProfitYear1.textContent = 'Прогнозная ЧП, млрд ₽';
-  if (headerProfitYear2) headerProfitYear2.textContent = 'Прогнозная ЧП, млрд ₽';
-  if (headerPriceYear1) headerPriceYear1.textContent = 'Прогнозная цена, ₽';
-  if (headerPriceYear2) headerPriceYear2.textContent = 'Прогнозная цена, ₽';
-  if (headerDividendsYear1) headerDividendsYear1.textContent = 'Остаток дивидендов к выплате, ₽/акцию';
-  if (headerDividendsYear2) headerDividendsYear2.textContent = 'Остаток дивидендов к выплате, ₽/акцию';
+  if (headerProfitYear1) headerProfitYear1.textContent = 'ЧП, млрд ₽';
+  if (headerProfitYear2) headerProfitYear2.textContent = 'ЧП, млрд ₽';
+  if (headerPriceYear1) headerPriceYear1.textContent = 'Цена, ₽';
+  if (headerPriceYear2) headerPriceYear2.textContent = 'Цена, ₽';
+  if (headerDividendsYear1) headerDividendsYear1.textContent = 'Дивиденды, ₽/акц.';
+  if (headerDividendsYear2) headerDividendsYear2.textContent = 'Дивиденды, ₽/акц.';
 }
 
 function yearKeyByIndex(index) {
@@ -726,7 +726,7 @@ function updateSortIndicators() {
   const [year1, year2] = activeYears();
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
-    { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация, млрд ₽' },
+    { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация' },
     { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Доходность (${year1}), %` },
     { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Доходность (${year2}), %` },
   ];
