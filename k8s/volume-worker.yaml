@@ -95,3 +95,9 @@ spec:
                   name: moex-secrets
                   key: VOLUME_SMTP_PASSWORD
                   optional: true
+            - name: VOLUME_NOTIFICATION_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: moex-secrets
+                  key: VOLUME_NOTIFICATION_EMAIL
+                  optional: true
