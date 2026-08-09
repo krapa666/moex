@@ -17,6 +17,8 @@ const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
 const sortMarketCap = document.getElementById('sort-market-cap');
+const sortDividendYieldYear1 = document.getElementById('sort-dividend-yield-year1');
+const sortDividendYieldYear2 = document.getElementById('sort-dividend-yield-year2');
 const sortUpsideYear1 = document.getElementById('sort-upside-year1');
 const sortUpsideYear2 = document.getElementById('sort-upside-year2');
 const headerProfitYear1 = document.getElementById('header-profit-year1');
@@ -742,7 +744,16 @@ function compareValues(a, b, direction = 'asc') {
 
 function sortRows(rows) {
   if (!sortState.key) return rows;
-  return [...rows].sort((left, right) => compareValues(left[sortState.key], right[sortState.key], sortState.direction));
+  const sortValue = (row) => {
+    if (sortState.key === 'dividend_yield_year1') {
+      return calculateDividendYield(mapDividendsByYear(row, 0), row.current_price);
+    }
+    if (sortState.key === 'dividend_yield_year2') {
+      return calculateDividendYield(mapDividendsByYear(row, 1), row.current_price);
+    }
+    return row[sortState.key];
+  };
+  return [...rows].sort((left, right) => compareValues(sortValue(left), sortValue(right), sortState.direction));
 }
 
 function updateSortIndicators() {
@@ -750,6 +761,8 @@ function updateSortIndicators() {
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация' },
+    { element: sortDividendYieldYear1, key: 'dividend_yield_year1', label: `Див. доходность (${year1}), %` },
+    { element: sortDividendYieldYear2, key: 'dividend_yield_year2', label: `Див. доходность (${year2}), %` },
     { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Полная доходность (${year1}), %` },
     { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Полная доходность (${year2}), %` },
   ];
