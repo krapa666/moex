@@ -12,8 +12,8 @@
   --down: #ef1d1d;
   --flat: #6b7280;
   --table-max-width: 1254px;
-  --ticker-col-width: 6.5%;
-  --price-col-width: 6.5%;
+  --ticker-col-width: 6%;
+  --price-col-width: 6%;
 }
 
 * {
@@ -206,59 +206,62 @@ thead th {
 }
 
 col:nth-child(1) {
-  width: 6.5%;
+  width: 6%;
 }
 
 col:nth-child(2) {
-  width: 6.5%;
+  width: 6%;
 }
 
 col:nth-child(3) {
-  width: 5.7%;
+  width: 5%;
 }
 
 col:nth-child(4) {
-  width: 7%;
-}
-
-col:nth-child(5) {
-  width: 5.3%;
-}
-
-col:nth-child(6),
-col:nth-child(10) {
   width: 6.5%;
 }
 
-col:nth-child(7),
+col:nth-child(5) {
+  width: 4.5%;
+}
+
+col:nth-child(6),
 col:nth-child(11) {
   width: 6%;
 }
 
-col:nth-child(8),
+col:nth-child(7),
 col:nth-child(12) {
-  width: 7%;
+  width: 5.5%;
+}
+
+col:nth-child(8),
+col:nth-child(13) {
+  width: 6.5%;
 }
 
 col:nth-child(9),
-col:nth-child(13) {
-  width: 6%;
-}
-
-col:nth-child(14) {
-  width: 7%;
-}
-
+col:nth-child(10),
+col:nth-child(14),
 col:nth-child(15) {
-  width: 11%;
+  width: 5.5%;
 }
 
-tbody td:nth-child(14) {
-  white-space: nowrap;
-  font-size: 11px;
+col:nth-child(16) {
+  width: 6.5%;
 }
 
-tbody td:nth-child(15) {
+col:nth-child(17) {
+  width: 7.5%;
+}
+
+tbody td:nth-child(16) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
+tbody td:nth-child(17) {
   white-space: normal;
 }
 

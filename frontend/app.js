@@ -17,6 +17,8 @@ const globalStatus = document.getElementById('global-status');
 const sortButtons = document.querySelectorAll('.th-sort');
 const sortTicker = document.getElementById('sort-ticker');
 const sortMarketCap = document.getElementById('sort-market-cap');
+const sortDividendYieldYear1 = document.getElementById('sort-dividend-yield-year1');
+const sortDividendYieldYear2 = document.getElementById('sort-dividend-yield-year2');
 const sortUpsideYear1 = document.getElementById('sort-upside-year1');
 const sortUpsideYear2 = document.getElementById('sort-upside-year2');
 const headerProfitYear1 = document.getElementById('header-profit-year1');
@@ -121,6 +123,20 @@ function formatPercent(value) {
   }
   const formatted = formatNumber(Math.round(Number(value)), 0);
   return formatted === '—' ? formatted : `${formatted} %`;
+}
+
+function calculateDividendYield(dividends, currentPrice) {
+  if (dividends === null || dividends === undefined || dividends === '') return null;
+  const dividendValue = Number(dividends);
+  const priceValue = Number(currentPrice);
+  if (!Number.isFinite(dividendValue) || !Number.isFinite(priceValue) || priceValue <= 0) return null;
+  return (dividendValue / priceValue) * 100;
+}
+
+function formatDividendYield(dividends, currentPrice) {
+  const value = calculateDividendYield(dividends, currentPrice);
+  if (value === null) return '—';
+  return `${formatNumber(value, 1)} %`;
 }
 
 function escapeHtml(value) {
@@ -457,10 +473,12 @@ function createInlineComparisonRow(item) {
     <td><input value="${y1?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y1?.forecast_price, priceDecimals)}</span></td>
     <td><input value="${y1?.dividends_per_share ?? ''}" disabled /></td>
+    <td class="readonly-cell">${formatDividendYield(y1?.dividends_per_share, item.current_price)}</td>
     <td class="readonly-cell ${upsideClass(y1?.upside_percent, { isNearTerm: true })}">${formatPercent(y1?.upside_percent)}</td>
     <td><input value="${y2?.forecast_profit_billion_rub ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(y2?.forecast_price, priceDecimals)}</span></td>
     <td><input value="${y2?.dividends_per_share ?? ''}" disabled /></td>
+    <td class="readonly-cell">${formatDividendYield(y2?.dividends_per_share, item.current_price)}</td>
     <td class="readonly-cell ${upsideClass(y2?.upside_percent)}">${formatPercent(y2?.upside_percent)}</td>
     <td class="readonly-cell"><span>${formatDate(item.price_updated_at)}</span></td>
     <td><span class="comparison-source">${escapeHtml(displayAnalystName(item.table_number, item.analyst_name))}</span></td>
@@ -490,22 +508,27 @@ function medianComparisonYear(items, year, field) {
 
 function createConsensusComparisonRow(items, ticker) {
   const [year1, year2] = activeYears();
-  const priceDecimals = detectDecimals(median(items.map((item) => item.current_price)));
+  const currentPrice = median(items.map((item) => item.current_price));
+  const priceDecimals = detectDecimals(currentPrice);
+  const dividendsYear1 = medianComparisonYear(items, year1, 'dividends_per_share');
+  const dividendsYear2 = medianComparisonYear(items, year2, 'dividends_per_share');
   const tr = document.createElement('tr');
   tr.className = 'comparison-inline-row consensus-row';
   tr.innerHTML = `
     <td><input class="ticker-input" value="${escapeHtml(ticker)}" disabled /></td>
-    <td class="readonly-cell"><span>${formatCurrency(median(items.map((item) => item.current_price)), priceDecimals)}</span></td>
+    <td class="readonly-cell"><span>${formatCurrency(currentPrice, priceDecimals)}</span></td>
     <td><input value="${median(items.map((item) => item.shares_billion)) ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(median(items.map((item) => item.market_cap_billion_rub)))}</span></td>
     <td><input value="${median(items.map((item) => item.pe_avg_5y)) ?? ''}" disabled /></td>
     <td><input value="${medianComparisonYear(items, year1, 'forecast_profit_billion_rub') ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(medianComparisonYear(items, year1, 'forecast_price'), priceDecimals)}</span></td>
-    <td><input value="${medianComparisonYear(items, year1, 'dividends_per_share') ?? ''}" disabled /></td>
+    <td><input value="${dividendsYear1 ?? ''}" disabled /></td>
+    <td class="readonly-cell">${formatDividendYield(dividendsYear1, currentPrice)}</td>
     <td class="readonly-cell ${upsideClass(medianComparisonYear(items, year1, 'upside_percent'), { isNearTerm: true })}">${formatPercent(medianComparisonYear(items, year1, 'upside_percent'))}</td>
     <td><input value="${medianComparisonYear(items, year2, 'forecast_profit_billion_rub') ?? ''}" disabled /></td>
     <td class="readonly-cell"><span>${formatCurrency(medianComparisonYear(items, year2, 'forecast_price'), priceDecimals)}</span></td>
-    <td><input value="${medianComparisonYear(items, year2, 'dividends_per_share') ?? ''}" disabled /></td>
+    <td><input value="${dividendsYear2 ?? ''}" disabled /></td>
+    <td class="readonly-cell">${formatDividendYield(dividendsYear2, currentPrice)}</td>
     <td class="readonly-cell ${upsideClass(medianComparisonYear(items, year2, 'upside_percent'))}">${formatPercent(medianComparisonYear(items, year2, 'upside_percent'))}</td>
     <td class="readonly-cell">—</td>
     <td><span class="comparison-source">Медиана (${items.length})</span></td>
@@ -646,6 +669,8 @@ function updateCalculatedCells(tr, row) {
   setCellText('market_cap', formatCurrency(row.market_cap_billion_rub));
   setCellText('forecast_price_year1', formatCurrency(row.forecast_price_year1, priceDecimals));
   setCellText('forecast_price_year2', formatCurrency(row.forecast_price_year2, priceDecimals));
+  setCellText('dividend_yield_year1', formatDividendYield(mapDividendsByYear(row, 0), row.current_price));
+  setCellText('dividend_yield_year2', formatDividendYield(mapDividendsByYear(row, 1), row.current_price));
   setUpsideCell('upside_year1', row.upside_percent_year1, { isNearTerm: true });
   setUpsideCell('upside_year2', row.upside_percent_year2);
   setCellText('price_updated_at', formatPriceUpdated(row.price_updated_at));
@@ -719,7 +744,16 @@ function compareValues(a, b, direction = 'asc') {
 
 function sortRows(rows) {
   if (!sortState.key) return rows;
-  return [...rows].sort((left, right) => compareValues(left[sortState.key], right[sortState.key], sortState.direction));
+  const sortValue = (row) => {
+    if (sortState.key === 'dividend_yield_year1') {
+      return calculateDividendYield(mapDividendsByYear(row, 0), row.current_price);
+    }
+    if (sortState.key === 'dividend_yield_year2') {
+      return calculateDividendYield(mapDividendsByYear(row, 1), row.current_price);
+    }
+    return row[sortState.key];
+  };
+  return [...rows].sort((left, right) => compareValues(sortValue(left), sortValue(right), sortState.direction));
 }
 
 function updateSortIndicators() {
@@ -727,8 +761,10 @@ function updateSortIndicators() {
   const sortableHeaders = [
     { element: sortTicker, key: 'ticker', label: 'Тикер' },
     { element: sortMarketCap, key: 'market_cap_billion_rub', label: 'Капитализация' },
-    { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Доходность (${year1}), %` },
-    { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Доходность (${year2}), %` },
+    { element: sortDividendYieldYear1, key: 'dividend_yield_year1', label: `Див. доходность (${year1}), %` },
+    { element: sortDividendYieldYear2, key: 'dividend_yield_year2', label: `Див. доходность (${year2}), %` },
+    { element: sortUpsideYear1, key: 'upside_percent_year1', label: `Полная доходность (${year1}), %` },
+    { element: sortUpsideYear2, key: 'upside_percent_year2', label: `Полная доходность (${year2}), %` },
   ];
 
   sortableHeaders.forEach(({ element, key, label }) => {
@@ -766,10 +802,12 @@ function renderRows(rows) {
       <td><input data-field="forecast_profit_year1_billion_rub" value="${mapProfitByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year1">${formatCurrency(row.forecast_price_year1, priceDecimals)}</span></td>
       <td><input data-field="dividends_year1" value="${mapDividendsByYear(row, 0) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
+      <td class="readonly-cell" data-cell="dividend_yield_year1" title="Дивиденды этого года / текущая цена × 100%">${formatDividendYield(mapDividendsByYear(row, 0), row.current_price)}</td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year1, { isNearTerm: true })}" data-cell="upside_year1" title="Доходность от текущей цены с учётом всех оставшихся дивидендов до выбранного года">${formatPercent(row.upside_percent_year1)}</td>
       <td><input data-field="forecast_profit_year2_billion_rub" value="${mapProfitByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
       <td class="readonly-cell"><span data-cell="forecast_price_year2">${formatCurrency(row.forecast_price_year2, priceDecimals)}</span></td>
       <td><input data-field="dividends_year2" value="${mapDividendsByYear(row, 1) ?? ''}" ${lockAllFields ? 'readonly' : ''} /></td>
+      <td class="readonly-cell" data-cell="dividend_yield_year2" title="Дивиденды этого года / текущая цена × 100%">${formatDividendYield(mapDividendsByYear(row, 1), row.current_price)}</td>
       <td class="readonly-cell ${upsideClass(row.upside_percent_year2)}" data-cell="upside_year2" title="Доходность от текущей цены с учётом всех оставшихся дивидендов до выбранного года">${formatPercent(row.upside_percent_year2)}</td>
       <td class="readonly-cell"><span data-cell="price_updated_at">${formatPriceUpdated(row.price_updated_at)}</span></td>
       <td>
@@ -817,6 +855,10 @@ function renderRows(rows) {
           if (yearIndex !== undefined) {
             map[yearKeyByIndex(yearIndex)] = parseInputNumber(normalizedValue);
             updated.dividend_year_map = map;
+            const yieldCell = tr.querySelector(`[data-cell="dividend_yield_year${yearIndex + 1}"]`);
+            if (yieldCell) {
+              yieldCell.textContent = formatDividendYield(map[yearKeyByIndex(yearIndex)], updated.current_price);
+            }
           }
         }
         rowDrafts.set(row.id, updated);
