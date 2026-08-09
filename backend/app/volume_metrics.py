@@ -1,4 +1,4 @@
-from prometheus_client import Gauge
+from prometheus_client import Counter, Gauge
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
@@ -11,15 +11,15 @@ from .volume_config import get_volume_settings
 
 LAST_COLLECTION_TIMESTAMP = Gauge(
     "moex_volume_last_collection_timestamp_seconds",
-    "Unix timestamp of the latest IMOEX volume collection start",
+    "Unix timestamp of the latest TQBR share volume collection start",
 )
 LAST_SUCCESS_TIMESTAMP = Gauge(
     "moex_volume_last_success_timestamp_seconds",
-    "Unix timestamp of the latest successful IMOEX volume collection finish",
+    "Unix timestamp of the latest successful TQBR share volume collection finish",
 )
 SECURITIES_TOTAL = Gauge(
     "moex_volume_securities_total",
-    "Number of IMOEX securities expected in the latest volume collection",
+    "Number of TQBR common/preferred shares expected in the latest volume collection",
 )
 SECURITIES_UPDATED = Gauge(
     "moex_volume_securities_updated",
@@ -27,7 +27,20 @@ SECURITIES_UPDATED = Gauge(
 )
 ACTIVE_SECURITIES = Gauge(
     "moex_volume_active_securities",
-    "Number of active IMOEX securities stored by the volume monitor",
+    "Number of active TQBR shares stored by the volume monitor",
+)
+IMOEX_SECURITIES = Gauge(
+    "moex_volume_imoex_securities",
+    "Number of active monitored shares that belong to IMOEX",
+)
+BASELINE_SESSIONS = Gauge(
+    "moex_volume_baseline_sessions",
+    "Configured number of completed sessions in the turnover baseline",
+)
+NOTIFICATION_SCOPE = Gauge(
+    "moex_volume_notification_scope",
+    "One-hot notification universe for volume alerts",
+    ["scope"],
 )
 SIGNALS_FOUND = Gauge(
     "moex_volume_signals_found",
@@ -45,6 +58,11 @@ SMTP_CONFIGURED = Gauge(
 RECIPIENT_CONFIGURED = Gauge(
     "moex_volume_notification_recipient_configured",
     "Whether a notification recipient is configured (address is never exposed)",
+)
+TEST_EMAIL_ATTEMPTS = Counter(
+    "moex_volume_test_email_attempts_total",
+    "Number of test notification email attempts",
+    ["result"],
 )
 
 KNOWN_STATUSES = ("running", "success", "partial", "failed")
@@ -64,6 +82,12 @@ def refresh_volume_metrics(db: Session) -> None:
     active_count = db.scalar(
         select(func.count(VolumeSecurity.id)).where(VolumeSecurity.active.is_(True))
     )
+    imoex_count = db.scalar(
+        select(func.count(VolumeSecurity.id)).where(
+            VolumeSecurity.active.is_(True),
+            VolumeSecurity.is_imoex.is_(True),
+        )
+    )
 
     for known_status in KNOWN_STATUSES:
         COLLECTION_STATUS.labels(status=known_status).set(
@@ -80,7 +104,15 @@ def refresh_volume_metrics(db: Session) -> None:
     SECURITIES_UPDATED.set(latest.securities_updated if latest else 0)
     SIGNALS_FOUND.set(latest.signals_found if latest else 0)
     ACTIVE_SECURITIES.set(active_count or 0)
-    SMTP_CONFIGURED.set(1 if get_volume_settings().smtp_configured else 0)
-    RECIPIENT_CONFIGURED.set(
-        1 if stored_settings is not None and stored_settings.notification_email else 0
+    IMOEX_SECURITIES.set(imoex_count or 0)
+    baseline_sessions = (
+        stored_settings.baseline_sessions
+        if stored_settings is not None
+        else get_volume_settings().baseline_sessions
     )
+    BASELINE_SESSIONS.set(baseline_sessions)
+    selected_scope = stored_settings.notification_scope if stored_settings else "imoex"
+    for scope in ("imoex", "all"):
+        NOTIFICATION_SCOPE.labels(scope=scope).set(1 if selected_scope == scope else 0)
+    SMTP_CONFIGURED.set(1 if get_volume_settings().smtp_configured else 0)
+    RECIPIENT_CONFIGURED.set(1 if get_volume_settings().notification_email else 0)
