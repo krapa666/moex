@@ -1,4 +1,4 @@
-FROM alpine:3.20 AS assets
+FROM alpine:3.24 AS assets
 
 WORKDIR /assets
 COPY index.html app.js styles.css ./
