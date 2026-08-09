@@ -44,7 +44,19 @@ NOTIFICATION_SCOPE = Gauge(
 )
 SIGNALS_FOUND = Gauge(
     "moex_volume_signals_found",
-    "Number of signals found in the latest volume collection",
+    "Number of turnover anomalies found in the latest volume collection",
+)
+IMOEX_ANOMALIES_FOUND = Gauge(
+    "moex_volume_imoex_anomalies_found",
+    "Number of IMOEX turnover anomalies found in the latest volume collection",
+)
+NOTIFICATIONS_SUPPRESSED = Gauge(
+    "moex_volume_notifications_suppressed",
+    "Number of high-ratio notifications suppressed by the broad-market rule",
+)
+NOTIFICATIONS_SENT = Gauge(
+    "moex_volume_notifications_sent",
+    "Number of security notifications included in the latest email digest",
 )
 COLLECTION_STATUS = Gauge(
     "moex_volume_collection_status",
@@ -103,6 +115,9 @@ def refresh_volume_metrics(db: Session) -> None:
     SECURITIES_TOTAL.set(latest.securities_total if latest else 0)
     SECURITIES_UPDATED.set(latest.securities_updated if latest else 0)
     SIGNALS_FOUND.set(latest.signals_found if latest else 0)
+    IMOEX_ANOMALIES_FOUND.set(latest.imoex_anomalies_found if latest else 0)
+    NOTIFICATIONS_SUPPRESSED.set(latest.notifications_suppressed if latest else 0)
+    NOTIFICATIONS_SENT.set(latest.notifications_sent if latest else 0)
     ACTIVE_SECURITIES.set(active_count or 0)
     IMOEX_SECURITIES.set(imoex_count or 0)
     baseline_sessions = (

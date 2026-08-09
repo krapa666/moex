@@ -1,6 +1,10 @@
 from decimal import Decimal
 
-from app.volume_collector import _notification_matches_scope, _status_values
+from app.volume_collector import (
+    _notification_matches_scope,
+    _select_notification_candidates,
+    _status_values,
+)
 from app.volume_config import VolumeSettings
 from app.volume_signals import evaluate_turnover
 
@@ -65,3 +69,33 @@ def test_stored_baseline_length_controls_signal_calculation() -> None:
 
     assert result.status == "signal"
     assert result.count == 10
+
+
+def test_high_ratio_is_sent_without_broad_market_condition() -> None:
+    candidates = [
+        {"ticker": "SBER", "status": "signal"},
+        {"ticker": "GAZP", "status": "above_range"},
+    ]
+
+    selected, suppressed = _select_notification_candidates(
+        candidates,
+        imoex_anomalies=10,
+        broad_market_threshold=10,
+    )
+
+    assert selected == candidates
+    assert suppressed == 0
+
+
+def test_broad_market_condition_suppresses_only_high_ratio_candidates() -> None:
+    ordinary = {"ticker": "SBER", "status": "signal"}
+    high_ratio = {"ticker": "GAZP", "status": "above_range"}
+
+    selected, suppressed = _select_notification_candidates(
+        [ordinary, high_ratio],
+        imoex_anomalies=11,
+        broad_market_threshold=10,
+    )
+
+    assert selected == [ordinary]
+    assert suppressed == 1

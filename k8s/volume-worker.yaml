@@ -55,8 +55,8 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: VOLUME_SCHEDULE_HOUR
               value: "18"
-            - name: VOLUME_SCHEDULE_MINUTE
-              value: "40"
+            - name: VOLUME_SCHEDULE_MINUTES
+              value: "20,35,45"
             - name: VOLUME_SCHEDULE_TIMEZONE
               value: Europe/Moscow
             - name: VOLUME_RUN_ON_STARTUP
@@ -71,6 +71,8 @@ spec:
               value: "3.6"
             - name: VOLUME_SIGNAL_MAX_RATIO
               value: "6.5"
+            - name: VOLUME_BROAD_MARKET_SIGNAL_THRESHOLD
+              value: "10"
             - name: VOLUME_MOEX_HISTORY_ROWS
               value: "140"
             - name: VOLUME_SMTP_ENABLED

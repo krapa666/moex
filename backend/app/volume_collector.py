@@ -88,6 +88,19 @@ def _notification_matches_scope(scope: str, is_imoex: bool) -> bool:
     return scope == "all" or is_imoex
 
 
+def _select_notification_candidates(
+    candidates: list[dict],
+    *,
+    imoex_anomalies: int,
+    broad_market_threshold: int,
+) -> tuple[list[dict], int]:
+    broad_market = imoex_anomalies > broad_market_threshold
+    if not broad_market:
+        return candidates, 0
+    selected = [item for item in candidates if item["status"] != "above_range"]
+    return selected, len(candidates) - len(selected)
+
+
 async def collect_once(
     settings: VolumeSettings,
     *,
@@ -134,7 +147,11 @@ async def collect_once(
 
     errors: list[str] = []
     signals: list[dict] = []
+    notification_candidates: list[dict] = []
     signals_detected = 0
+    imoex_anomalies_found = 0
+    notifications_suppressed = 0
+    notifications_sent = 0
     updated = 0
     total = 0
 
@@ -247,8 +264,10 @@ async def collect_once(
                                 is_final=False,
                                 source="intraday",
                             )
-                            if result.status == "signal":
+                            if result.status in {"signal", "above_range"}:
                                 signals_detected += 1
+                                if security["is_imoex"]:
+                                    imoex_anomalies_found += 1
                                 if _notification_matches_scope(
                                     notification_scope,
                                     security["is_imoex"],
@@ -260,7 +279,7 @@ async def collect_once(
                                         )
                                     )
                                     if already_sent is None:
-                                        signals.append(
+                                        notification_candidates.append(
                                             {
                                                 "security_id": security_id,
                                                 "ticker": ticker,
@@ -268,10 +287,24 @@ async def collect_once(
                                                 "turnover_rub": current["turnover_rub"],
                                                 "average_rub": result.average,
                                                 "ratio": result.ratio,
+                                                "status": result.status,
                                             }
                                         )
                         session.commit()
                     updated += 1
+
+            signals, notifications_suppressed = _select_notification_candidates(
+                notification_candidates,
+                imoex_anomalies=imoex_anomalies_found,
+                broad_market_threshold=settings.broad_market_signal_threshold,
+            )
+            if imoex_anomalies_found > settings.broad_market_signal_threshold:
+                logger.info(
+                    "Broad-market volume condition detected; imoex_anomalies=%d threshold=%d high_ratio_notifications_suppressed=%d",
+                    imoex_anomalies_found,
+                    settings.broad_market_signal_threshold,
+                    notifications_suppressed,
+                )
 
             if allow_notifications and settings.smtp_configured and recipient and signals:
                 await asyncio.to_thread(send_signal_digest, settings, recipient, signals)
@@ -293,6 +326,7 @@ async def collect_once(
                         )
                         session.execute(statement)
                     session.commit()
+                notifications_sent = len(signals)
 
             status = "partial" if errors else "success"
             error_message = "\n".join(errors[:20]) or None
@@ -309,14 +343,20 @@ async def collect_once(
                 run.securities_total = total
                 run.securities_updated = updated
                 run.signals_found = signals_detected
+                run.imoex_anomalies_found = imoex_anomalies_found
+                run.notifications_suppressed = notifications_suppressed
+                run.notifications_sent = notifications_sent
                 run.error_message = error_message
                 session.commit()
         logger.info(
-            "Finished TQBR equity volume collection; status=%s total=%d updated=%d signals=%d errors=%d",
+            "Finished TQBR equity volume collection; status=%s total=%d updated=%d anomalies=%d imoex_anomalies=%d notifications_sent=%d notifications_suppressed=%d errors=%d",
             status,
             total,
             updated,
             signals_detected,
+            imoex_anomalies_found,
+            notifications_sent,
+            notifications_suppressed,
             len(errors),
         )
         return {
@@ -324,6 +364,9 @@ async def collect_once(
             "securities_total": total,
             "securities_updated": updated,
             "signals_found": signals_detected,
+            "imoex_anomalies_found": imoex_anomalies_found,
+            "notifications_sent": notifications_sent,
+            "notifications_suppressed": notifications_suppressed,
             "detail": error_message,
         }
     finally:

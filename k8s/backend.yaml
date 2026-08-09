@@ -37,6 +37,12 @@ spec:
                 secretKeyRef:
                   name: moex-secrets
                   key: POSTGRES_PASSWORD
+            - name: VOLUME_SCHEDULE_HOUR
+              value: "18"
+            - name: VOLUME_SCHEDULE_MINUTES
+              value: "20,35,45"
+            - name: VOLUME_SCHEDULE_TIMEZONE
+              value: Europe/Moscow
             - name: VOLUME_SMTP_ENABLED
               value: "false"
             - name: VOLUME_SMTP_HOST
@@ -45,6 +51,8 @@ spec:
               value: "587"
             - name: VOLUME_SMTP_FROM
               value: ""
+            - name: VOLUME_BROAD_MARKET_SIGNAL_THRESHOLD
+              value: "10"
             - name: VOLUME_PUBLIC_BASE_URL
               value: ""
             - name: VOLUME_SMTP_USERNAME
