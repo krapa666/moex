@@ -83,6 +83,38 @@ data:
           "gridPos": {"h": 9, "w": 24, "x": 0, "y": 8},
           "datasource": {"type": "loki", "uid": "loki"},
           "targets": [{"expr": "{job=~\".*\"}", "queryType": "range", "refId": "A"}]
+        },
+        {
+          "type": "stat",
+          "title": "Volume collection OK",
+          "id": 5,
+          "gridPos": {"h": 6, "w": 6, "x": 0, "y": 17},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "moex_volume_collection_status{status='success'}", "refId": "A"}]
+        },
+        {
+          "type": "stat",
+          "title": "Volume success age, hours",
+          "id": 6,
+          "gridPos": {"h": 6, "w": 6, "x": 6, "y": 17},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "(time() - moex_volume_last_success_timestamp_seconds) / 3600 and moex_volume_last_success_timestamp_seconds > 0", "refId": "A"}]
+        },
+        {
+          "type": "stat",
+          "title": "IMOEX securities updated",
+          "id": 7,
+          "gridPos": {"h": 6, "w": 6, "x": 12, "y": 17},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "moex_volume_securities_updated", "refId": "A"}]
+        },
+        {
+          "type": "stat",
+          "title": "Volume signals",
+          "id": 8,
+          "gridPos": {"h": 6, "w": 6, "x": 18, "y": 17},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "moex_volume_signals_found", "refId": "A"}]
         }
       ]
     }

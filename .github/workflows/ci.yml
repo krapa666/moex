@@ -35,11 +35,15 @@ jobs:
         with:
           node-version: "22"
       - name: Check frontend JavaScript
-        run: node --check frontend/app.js
+        run: |
+          node --check frontend/app.js
+          node --check frontend/volumes/volumes.js
       - name: Check shell scripts
         run: bash -n scripts/*.sh
       - name: Validate Compose file
         run: docker compose config --quiet
+        env:
+          POSTGRES_PASSWORD: ci-compose-validation-only
 
   browser:
     runs-on: ubuntu-latest

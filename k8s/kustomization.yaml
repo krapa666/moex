@@ -8,6 +8,7 @@ resources:
   - monitoring-pvcs.yaml
   - postgres.yaml
   - backend.yaml
+  - volume-worker.yaml
   - frontend.yaml
   - prometheus.yaml
   - loki.yaml

@@ -1,12 +1,24 @@
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg2://postgres:postgres@db:5432/fair_price",
-)
+
+def build_database_url() -> str | URL:
+    explicit_url = os.getenv("DATABASE_URL")
+    if explicit_url:
+        return explicit_url
+    return URL.create(
+        drivername="postgresql+psycopg2",
+        username=os.getenv("POSTGRES_USER", "postgres"),
+        password=os.getenv("POSTGRES_PASSWORD") or None,
+        host=os.getenv("POSTGRES_HOST", "db"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+        database=os.getenv("POSTGRES_DB", "fair_price"),
+    )
+
+
+DATABASE_URL = build_database_url()
 
 
 class Base(DeclarativeBase):
