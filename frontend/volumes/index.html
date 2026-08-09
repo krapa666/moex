@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Объёмы торгов IMOEX</title>
+    <title>Объёмы торгов акциями MOEX</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/volumes/volumes.css" />
   </head>
@@ -11,7 +11,7 @@
     <main class="page volume-page">
       <header class="header volume-header">
         <div>
-          <h1>Контроль объёмов торгов IMOEX</h1>
+          <h1>Контроль объёмов торгов акциями MOEX</h1>
           <p class="subtitle" id="volume-subtitle">
             Сравнение текущего оборота с 60 предыдущими торговыми сессиями.
           </p>
@@ -37,11 +37,21 @@
         </article>
         <article class="volume-info-card notification-card" id="notification-card" hidden>
           <form id="notification-form">
-            <label class="volume-info-label" for="notification-email">Email для уведомлений</label>
+            <span class="volume-info-label">Настройки мониторинга</span>
             <div class="notification-controls">
-              <input id="notification-email" type="email" maxlength="320" placeholder="name@example.com" />
+              <select id="notification-scope" aria-label="Область уведомлений">
+                <option value="imoex">Только IMOEX</option>
+                <option value="all">Все акции TQBR</option>
+              </select>
+              <label class="baseline-control">
+                Среднее за
+                <input id="baseline-sessions" type="number" min="10" max="250" step="1" value="60" required />
+                сессий
+              </label>
               <button class="btn btn-primary" type="submit">Сохранить</button>
+              <button class="btn" id="test-email-btn" type="button">Тест письма</button>
             </div>
+            <span class="volume-info-detail">Получатель задаётся через VOLUME_NOTIFICATION_EMAIL в .env.</span>
             <span class="volume-info-detail" id="notification-status"></span>
           </form>
         </article>
@@ -50,8 +60,16 @@
       <section class="card volume-card" id="overview-section">
         <div class="volume-table-heading">
           <div>
-            <h2>Акции индекса</h2>
-            <p>Нажмите на тикер, чтобы открыть историю последних 60 сессий.</p>
+            <h2>Акции основной доски TQBR</h2>
+            <p>Обыкновенные и привилегированные акции без фондов и депозитарных расписок.</p>
+          </div>
+          <div class="volume-filters">
+            <input id="security-search" type="search" placeholder="Тикер или название" aria-label="Поиск акции" />
+            <select id="index-filter" aria-label="Фильтр по индексу">
+              <option value="all">Все бумаги</option>
+              <option value="imoex">Только IMOEX</option>
+              <option value="outside">Вне IMOEX</option>
+            </select>
           </div>
         </div>
         <div class="table-wrap volume-table-wrap">
@@ -59,6 +77,7 @@
             <colgroup>
               <col class="volume-col-ticker" />
               <col class="volume-col-name" />
+              <col class="volume-col-type" />
               <col class="volume-col-weight" />
               <col class="volume-col-date" />
               <col class="volume-col-money" />
@@ -70,7 +89,8 @@
               <tr>
                 <th><button class="th-sort volume-sort" data-sort="ticker">Тикер ⇅</button></th>
                 <th>Название</th>
-                <th><button class="th-sort volume-sort" data-sort="weight">Вес, % ⇅</button></th>
+                <th><button class="th-sort volume-sort" data-sort="type">Тип ⇅</button></th>
+                <th><button class="th-sort volume-sort" data-sort="weight">IMOEX, % ⇅</button></th>
                 <th>Дата</th>
                 <th><button class="th-sort volume-sort" data-sort="turnover">Оборот, млн ₽ ⇅</button></th>
                 <th>Среднее, млн ₽</th>

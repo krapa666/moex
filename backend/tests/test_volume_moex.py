@@ -61,3 +61,28 @@ async def test_open_market_uses_moex_system_date() -> None:
         assert result["trade_date"].isoformat() == "2026-08-10"
     finally:
         await client._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_tqbr_universe_keeps_only_active_common_and_preferred_shares() -> None:
+    client = VolumeMoexClient(settings())
+    client._get = AsyncMock(
+        return_value={
+            "securities": {
+                "columns": ["SECID", "SHORTNAME", "STATUS", "SECTYPE"],
+                "data": [
+                    ["SBER", "Сбербанк", "A", "1"],
+                    ["SBERP", "Сбербанк-п", "A", "2"],
+                    ["AGRO", "Русагро-гдр", "A", "3"],
+                    ["OLD", "Не торгуется", "N", "1"],
+                ],
+            }
+        }
+    )
+    try:
+        assert await client.fetch_tqbr_equities() == [
+            {"ticker": "SBER", "short_name": "Сбербанк", "security_type": "common"},
+            {"ticker": "SBERP", "short_name": "Сбербанк-п", "security_type": "preferred"},
+        ]
+    finally:
+        await client._client.aclose()

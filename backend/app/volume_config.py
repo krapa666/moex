@@ -42,6 +42,7 @@ class VolumeSettings:
     smtp_from: str
     smtp_starttls: bool
     smtp_ssl: bool
+    notification_email: str
     public_base_url: str
 
     @property
@@ -71,6 +72,7 @@ class VolumeSettings:
             smtp_from=os.getenv("VOLUME_SMTP_FROM", ""),
             smtp_starttls=_bool_env("VOLUME_SMTP_STARTTLS", True),
             smtp_ssl=_bool_env("VOLUME_SMTP_SSL", False),
+            notification_email=os.getenv("VOLUME_NOTIFICATION_EMAIL", "").strip(),
             public_base_url=os.getenv("VOLUME_PUBLIC_BASE_URL", ""),
         )
         settings.validate()
@@ -103,6 +105,10 @@ class VolumeSettings:
             raise ValueError("VOLUME_SMTP_SSL and VOLUME_SMTP_STARTTLS cannot both be enabled")
         if self.smtp_enabled and not self.smtp_configured:
             raise ValueError("Enabled SMTP requires VOLUME_SMTP_HOST and VOLUME_SMTP_FROM")
+        if self.notification_email and (
+            "@" not in self.notification_email or " " in self.notification_email
+        ):
+            raise ValueError("VOLUME_NOTIFICATION_EMAIL is invalid")
 
 
 @lru_cache

@@ -193,7 +193,7 @@
     },
     {
       "type": "stat",
-      "title": "IMOEX securities updated",
+      "title": "TQBR shares updated",
       "id": 11,
       "gridPos": {"h": 4, "w": 5, "x": 10, "y": 20},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -220,6 +220,39 @@
       "targets": [{"expr": "moex_volume_smtp_configured * moex_volume_notification_recipient_configured", "refId": "A"}],
       "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name"},
       "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "NOT READY"}, "1": {"text": "READY"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "orange", "value": 0}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Active TQBR / IMOEX shares",
+      "id": 14,
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "moex_volume_active_securities", "legendFormat": "TQBR", "refId": "A"},
+        {"expr": "moex_volume_imoex_securities", "legendFormat": "IMOEX", "refId": "B"}
+      ],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "value_and_name"},
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Volume baseline sessions",
+      "id": 15,
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "moex_volume_baseline_sessions", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "value"},
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Failed test emails, 24h",
+      "id": 16,
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 24},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(increase(moex_volume_test_email_attempts_total{result='failed'}[24h]))", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "textMode": "value"},
+      "fieldConfig": {"defaults": {"decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []}
     }
   ],
   "refresh": "30s",
@@ -232,6 +265,6 @@
   "timezone": "browser",
   "title": "MOEX App Operations Overview",
   "uid": "moex-home-overview",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

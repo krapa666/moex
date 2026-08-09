@@ -1,0 +1,8 @@
+services:
+  backend:
+    environment:
+      VOLUME_NOTIFICATION_EMAIL: ${VOLUME_NOTIFICATION_EMAIL:-}
+
+  volume-worker:
+    environment:
+      VOLUME_NOTIFICATION_EMAIL: ${VOLUME_NOTIFICATION_EMAIL:-}

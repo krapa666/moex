@@ -5,6 +5,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -100,10 +101,18 @@ class UserSession(Base):
 
 class VolumeSecurity(Base):
     __tablename__ = "volume_securities"
+    __table_args__ = (
+        CheckConstraint(
+            "security_type IN ('common', 'preferred')",
+            name="ck_volume_securities_security_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticker: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
     short_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    security_type: Mapped[str] = mapped_column(String(16), nullable=False, default="common")
+    is_imoex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     weight: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -185,9 +194,30 @@ class VolumeCollectionRun(Base):
 
 class VolumeMonitorSettings(Base):
     __tablename__ = "volume_monitor_settings"
+    __table_args__ = (
+        CheckConstraint(
+            "notification_scope IN ('imoex', 'all')",
+            name="ck_volume_monitor_settings_notification_scope",
+        ),
+        CheckConstraint(
+            "baseline_sessions BETWEEN 10 AND 250",
+            name="ck_volume_monitor_settings_baseline_sessions",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    notification_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    notification_scope: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="imoex",
+        server_default="imoex",
+    )
+    baseline_sessions: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=60,
+        server_default="60",
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

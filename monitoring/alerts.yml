@@ -27,7 +27,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Сбор объёмов IMOEX завершился ошибкой"
+          summary: "Сбор объёмов акций TQBR завершился ошибкой"
           description: "Последний запуск volume-worker не смог завершить сбор. Проверь docker compose logs volume-worker."
 
       - alert: MOEXVolumeCollectionPartial
@@ -36,7 +36,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Собраны не все объёмы IMOEX"
+          summary: "Собраны не все объёмы акций TQBR"
           description: "Последний запуск обновил только часть бумаг. Возможна частичная недоступность MOEX ISS."
 
       - alert: MOEXVolumeCollectionStale
@@ -45,5 +45,5 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Успешного сбора объёмов IMOEX не было более 4 суток"
+          summary: "Успешного сбора объёмов акций TQBR не было более 4 суток"
           description: "Порог 4 суток выбран с запасом на выходные; в длинные биржевые праздники предупреждение может быть ожидаемым."

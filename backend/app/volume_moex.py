@@ -91,6 +91,49 @@ class VolumeMoexClient:
             raise VolumeMoexError("Could not extract tickers from IMOEX analytics")
         return sorted(result.values(), key=lambda item: item["ticker"])
 
+    async def fetch_tqbr_equities(self) -> list[dict[str, Any]]:
+        """Return active common and preferred shares from the main TQBR board.
+
+        TQBR also contains depositary receipts. MOEX identifies common and
+        preferred shares with SECTYPE values 1 and 2, so other instrument
+        types are intentionally excluded.
+        """
+        start = 0
+        result: dict[str, dict[str, Any]] = {}
+        security_types = {"1": "common", "2": "preferred"}
+        path = "/engines/stock/markets/shares/boards/TQBR/securities.json"
+        while True:
+            payload = await self._get(
+                path,
+                {
+                    "iss.meta": "off",
+                    "iss.only": "securities",
+                    "securities.columns": "SECID,SHORTNAME,STATUS,SECTYPE",
+                    "start": start,
+                    "limit": 100,
+                },
+            )
+            page = table_rows(payload, "securities")
+            for row in page:
+                security_type = security_types.get(str(row.get("SECTYPE") or ""))
+                if security_type is None or str(row.get("STATUS") or "").upper() != "A":
+                    continue
+                ticker = str(row.get("SECID") or "").strip().upper()
+                if not ticker:
+                    continue
+                result[ticker] = {
+                    "ticker": ticker,
+                    "short_name": str(row.get("SHORTNAME") or ticker),
+                    "security_type": security_type,
+                }
+            if len(page) < 100:
+                break
+            start += len(page)
+
+        if not result:
+            raise VolumeMoexError("TQBR common/preferred shares table is empty")
+        return sorted(result.values(), key=lambda item: item["ticker"])
+
     async def fetch_history(self, ticker: str, rows_needed: int) -> list[dict[str, Any]]:
         start = 0
         result: list[dict[str, Any]] = []

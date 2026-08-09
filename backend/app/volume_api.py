@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import re
+import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -17,28 +18,22 @@ from .models import (
 )
 from .volume_collector import collect_once
 from .volume_config import get_volume_settings
+from .volume_mailer import send_test_email
+from .volume_metrics import TEST_EMAIL_ATTEMPTS
 
 router = APIRouter(prefix="/api/volume", tags=["volume-monitor"])
 manual_collection_task: asyncio.Task | None = None
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+logger = logging.getLogger(__name__)
 
 
-class NotificationEmailUpdate(BaseModel):
-    notification_email: str | None = Field(default=None, max_length=320)
-
-    @field_validator("notification_email")
-    @classmethod
-    def validate_email(cls, value: str | None) -> str | None:
-        normalized = (value or "").strip()
-        if not normalized:
-            return None
-        if not EMAIL_PATTERN.fullmatch(normalized):
-            raise ValueError("Введите корректный email")
-        return normalized
+class VolumeMonitorSettingsUpdate(BaseModel):
+    notification_scope: Literal["imoex", "all"] | None = None
+    baseline_sessions: int | None = Field(default=None, ge=10, le=250)
 
 
 class VolumeSettingsRead(BaseModel):
-    notification_email: str | None
+    notification_scope: Literal["imoex", "all"]
+    baseline_sessions: int
     smtp_configured: bool
     notifications_enabled: bool
     schedule: str
@@ -83,10 +78,12 @@ def _serialize_run(run: VolumeCollectionRun | None) -> dict | None:
 
 
 @router.get("/config")
-def get_public_config() -> dict[str, int | float | str | bool]:
+def get_public_config(db: Session = Depends(get_db)) -> dict[str, int | float | str | bool]:
     settings = get_volume_settings()
+    stored = db.get(VolumeMonitorSettings, 1)
+    baseline_sessions = stored.baseline_sessions if stored else settings.baseline_sessions
     return {
-        "baseline_sessions": settings.baseline_sessions,
+        "baseline_sessions": baseline_sessions,
         "display_sessions": settings.display_sessions,
         "signal_min_ratio": settings.signal_min_ratio,
         "signal_max_ratio": settings.signal_max_ratio,
@@ -99,23 +96,28 @@ def get_public_config() -> dict[str, int | float | str | bool]:
 
 @router.get("/overview")
 def get_overview(db: Session = Depends(get_db)) -> list[dict]:
-    securities = db.scalars(
-        select(VolumeSecurity)
+    latest_observation_id = (
+        select(VolumeObservation.id)
+        .where(VolumeObservation.security_id == VolumeSecurity.id)
+        .order_by(desc(VolumeObservation.trade_date))
+        .limit(1)
+        .correlate(VolumeSecurity)
+        .scalar_subquery()
+    )
+    rows = db.execute(
+        select(VolumeSecurity, VolumeObservation)
+        .outerjoin(VolumeObservation, VolumeObservation.id == latest_observation_id)
         .where(VolumeSecurity.active.is_(True))
         .order_by(VolumeSecurity.ticker.asc())
     ).all()
     result = []
-    for security in securities:
-        latest = db.scalar(
-            select(VolumeObservation)
-            .where(VolumeObservation.security_id == security.id)
-            .order_by(desc(VolumeObservation.trade_date))
-            .limit(1)
-        )
+    for security, latest in rows:
         result.append(
             {
                 "ticker": security.ticker,
                 "short_name": security.short_name,
+                "security_type": security.security_type,
+                "is_imoex": security.is_imoex,
                 "weight": security.weight,
                 "latest": _serialize_observation(latest),
             }
@@ -143,6 +145,8 @@ def get_observations(
     return {
         "ticker": security.ticker,
         "short_name": security.short_name,
+        "security_type": security.security_type,
+        "is_imoex": security.is_imoex,
         "weight": security.weight,
         "observations": [_serialize_observation(item) for item in observations],
     }
@@ -158,11 +162,21 @@ def get_latest_run(db: Session = Depends(get_db)) -> dict | None:
 
 def _settings_response(stored: VolumeMonitorSettings | None) -> VolumeSettingsRead:
     settings = get_volume_settings()
-    recipient = stored.notification_email if stored else None
+    notification_scope = (
+        stored.notification_scope
+        if stored and stored.notification_scope in {"imoex", "all"}
+        else "imoex"
+    )
+    baseline_sessions = (
+        stored.baseline_sessions
+        if stored and 10 <= stored.baseline_sessions <= 250
+        else settings.baseline_sessions
+    )
     return VolumeSettingsRead(
-        notification_email=recipient,
+        notification_scope=notification_scope,
+        baseline_sessions=baseline_sessions,
         smtp_configured=settings.smtp_configured,
-        notifications_enabled=bool(settings.smtp_configured and recipient),
+        notifications_enabled=bool(settings.smtp_configured and settings.notification_email),
         schedule=(
             f"{settings.schedule_hour:02d}:{settings.schedule_minute:02d} "
             f"{settings.schedule_timezone}"
@@ -180,7 +194,7 @@ def get_notification_settings(
 
 @router.put("/settings", response_model=VolumeSettingsRead)
 def update_notification_settings(
-    payload: NotificationEmailUpdate,
+    payload: VolumeMonitorSettingsUpdate,
     _access: None = Depends(require_local_access),
     db: Session = Depends(get_db),
 ) -> VolumeSettingsRead:
@@ -188,10 +202,43 @@ def update_notification_settings(
     if stored is None:
         stored = VolumeMonitorSettings(id=1)
         db.add(stored)
-    stored.notification_email = payload.notification_email
+    if payload.notification_scope is not None:
+        stored.notification_scope = payload.notification_scope
+    if payload.baseline_sessions is not None:
+        stored.baseline_sessions = payload.baseline_sessions
     db.commit()
     db.refresh(stored)
     return _settings_response(stored)
+
+
+@router.post("/notifications/test")
+async def send_test_notification(
+    _access: None = Depends(require_local_access),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    stored = db.get(VolumeMonitorSettings, 1)
+    settings = get_volume_settings()
+    recipient = settings.notification_email
+    if not recipient:
+        raise HTTPException(status_code=400, detail="Задайте VOLUME_NOTIFICATION_EMAIL в .env")
+    if not settings.smtp_configured:
+        raise HTTPException(status_code=400, detail="SMTP не настроен в .env")
+    notification_scope = (
+        stored.notification_scope
+        if stored and stored.notification_scope in {"imoex", "all"}
+        else "imoex"
+    )
+    try:
+        await asyncio.to_thread(send_test_email, settings, recipient, notification_scope)
+    except Exception as exc:
+        TEST_EMAIL_ATTEMPTS.labels(result="failed").inc()
+        logger.exception("Test volume notification email failed")
+        raise HTTPException(
+            status_code=502,
+            detail="Письмо не отправлено. Проверьте SMTP-реквизиты и логи backend.",
+        ) from exc
+    TEST_EMAIL_ATTEMPTS.labels(result="success").inc()
+    return {"status": "sent", "detail": "Тестовое письмо отправлено"}
 
 
 async def _run_manual_collection() -> None:

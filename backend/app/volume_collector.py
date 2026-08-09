@@ -26,11 +26,16 @@ logger = logging.getLogger(__name__)
 COLLECTION_ADVISORY_LOCK_ID = 6_620_260_840
 
 
-def _status_values(settings: VolumeSettings, current: Decimal, baseline: list[Decimal]):
+def _status_values(
+    settings: VolumeSettings,
+    current: Decimal,
+    baseline: list[Decimal],
+    baseline_sessions: int,
+):
     return evaluate_turnover(
         current,
-        baseline[-settings.baseline_sessions :],
-        minimum_count=settings.min_baseline_sessions,
+        baseline[-baseline_sessions:],
+        minimum_count=baseline_sessions,
         min_ratio=Decimal(str(settings.signal_min_ratio)),
         max_ratio=Decimal(str(settings.signal_max_ratio)),
     )
@@ -67,12 +72,20 @@ def _upsert_observation(
     session.execute(statement)
 
 
-def _notification_recipient() -> str | None:
+def _monitor_preferences(settings: VolumeSettings) -> tuple[str | None, str, int]:
     with SessionLocal() as session:
         stored = session.get(VolumeMonitorSettings, 1)
-        if stored is None or not stored.notification_email:
-            return None
-        return stored.notification_email.strip() or None
+        if stored is None:
+            return settings.notification_email or None, "imoex", settings.baseline_sessions
+        scope = stored.notification_scope if stored.notification_scope in {"imoex", "all"} else "imoex"
+        baseline_sessions = stored.baseline_sessions
+        if not 10 <= baseline_sessions <= 250:
+            baseline_sessions = settings.baseline_sessions
+        return settings.notification_email or None, scope, baseline_sessions
+
+
+def _notification_matches_scope(scope: str, is_imoex: bool) -> bool:
+    return scope == "all" or is_imoex
 
 
 async def collect_once(
@@ -80,7 +93,13 @@ async def collect_once(
     *,
     allow_notifications: bool = True,
 ) -> dict[str, int | str | None]:
-    logger.info("Starting IMOEX volume collection; notifications_allowed=%s", allow_notifications)
+    recipient, notification_scope, baseline_sessions = _monitor_preferences(settings)
+    logger.info(
+        "Starting TQBR equity volume collection; notifications_allowed=%s notification_scope=%s baseline_sessions=%d",
+        allow_notifications,
+        notification_scope,
+        baseline_sessions,
+    )
     lock_session = SessionLocal()
     try:
         lock_acquired = bool(
@@ -94,7 +113,7 @@ async def collect_once(
         raise
     if not lock_acquired:
         lock_session.close()
-        logger.info("Skipping IMOEX volume collection because another run holds the lock")
+        logger.info("Skipping TQBR equity volume collection because another run holds the lock")
         return {"status": "skipped", "detail": "Сбор уже выполняется"}
 
     try:
@@ -122,16 +141,26 @@ async def collect_once(
     try:
         try:
             async with VolumeMoexClient(settings) as moex:
-                constituents = await moex.fetch_imoex_constituents()
-                total = len(constituents)
+                securities, imoex_constituents = await asyncio.gather(
+                    moex.fetch_tqbr_equities(),
+                    moex.fetch_imoex_constituents(),
+                )
+                imoex_by_ticker = {item["ticker"]: item for item in imoex_constituents}
+                for item in securities:
+                    index_item = imoex_by_ticker.get(item["ticker"])
+                    item["is_imoex"] = index_item is not None
+                    item["weight"] = index_item["weight"] if index_item else None
+                total = len(securities)
 
                 with SessionLocal() as session:
                     session.execute(update(VolumeSecurity).values(active=False))
                     now = datetime.now(UTC)
-                    for item in constituents:
+                    for item in securities:
                         statement = pg_insert(VolumeSecurity).values(
                             ticker=item["ticker"],
                             short_name=item["short_name"],
+                            security_type=item["security_type"],
+                            is_imoex=item["is_imoex"],
                             weight=item["weight"],
                             active=True,
                             updated_at=now,
@@ -140,6 +169,8 @@ async def collect_once(
                             index_elements=[VolumeSecurity.ticker],
                             set_={
                                 "short_name": item["short_name"],
+                                "security_type": item["security_type"],
+                                "is_imoex": item["is_imoex"],
                                 "weight": item["weight"],
                                 "active": True,
                                 "updated_at": now,
@@ -152,19 +183,23 @@ async def collect_once(
                     )
 
                 async def fetch_all(ticker: str):
+                    history_rows = max(
+                        settings.moex_history_rows,
+                        baseline_sessions + settings.display_sessions,
+                    )
                     history, current = await asyncio.gather(
-                        moex.fetch_history(ticker, settings.moex_history_rows),
+                        moex.fetch_history(ticker, history_rows),
                         moex.fetch_current(ticker),
                     )
                     return history, current
 
                 results = await asyncio.gather(
-                    *(fetch_all(item["ticker"]) for item in constituents),
+                    *(fetch_all(item["ticker"]) for item in securities),
                     return_exceptions=True,
                 )
 
-                for constituent, fetched in zip(constituents, results, strict=True):
-                    ticker = constituent["ticker"]
+                for security, fetched in zip(securities, results, strict=True):
+                    ticker = security["ticker"]
                     if isinstance(fetched, BaseException):
                         errors.append(f"{ticker}: {fetched}")
                         logger.error("Failed to collect volume for %s: %s", ticker, fetched)
@@ -176,7 +211,12 @@ async def collect_once(
                     market_today = datetime.now(ZoneInfo(settings.schedule_timezone)).date()
                     with SessionLocal() as session:
                         for item in history:
-                            result = _status_values(settings, item["turnover_rub"], baseline)
+                            result = _status_values(
+                                settings,
+                                item["turnover_rub"],
+                                baseline,
+                                baseline_sessions,
+                            )
                             _upsert_observation(
                                 session,
                                 security_id,
@@ -193,7 +233,12 @@ async def collect_once(
                                 for item in history
                                 if item["trade_date"] < current["trade_date"]
                             ]
-                            result = _status_values(settings, current["turnover_rub"], completed)
+                            result = _status_values(
+                                settings,
+                                current["turnover_rub"],
+                                completed,
+                                baseline_sessions,
+                            )
                             _upsert_observation(
                                 session,
                                 security_id,
@@ -204,27 +249,30 @@ async def collect_once(
                             )
                             if result.status == "signal":
                                 signals_detected += 1
-                                already_sent = session.scalar(
-                                    select(VolumeNotification.id).where(
-                                        VolumeNotification.security_id == security_id,
-                                        VolumeNotification.trade_date == current["trade_date"],
+                                if _notification_matches_scope(
+                                    notification_scope,
+                                    security["is_imoex"],
+                                ):
+                                    already_sent = session.scalar(
+                                        select(VolumeNotification.id).where(
+                                            VolumeNotification.security_id == security_id,
+                                            VolumeNotification.trade_date == current["trade_date"],
+                                        )
                                     )
-                                )
-                                if already_sent is None:
-                                    signals.append(
-                                        {
-                                            "security_id": security_id,
-                                            "ticker": ticker,
-                                            "trade_date": current["trade_date"],
-                                            "turnover_rub": current["turnover_rub"],
-                                            "average_rub": result.average,
-                                            "ratio": result.ratio,
-                                        }
-                                    )
+                                    if already_sent is None:
+                                        signals.append(
+                                            {
+                                                "security_id": security_id,
+                                                "ticker": ticker,
+                                                "trade_date": current["trade_date"],
+                                                "turnover_rub": current["turnover_rub"],
+                                                "average_rub": result.average,
+                                                "ratio": result.ratio,
+                                            }
+                                        )
                         session.commit()
                     updated += 1
 
-            recipient = _notification_recipient()
             if allow_notifications and settings.smtp_configured and recipient and signals:
                 await asyncio.to_thread(send_signal_digest, settings, recipient, signals)
                 with SessionLocal() as session:
@@ -264,7 +312,7 @@ async def collect_once(
                 run.error_message = error_message
                 session.commit()
         logger.info(
-            "Finished IMOEX volume collection; status=%s total=%d updated=%d signals=%d errors=%d",
+            "Finished TQBR equity volume collection; status=%s total=%d updated=%d signals=%d errors=%d",
             status,
             total,
             updated,
