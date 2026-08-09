@@ -1,6 +1,6 @@
 """track reliable volume notification decisions
 
-Revision ID: 0015_reliable_volume_notifications
+Revision ID: 0015_reliable_alerts
 Revises: 0014_all_tqbr_volume_stocks
 Create Date: 2026-08-09
 """
@@ -8,7 +8,7 @@ Create Date: 2026-08-09
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0015_reliable_volume_notifications"
+revision = "0015_reliable_alerts"
 down_revision = "0014_all_tqbr_volume_stocks"
 branch_labels = None
 depends_on = None
