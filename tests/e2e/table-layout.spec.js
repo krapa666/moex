@@ -59,16 +59,21 @@ async function openTable(page) {
   await expect(page.locator('#rows-table-body > tr')).toHaveCount(1);
 }
 
-test('renders the two-year forecast as a 15-column row', async ({ page }) => {
+test('renders the two-year forecast as a 17-column row with dividend yields', async ({ page }) => {
   await openTable(page);
 
   await expect(page.locator('#header-year1-group')).toHaveText('2026');
   await expect(page.locator('#header-year2-group')).toHaveText('2027');
   await expect(page.locator('#header-dividends-year1')).toHaveText('Дивиденды, ₽/акц.');
   await expect(page.locator('#header-dividends-year2')).toHaveText('Дивиденды, ₽/акц.');
-  await expect(page.locator('#rows-table-body > tr').first().locator('td')).toHaveCount(15);
+  await expect(page.locator('#rows-table-body > tr').first().locator('td')).toHaveCount(17);
+  await expect(page.locator('[data-cell="dividend_yield_year1"]')).toHaveText('10,9 %');
+  await expect(page.locator('[data-cell="dividend_yield_year2"]')).toHaveText('13,1 %');
   await expect(page.locator('[data-cell="upside_year1"]')).toHaveText('72 %');
   await expect(page.locator('[data-cell="upside_year2"]')).toHaveText('112 %');
+
+  await page.locator('input[data-field="dividends_year1"]').fill('64.09');
+  await expect(page.locator('[data-cell="dividend_yield_year1"]')).toHaveText('20,0 %');
 });
 
 for (const viewport of [
