@@ -3,6 +3,7 @@ const state = {
   config: null,
   rows: [],
   sort: { field: 'ticker', direction: 'asc' },
+  filters: { query: '', index: 'all' },
   collectionStartedAt: null,
 };
 
@@ -15,8 +16,12 @@ const authLabel = document.getElementById('volume-auth-label');
 const collectBtn = document.getElementById('collect-btn');
 const notificationCard = document.getElementById('notification-card');
 const notificationForm = document.getElementById('notification-form');
-const notificationEmail = document.getElementById('notification-email');
+const notificationScope = document.getElementById('notification-scope');
+const baselineSessions = document.getElementById('baseline-sessions');
 const notificationStatus = document.getElementById('notification-status');
+const testEmailBtn = document.getElementById('test-email-btn');
+const securitySearch = document.getElementById('security-search');
+const indexFilter = document.getElementById('index-filter');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -89,15 +94,26 @@ function statusHtml(observation) {
 
 function sortValue(row, field) {
   if (field === 'ticker') return row.ticker || '';
+  if (field === 'type') return row.security_type || '';
   if (field === 'weight') return Number(row.weight ?? Number.NEGATIVE_INFINITY);
   if (field === 'turnover') return Number(row.latest?.turnover_rub ?? Number.NEGATIVE_INFINITY);
   if (field === 'ratio') return Number(row.latest?.ratio ?? Number.NEGATIVE_INFINITY);
   return '';
 }
 
+function visibleRows() {
+  const query = state.filters.query.toLocaleLowerCase('ru');
+  return state.rows.filter((row) => {
+    if (state.filters.index === 'imoex' && !row.is_imoex) return false;
+    if (state.filters.index === 'outside' && row.is_imoex) return false;
+    if (!query) return true;
+    return `${row.ticker || ''} ${row.short_name || ''}`.toLocaleLowerCase('ru').includes(query);
+  });
+}
+
 function sortedRows() {
   const factor = state.sort.direction === 'asc' ? 1 : -1;
-  return [...state.rows].sort((left, right) => {
+  return visibleRows().sort((left, right) => {
     const a = sortValue(left, state.sort.field);
     const b = sortValue(right, state.sort.field);
     if (typeof a === 'string') return a.localeCompare(b, 'ru') * factor;
@@ -106,17 +122,24 @@ function sortedRows() {
 }
 
 function renderOverview() {
-  if (!state.rows.length) {
-    overviewBody.innerHTML = '<tr class="empty-volume-row"><td colspan="8">Данные появятся после первого сбора с MOEX.</td></tr>';
+  const rows = sortedRows();
+  if (!rows.length) {
+    const message = state.rows.length
+      ? 'По заданному фильтру бумаг нет.'
+      : 'Данные появятся после первого сбора с MOEX.';
+    overviewBody.innerHTML = `<tr class="empty-volume-row"><td colspan="9">${message}</td></tr>`;
+    updateOverviewStatus();
     return;
   }
-  overviewBody.innerHTML = sortedRows().map((row) => {
+  overviewBody.innerHTML = rows.map((row) => {
     const latest = row.latest;
+    const securityType = row.security_type === 'preferred' ? 'ап' : 'ао';
     return `
       <tr>
         <td><button class="ticker-link" data-ticker="${escapeHtml(row.ticker)}">${escapeHtml(row.ticker)}</button></td>
         <td>${escapeHtml(row.short_name)}</td>
-        <td>${formatNumber(row.weight, 2)}</td>
+        <td>${securityType}</td>
+        <td>${row.weight == null ? '—' : formatNumber(row.weight, 2)}</td>
         <td>${formatDate(latest?.trade_date)}</td>
         <td>${formatMillions(latest?.turnover_rub)}</td>
         <td>${formatMillions(latest?.baseline_average_rub)}</td>
@@ -124,6 +147,14 @@ function renderOverview() {
         <td>${statusHtml(latest)}</td>
       </tr>`;
   }).join('');
+  updateOverviewStatus();
+}
+
+function updateOverviewStatus() {
+  const shown = visibleRows().length;
+  setStatus(shown === state.rows.length
+    ? `Показано бумаг: ${shown}`
+    : `Показано бумаг: ${shown} из ${state.rows.length}`);
 }
 
 async function loadOverview() {
@@ -174,10 +205,13 @@ async function loadAuthAndSettings() {
   if (!state.user.is_admin) return;
 
   const settings = await api('/api/volume/settings');
-  notificationEmail.value = settings.notification_email || '';
+  notificationScope.value = settings.notification_scope || 'imoex';
+  baselineSessions.value = settings.baseline_sessions || 60;
   notificationStatus.textContent = settings.smtp_configured
-    ? (settings.notifications_enabled ? 'Уведомления включены.' : 'Укажите получателя, чтобы включить уведомления.')
-    : 'Получатель сохранится, но SMTP сначала нужно настроить в .env.';
+    ? (settings.notifications_enabled
+      ? 'Уведомления включены.'
+      : 'Задайте VOLUME_NOTIFICATION_EMAIL в .env.')
+    : 'Настройте SMTP и VOLUME_NOTIFICATION_EMAIL в .env.';
 }
 
 async function openDetail(ticker) {
@@ -240,7 +274,17 @@ overviewBody.addEventListener('click', (event) => {
 document.getElementById('detail-back-btn').addEventListener('click', () => {
   detailSection.hidden = true;
   overviewSection.hidden = false;
-  setStatus(`Показано бумаг: ${state.rows.length}`);
+  updateOverviewStatus();
+});
+
+securitySearch.addEventListener('input', () => {
+  state.filters.query = securitySearch.value.trim();
+  renderOverview();
+});
+
+indexFilter.addEventListener('change', () => {
+  state.filters.index = indexFilter.value;
+  renderOverview();
 });
 
 notificationForm.addEventListener('submit', async (event) => {
@@ -249,13 +293,36 @@ notificationForm.addEventListener('submit', async (event) => {
   try {
     const settings = await api('/api/volume/settings', {
       method: 'PUT',
-      body: JSON.stringify({ notification_email: notificationEmail.value.trim() || null }),
+      body: JSON.stringify({
+        notification_scope: notificationScope.value,
+        baseline_sessions: Number(baselineSessions.value),
+      }),
     });
+    state.config.baseline_sessions = settings.baseline_sessions;
+    await loadConfig();
     notificationStatus.textContent = settings.smtp_configured
-      ? (settings.notifications_enabled ? 'Уведомления включены.' : 'Получатель удалён; уведомления выключены.')
-      : 'Email сохранён. Для отправки настройте SMTP в .env.';
+      ? (settings.notifications_enabled
+        ? 'Настройки сохранены; новый период среднего применится при следующем сборе.'
+        : 'Настройки сохранены; уведомления выключены без получателя.')
+      : 'Настройки сохранены. Для отправки писем настройте SMTP в .env.';
   } catch (error) {
     notificationStatus.textContent = error.message;
+  }
+});
+
+testEmailBtn.addEventListener('click', async () => {
+  testEmailBtn.disabled = true;
+  notificationStatus.textContent = 'Отправка тестового письма...';
+  try {
+    const result = await api('/api/volume/notifications/test', {
+      method: 'POST',
+      body: '{}',
+    });
+    notificationStatus.textContent = result.detail;
+  } catch (error) {
+    notificationStatus.textContent = error.message;
+  } finally {
+    testEmailBtn.disabled = false;
   }
 });
 
@@ -276,7 +343,7 @@ collectBtn.addEventListener('click', async () => {
 async function initialize() {
   try {
     await Promise.all([loadConfig(), loadAuthAndSettings(), loadLastRun(), loadOverview()]);
-    setStatus(`Показано бумаг: ${state.rows.length}`);
+    updateOverviewStatus();
   } catch (error) {
     setStatus(error.message);
   }
