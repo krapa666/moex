@@ -39,12 +39,38 @@
 
 .notification-controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin: 5px 0;
 }
 
 .notification-controls input {
   min-width: 0;
+}
+
+.notification-controls select,
+.volume-filters select,
+.volume-filters input {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px 8px;
+  color: inherit;
+}
+
+.baseline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.baseline-control input {
+  width: 58px;
+  padding: 6px;
 }
 
 .volume-card {
@@ -67,6 +93,16 @@
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.volume-filters {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.volume-filters input {
+  width: 190px;
 }
 
 .detail-heading .btn {
@@ -92,13 +128,14 @@
   text-align: left;
 }
 
-.volume-col-ticker { width: 9%; }
-.volume-col-name { width: 22%; }
+.volume-col-ticker { width: 8%; }
+.volume-col-name { width: 18%; }
+.volume-col-type { width: 5%; }
 .volume-col-weight { width: 8%; }
-.volume-col-date { width: 10%; }
-.volume-col-money { width: 14%; }
-.volume-col-ratio { width: 10%; }
-.volume-col-status { width: 13%; }
+.volume-col-date { width: 9%; }
+.volume-col-money { width: 13%; }
+.volume-col-ratio { width: 9%; }
+.volume-col-status { width: 12%; }
 
 .ticker-link {
   border: 0;
@@ -163,6 +200,16 @@
 
   .volume-header {
     align-items: flex-start;
+  }
+
+  .volume-table-heading,
+  .volume-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .volume-filters input {
+    width: auto;
   }
 
   .volume-table th,
