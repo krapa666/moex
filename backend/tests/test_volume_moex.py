@@ -86,3 +86,23 @@ async def test_tqbr_universe_keeps_only_active_common_and_preferred_shares() -> 
         ]
     finally:
         await client._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_tqbr_universe_does_not_paginate_complete_board_response() -> None:
+    client = VolumeMoexClient(settings())
+    rows = [[f"TEST{number}", f"Share {number}", "A", "1"] for number in range(101)]
+    client._get = AsyncMock(
+        return_value={
+            "securities": {
+                "columns": ["SECID", "SHORTNAME", "STATUS", "SECTYPE"],
+                "data": rows,
+            }
+        }
+    )
+    try:
+        result = await client.fetch_tqbr_equities()
+        assert len(result) == 101
+        client._get.assert_awaited_once()
+    finally:
+        await client._client.aclose()
