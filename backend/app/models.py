@@ -228,3 +228,6 @@ class VolumeMonitorSettings(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+from .forecast_history import ForecastRevision  # noqa: E402,F401
