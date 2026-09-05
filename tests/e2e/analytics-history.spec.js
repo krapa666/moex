@@ -74,6 +74,9 @@ const revisions = [
 async function mockAnalyticsApi(page) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/auth/me') {
+      return route.fulfill({ json: { username: 'local-network', is_admin: true } });
+    }
     if (url.pathname === '/api/tables') {
       return route.fulfill({ json: tables });
     }
@@ -86,6 +89,7 @@ async function mockAnalyticsApi(page) {
         : revisions;
       return route.fulfill({ json: rows });
     }
+    if (url.pathname === '/api/ticker-comparison') return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { detail: `Unexpected ${url.pathname}` } });
   });
 }
