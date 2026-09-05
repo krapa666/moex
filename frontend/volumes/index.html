@@ -6,21 +6,34 @@
     <title>Объёмы торгов акциями MOEX</title>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/volumes/volumes.css" />
+    <link rel="stylesheet" href="/shell.css" />
   </head>
   <body>
+    <nav class="app-nav" aria-label="Основная навигация">
+      <div class="app-nav-inner">
+        <a class="app-brand" href="/" aria-label="MOEX Analytics — главная">MOEX Analytics</a>
+        <div class="app-nav-links">
+          <a class="app-nav-link" href="/">Оценки</a>
+          <a class="app-nav-link active" href="/volumes/" aria-current="page">Объёмы</a>
+        </div>
+        <div class="app-nav-status">
+          <span class="status-pill" id="volume-global-status">Инициализация...</span>
+          <span class="auth-user" id="volume-auth-label">Гость</span>
+        </div>
+      </div>
+    </nav>
+
     <main class="page volume-page">
-      <header class="header volume-header">
-        <div>
-          <h1>Контроль объёмов торгов акциями MOEX</h1>
+      <header class="page-header">
+        <div class="page-heading">
+          <span class="eyebrow">Активность рынка</span>
+          <h1>Объёмы торгов MOEX</h1>
           <p class="subtitle" id="volume-subtitle">
             Сравнение текущего оборота с 60 предыдущими торговыми сессиями.
           </p>
         </div>
-        <div class="toolbar">
-          <a class="btn btn-nav" href="/">Прогнозы и потенциалы</a>
-          <button class="btn" id="collect-btn" hidden>Собрать сейчас</button>
-          <span class="status-pill" id="volume-global-status">Инициализация...</span>
-          <span class="auth-user" id="volume-auth-label">Гость</span>
+        <div class="page-actions">
+          <button class="btn btn-primary" id="collect-btn" hidden>Собрать сейчас</button>
         </div>
       </header>
 
