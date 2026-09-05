@@ -159,6 +159,7 @@ test('opens per-ticker history without horizontal scrolling', async ({ page }) =
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
 
   await page.getByRole('button', { name: '← К списку' }).click();
+  await expect(page.locator('#overview-section')).toBeVisible();
   expect(new URL(page.url()).searchParams.get('ticker')).toBeNull();
 });
 
@@ -170,6 +171,35 @@ test('opens per-ticker history directly from a ticker query parameter', async ({
   await expect(page.locator('#overview-section')).toBeHidden();
   await expect(page.locator('#volume-detail-body > tr')).toHaveCount(1);
   expect(new URL(page.url()).searchParams.get('ticker')).toBe('SBER');
+
+  await page.getByRole('button', { name: '← К списку' }).click();
+  await expect(page.locator('#overview-section')).toBeVisible();
+  await expect(page).toHaveURL('/volumes/');
+});
+
+test('uses browser back and forward for volume details without refetching cached history', async ({ page }) => {
+  let observationRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/volume/securities/SBER/observations') {
+      observationRequests += 1;
+    }
+  });
+
+  await page.getByRole('button', { name: 'SBER' }).click();
+  await expect(page.locator('#detail-section')).toBeVisible();
+  await expect(page).toHaveURL('/volumes/?ticker=SBER');
+  expect(observationRequests).toBe(1);
+
+  await page.goBack();
+  await expect(page.locator('#overview-section')).toBeVisible();
+  await expect(page.locator('#detail-section')).toBeHidden();
+  await expect(page).toHaveURL('/volumes/');
+
+  await page.goForward();
+  await expect(page.locator('#detail-section')).toBeVisible();
+  await expect(page.locator('#detail-title')).toHaveText('SBER — история объёмов');
+  await expect(page).toHaveURL('/volumes/?ticker=SBER');
+  expect(observationRequests).toBe(1);
 });
 
 test('sorts overview by ratio', async ({ page }) => {
