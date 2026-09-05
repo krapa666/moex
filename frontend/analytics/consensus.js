@@ -139,6 +139,16 @@
     const positiveReturns = returns.filter((value) => value > 0).length;
     const positiveReturnLabel = returns.length ? `${positiveReturns}/${returns.length}` : '—';
     const currentPrice = median(ordered.map((item) => item.current_price).filter(finite));
+    const hasMarketPrice = finite(currentPrice) && Number(currentPrice) > 0;
+    const marketGap = hasMarketPrice
+      ? ((Number(medianValue) / Number(currentPrice)) - 1) * 100
+      : null;
+    const targetsAboveMarket = hasMarketPrice
+      ? targets.filter((target) => target.value > Number(currentPrice)).length
+      : null;
+    const targetsAboveMarketLabel = targetsAboveMarket === null
+      ? '—'
+      : `${targetsAboveMarket}/${targets.length}`;
     const agreement = agreementSummary(values, medianValue);
     const medianPosition = position(medianValue, minValue, maxValue);
     const rangeLabel = `Диапазон целей ${ticker} на ${year}: минимум ${formatPrice(minValue)}, медиана ${formatPrice(medianValue)}, максимум ${formatPrice(maxValue)}`;
@@ -165,6 +175,9 @@
     const returnNote = returns.length
       ? `Медианная полная доходность использует рассчитанный backend upside_percent тех же целей на ${year} год и уже учитывает оставшиеся дивиденды до этого горизонта. Положительных — прогнозы с доходностью выше 0%.`
       : 'Для сопоставимых целей пока нет рассчитанной полной доходности.';
+    const marketNote = hasMarketPrice
+      ? `Ценовой потенциал = медианная целевая цена / текущая рыночная цена − 1. Он не включает дивиденды. «Целей выше рынка» считает только целевые цены строго выше текущей цены ${formatPrice(currentPrice)}.`
+      : 'Ценовой потенциал и число целей выше рынка не рассчитываются без корректной текущей рыночной цены.';
 
     body.innerHTML = `
       <div class="analytics-consensus-kpis" aria-label="Сводка консенсуса ${escapeHtml(ticker)}">
@@ -172,12 +185,15 @@
         <article><span>Медиана</span><strong data-consensus-kpi="median">${formatPrice(medianValue)}</strong></article>
         <article><span>Максимум</span><strong data-consensus-kpi="max">${formatPrice(maxValue)}</strong></article>
         <article><span>Рынок</span><strong data-consensus-kpi="market">${formatPrice(currentPrice)}</strong></article>
+        <article><span>Ценовой потенциал</span><strong class="analytics-consensus-return ${returnClass(marketGap)}" data-consensus-kpi="market-gap">${formatSignedPercent(marketGap)}</strong></article>
+        <article><span>Целей выше рынка</span><strong data-consensus-kpi="above-market">${escapeHtml(targetsAboveMarketLabel)}</strong></article>
         <article><span>Медианная доходность</span><strong class="analytics-consensus-return ${returnClass(medianReturn)}" data-consensus-kpi="return">${formatSignedPercent(medianReturn)}</strong></article>
         <article><span>Положительных</span><strong data-consensus-kpi="positive">${escapeHtml(positiveReturnLabel)}</strong></article>
         <article><span>Разброс</span><strong data-consensus-kpi="spread">${formatPercent(agreement.spreadPercent)}</strong></article>
         <article><span>Согласованность</span><strong class="analytics-consensus-agreement ${agreement.className}" data-consensus-kpi="agreement">${escapeHtml(agreement.label)}</strong></article>
       </div>
       <div class="analytics-consensus-notes">
+        <p class="analytics-consensus-formula">${escapeHtml(marketNote)}</p>
         <p class="analytics-consensus-formula">${escapeHtml(returnNote)}</p>
         <p class="analytics-consensus-formula">${escapeHtml(agreementNote)}</p>
       </div>
