@@ -1,6 +1,6 @@
 :root {
-  --ticker-col-width: 6.5%;
-  --price-col-width: 6.5%;
+  --ticker-col-width: 7%;
+  --price-col-width: 7%;
 }
 
 body {
@@ -189,8 +189,8 @@ input[readonly] {
   display: none;
 }
 
-.forecast-table-compact col.compact-hidden-col {
-  width: 0 !important;
+.forecast-table-compact colgroup {
+  display: none;
 }
 
 .forecast-table-compact tbody tr > td:nth-child(3),
@@ -199,20 +199,6 @@ input[readonly] {
 .forecast-table-compact tbody tr > td:nth-child(16) {
   display: none;
 }
-
-.forecast-table-compact col:nth-child(1) { width: 6.5%; }
-.forecast-table-compact col:nth-child(2) { width: 6.5%; }
-.forecast-table-compact col:nth-child(4) { width: 8%; }
-.forecast-table-compact col:nth-child(5) { width: 5%; }
-.forecast-table-compact col:nth-child(6),
-.forecast-table-compact col:nth-child(11) { width: 7%; }
-.forecast-table-compact col:nth-child(7),
-.forecast-table-compact col:nth-child(12) { width: 7%; }
-.forecast-table-compact col:nth-child(9),
-.forecast-table-compact col:nth-child(14) { width: 7.5%; }
-.forecast-table-compact col:nth-child(10),
-.forecast-table-compact col:nth-child(15) { width: 8.5%; }
-.forecast-table-compact col:nth-child(17) { width: 8%; }
 
 .forecast-table-compact tbody tr:not(.comparison-inline-row) > td:nth-child(17) .source-note {
   display: none;
