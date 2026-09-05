@@ -6,6 +6,7 @@
   const detail = (name) => overlay.querySelector(`[data-detail="${name}"]`);
   const closeTargets = overlay.querySelectorAll('[data-detail-close]');
   const detailInputs = overlay.querySelectorAll('[data-detail-input]');
+  const historyLink = overlay.querySelector('[data-detail-history]');
   const globalStatus = document.getElementById('global-status');
   const requestedTicker = new URLSearchParams(window.location.search).get('ticker')?.trim() || '';
   let deepLinkHandled = !requestedTicker;
@@ -91,6 +92,9 @@
     const year2 = document.getElementById('header-year2-group')?.textContent?.trim() || 'Год 2';
 
     setTickerQuery(ticker, historyMode);
+    if (historyLink && ticker !== '—') {
+      historyLink.href = `/analytics/?${new URLSearchParams({ ticker }).toString()}`;
+    }
     setDetail('ticker', ticker);
     setDetail('subtitle', `${text(row, '[data-cell="current_price"]')} · обновлено ${text(row, '[data-cell="price_updated_at"]')}`);
     setDetail('current_price', text(row, '[data-cell="current_price"]'));
