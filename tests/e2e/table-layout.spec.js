@@ -147,6 +147,29 @@ test('opens the requested stock drawer from a ticker deep link after rows load',
   await expect(drawer).toBeVisible();
   await expect(drawer.locator('[data-detail="ticker"]')).toHaveText('LKOH');
   await expect(drawer.locator('[data-detail="current_price"]')).toHaveText('6 000 ₽');
+
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+  await expect(page).toHaveURL('/');
+});
+
+test('uses browser back and forward for forecast details opened inside the app', async ({ page }) => {
+  await openTable(page);
+  const drawer = page.locator('#security-detail-overlay');
+
+  await page.locator('#rows-table-body > tr').first().getByRole('button', { name: 'Подробнее' }).click();
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('[data-detail="ticker"]')).toHaveText('SBER');
+  await expect(page).toHaveURL('/?ticker=SBER');
+
+  await page.goBack();
+  await expect(drawer).toBeHidden();
+  await expect(page).toHaveURL('/');
+
+  await page.goForward();
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('[data-detail="ticker"]')).toHaveText('SBER');
+  await expect(page).toHaveURL('/?ticker=SBER');
 });
 
 test('sorts rows by dividend yield for each forecast year', async ({ page }) => {
