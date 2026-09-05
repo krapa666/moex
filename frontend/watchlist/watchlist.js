@@ -11,7 +11,8 @@
   if (!body || !tableWrap || !empty || !filterEmpty || !status || !searchInput || !filterSelect || !resetViewBtn) return;
 
   const VIEW_STORAGE_KEY = 'moex.watchlist.view.v1';
-  const validFilters = new Set(['all', 'signals', 'positive', 'negative']);
+  const PIN_STORAGE_KEY = 'moex.watchlist.pins.v1';
+  const validFilters = new Set(['all', 'pinned', 'signals', 'positive', 'negative']);
   const validSortFields = new Set(['ticker', 'current', 'fair', 'upside', 'dividend', 'ratio']);
 
   const viewState = {
@@ -23,6 +24,7 @@
     field: null,
     direction: 'asc',
   };
+  const pinnedTickers = loadPinnedTickers();
 
   const priceFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
@@ -47,6 +49,10 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function normalizeTicker(value) {
+    return String(value || '').trim().toLocaleUpperCase('ru').slice(0, 32);
   }
 
   function isFiniteValue(value) {
@@ -96,6 +102,26 @@
     if (number > 0) return 'watchlist-value-positive';
     if (number < 0) return 'watchlist-value-negative';
     return 'watchlist-value-muted';
+  }
+
+  function loadPinnedTickers() {
+    try {
+      const raw = localStorage.getItem(PIN_STORAGE_KEY);
+      if (!raw) return new Set();
+      const saved = JSON.parse(raw);
+      if (!Array.isArray(saved)) return new Set();
+      return new Set(saved.map(normalizeTicker).filter(Boolean));
+    } catch (_error) {
+      return new Set();
+    }
+  }
+
+  function persistPins() {
+    try {
+      localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify([...pinnedTickers].sort()));
+    } catch (_error) {
+      // Pinning remains usable for the current page even when storage is unavailable.
+    }
   }
 
   function persistView() {
@@ -171,6 +197,7 @@
     const upsideRaw = row.dataset.watchlistUpside;
     const upside = upsideRaw === '' || upsideRaw == null ? null : Number(upsideRaw);
 
+    if (filter === 'pinned') return row.dataset.watchlistPinned === 'true';
     if (filter === 'signals') return ['signal', 'above_range'].includes(signal);
     if (filter === 'positive') return Number.isFinite(upside) && upside > 0;
     if (filter === 'negative') return Number.isFinite(upside) && upside < 0;
@@ -279,6 +306,25 @@
     applyFilters();
   }
 
+  function updatePinButton(button, ticker, pinned) {
+    button.setAttribute('aria-pressed', String(pinned));
+    button.setAttribute('aria-label', `${pinned ? 'Открепить' : 'Закрепить'} ${ticker}`);
+    button.title = `${pinned ? 'Открепить' : 'Закрепить'} ${ticker}`;
+  }
+
+  function togglePin(button) {
+    const ticker = normalizeTicker(button.dataset.watchlistPin);
+    if (!ticker) return;
+    const row = button.closest('tr');
+    const pinned = !pinnedTickers.has(ticker);
+    if (pinned) pinnedTickers.add(ticker);
+    else pinnedTickers.delete(ticker);
+    persistPins();
+    if (row) row.dataset.watchlistPinned = String(pinned);
+    updatePinButton(button, ticker, pinned);
+    applyFilters();
+  }
+
   function render(rows, volumeRows, primaryTable, { volumeAvailable = true } = {}) {
     if (!rows.length) {
       showEmpty('Основная таблица оценок пуста', 'Добавьте бумаги в таблицу №1 — они появятся здесь автоматически.');
@@ -286,24 +332,26 @@
     }
 
     const volumeMap = new Map(
-      (volumeRows || []).map((item) => [String(item.ticker || '').toLocaleUpperCase('ru'), item]),
+      (volumeRows || []).map((item) => [normalizeTicker(item.ticker), item]),
     );
     const year = Number(primaryTable.forecast_start_year) || new Date().getFullYear();
     let matchedVolumes = 0;
 
     body.innerHTML = rows.map((row, index) => {
-      const ticker = String(row.ticker || '').trim().toLocaleUpperCase('ru');
+      const ticker = normalizeTicker(row.ticker);
       const volume = volumeMap.get(ticker) || null;
       if (volume) matchedVolumes += 1;
       const latest = volume?.latest || null;
       const ratio = latest?.ratio;
       const yieldPercent = dividendYield(row, year);
       const signalStatus = latest?.signal_status || '';
+      const pinned = pinnedTickers.has(ticker);
 
       return `
         <tr
           data-watchlist-order="${index}"
           data-watchlist-ticker="${escapeHtml(ticker)}"
+          data-watchlist-pinned="${pinned}"
           data-watchlist-current="${escapeHtml(dataNumber(row.current_price))}"
           data-watchlist-fair="${escapeHtml(dataNumber(row.forecast_price_year1))}"
           data-watchlist-upside="${escapeHtml(dataNumber(row.upside_percent_year1))}"
@@ -311,6 +359,16 @@
           data-watchlist-ratio="${escapeHtml(dataNumber(ratio))}"
           data-watchlist-signal="${escapeHtml(signalStatus)}"
         >
+          <td class="watchlist-pin-cell">
+            <button
+              class="watchlist-pin-btn"
+              type="button"
+              data-watchlist-pin="${escapeHtml(ticker)}"
+              aria-pressed="${pinned}"
+              aria-label="${pinned ? 'Открепить' : 'Закрепить'} ${escapeHtml(ticker)}"
+              title="${pinned ? 'Открепить' : 'Закрепить'} ${escapeHtml(ticker)}"
+            >★</button>
+          </td>
           <td>
             <a class="watchlist-ticker-link" href="/?ticker=${encodeURIComponent(ticker)}">${escapeHtml(ticker || '—')}</a>
           </td>
@@ -377,6 +435,10 @@
     applyFilters();
   });
   resetViewBtn.addEventListener('click', resetView);
+  body.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-watchlist-pin]');
+    if (button) togglePin(button);
+  });
   sortButtons.forEach((button) => {
     button.addEventListener('click', () => changeSort(button.dataset.watchlistSort));
   });
