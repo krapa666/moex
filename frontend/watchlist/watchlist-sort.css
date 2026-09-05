@@ -1,0 +1,53 @@
+.watchlist-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
+}
+
+.watchlist-sort:hover:not(:disabled) {
+  color: #2563eb;
+}
+
+.watchlist-sort:focus-visible {
+  border-radius: 4px;
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+}
+
+.watchlist-sort:disabled {
+  cursor: default;
+}
+
+.watchlist-sort [data-sort-indicator] {
+  min-width: 9px;
+  color: #94a3b8;
+  font-size: 9px;
+  text-align: center;
+}
+
+th[aria-sort="ascending"] .watchlist-sort,
+th[aria-sort="descending"] .watchlist-sort {
+  color: #1d4ed8;
+}
+
+th[aria-sort="ascending"] .watchlist-sort [data-sort-indicator],
+th[aria-sort="descending"] .watchlist-sort [data-sort-indicator] {
+  color: currentColor;
+}
+
+[data-theme="dark"] .watchlist-sort:hover:not(:disabled),
+[data-theme="dark"] th[aria-sort="ascending"] .watchlist-sort,
+[data-theme="dark"] th[aria-sort="descending"] .watchlist-sort {
+  color: #7fb0ff;
+}

@@ -137,6 +137,46 @@ test('filters Watchlist locally by ticker, signal, and upside sign', async ({ pa
   await expect(page.locator('#watchlist-status')).toHaveText('Бумаги: 3 · объёмы: 2');
 });
 
+test('sorts numeric Watchlist columns while keeping missing values last and filters active', async ({ page }) => {
+  await mockWatchlistApi(page);
+  await page.goto('/watchlist/');
+
+  const allTickers = () => page.locator('#watchlist-body > tr').evaluateAll(
+    (rows) => rows.map((row) => row.dataset.watchlistTicker),
+  );
+  const visibleTickers = () => page.locator('#watchlist-body > tr:visible').evaluateAll(
+    (rows) => rows.map((row) => row.dataset.watchlistTicker),
+  );
+
+  await expect.poll(allTickers).toEqual(['SBER', 'LKOH', 'GAZP']);
+
+  const upsideSort = page.locator('[data-watchlist-sort="upside"]');
+  await upsideSort.click();
+  await expect.poll(allTickers).toEqual(['LKOH', 'SBER', 'GAZP']);
+  await expect(upsideSort.locator('[data-sort-indicator]')).toHaveText('↓');
+  await expect(upsideSort.locator('xpath=..')).toHaveAttribute('aria-sort', 'descending');
+
+  await page.locator('#watchlist-filter').selectOption('positive');
+  await expect.poll(visibleTickers).toEqual(['LKOH', 'SBER']);
+
+  await upsideSort.click();
+  await expect.poll(visibleTickers).toEqual(['SBER', 'LKOH']);
+  await expect(upsideSort.locator('[data-sort-indicator]')).toHaveText('↑');
+
+  await page.locator('#watchlist-filter').selectOption('all');
+  const fairSort = page.locator('[data-watchlist-sort="fair"]');
+  await fairSort.click();
+  await expect.poll(allTickers).toEqual(['LKOH', 'SBER', 'GAZP']);
+  await fairSort.click();
+  await expect.poll(allTickers).toEqual(['SBER', 'LKOH', 'GAZP']);
+
+  const ratioSort = page.locator('[data-watchlist-sort="ratio"]');
+  await ratioSort.click();
+  await expect.poll(allTickers).toEqual(['GAZP', 'SBER', 'LKOH']);
+  await ratioSort.click();
+  await expect.poll(allTickers).toEqual(['SBER', 'GAZP', 'LKOH']);
+});
+
 test('keeps valuation rows usable when the volume API is unavailable', async ({ page }) => {
   await mockWatchlistApi(page, { volumeAvailable: false });
   await page.goto('/watchlist/');

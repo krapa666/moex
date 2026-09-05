@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/shell.css" />
     <link rel="stylesheet" href="/watchlist/watchlist.css" />
+    <link rel="stylesheet" href="/watchlist/watchlist-sort.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -90,12 +91,12 @@
           <table class="watchlist-table">
             <thead>
               <tr>
-                <th>Тикер</th>
-                <th>Текущая, ₽</th>
-                <th>Fair value, ₽</th>
-                <th>Полная доходность, %</th>
-                <th>Див. доходность, %</th>
-                <th>Объём</th>
+                <th><button class="watchlist-sort" data-watchlist-sort="ticker">Тикер <span data-sort-indicator>⇅</span></button></th>
+                <th><button class="watchlist-sort" data-watchlist-sort="current">Текущая, ₽ <span data-sort-indicator>⇅</span></button></th>
+                <th><button class="watchlist-sort" data-watchlist-sort="fair">Fair value, ₽ <span data-sort-indicator>⇅</span></button></th>
+                <th><button class="watchlist-sort" data-watchlist-sort="upside">Полная доходность, % <span data-sort-indicator>⇅</span></button></th>
+                <th><button class="watchlist-sort" data-watchlist-sort="dividend">Див. доходность, % <span data-sort-indicator>⇅</span></button></th>
+                <th><button class="watchlist-sort" data-watchlist-sort="ratio">Объём <span data-sort-indicator>⇅</span></button></th>
                 <th>Сигнал</th>
               </tr>
             </thead>

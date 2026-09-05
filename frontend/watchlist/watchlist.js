@@ -6,12 +6,17 @@
   const status = document.getElementById('watchlist-status');
   const searchInput = document.getElementById('watchlist-search');
   const filterSelect = document.getElementById('watchlist-filter');
+  const sortButtons = [...document.querySelectorAll('[data-watchlist-sort]')];
   if (!body || !tableWrap || !empty || !filterEmpty || !status || !searchInput || !filterSelect) return;
 
   const viewState = {
     total: 0,
     matchedVolumes: 0,
     volumeAvailable: true,
+  };
+  const sortState = {
+    field: null,
+    direction: 'asc',
   };
 
   const priceFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
@@ -41,6 +46,10 @@
 
   function isFiniteValue(value) {
     return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  }
+
+  function dataNumber(value) {
+    return isFiniteValue(value) ? String(Number(value)) : '';
   }
 
   function formatPrice(value) {
@@ -87,6 +96,9 @@
   function setControlsEnabled(enabled) {
     searchInput.disabled = !enabled;
     filterSelect.disabled = !enabled;
+    sortButtons.forEach((button) => {
+      button.disabled = !enabled;
+    });
   }
 
   function showEmpty(title, message, state = 'empty') {
@@ -139,6 +151,73 @@
     updateStatus(visibleCount);
   }
 
+  function sortRawValue(row, field) {
+    if (field === 'ticker') return row.dataset.watchlistTicker || '';
+    const datasetKey = {
+      current: 'watchlistCurrent',
+      fair: 'watchlistFair',
+      upside: 'watchlistUpside',
+      dividend: 'watchlistDividend',
+      ratio: 'watchlistRatio',
+    }[field];
+    const raw = datasetKey ? row.dataset[datasetKey] : '';
+    return raw === '' || raw == null ? null : Number(raw);
+  }
+
+  function compareRows(left, right) {
+    if (sortState.field === 'ticker') {
+      const result = sortRawValue(left, 'ticker').localeCompare(sortRawValue(right, 'ticker'), 'ru');
+      return sortState.direction === 'asc' ? result : -result;
+    }
+
+    const leftValue = sortRawValue(left, sortState.field);
+    const rightValue = sortRawValue(right, sortState.field);
+    const leftMissing = !Number.isFinite(leftValue);
+    const rightMissing = !Number.isFinite(rightValue);
+    if (leftMissing && rightMissing) {
+      return (left.dataset.watchlistTicker || '').localeCompare(right.dataset.watchlistTicker || '', 'ru');
+    }
+    if (leftMissing) return 1;
+    if (rightMissing) return -1;
+
+    const result = leftValue - rightValue;
+    if (result !== 0) return sortState.direction === 'asc' ? result : -result;
+    return (left.dataset.watchlistTicker || '').localeCompare(right.dataset.watchlistTicker || '', 'ru');
+  }
+
+  function updateSortIndicators() {
+    sortButtons.forEach((button) => {
+      const active = button.dataset.watchlistSort === sortState.field;
+      const indicator = button.querySelector('[data-sort-indicator]');
+      if (indicator) indicator.textContent = active ? (sortState.direction === 'asc' ? '↑' : '↓') : '⇅';
+      const header = button.closest('th');
+      if (!header) return;
+      if (active) header.setAttribute('aria-sort', sortState.direction === 'asc' ? 'ascending' : 'descending');
+      else header.removeAttribute('aria-sort');
+    });
+  }
+
+  function sortRows() {
+    if (!sortState.field) {
+      updateSortIndicators();
+      return;
+    }
+    const rows = [...body.querySelectorAll(':scope > tr')].sort(compareRows);
+    rows.forEach((row) => body.appendChild(row));
+    updateSortIndicators();
+  }
+
+  function changeSort(field) {
+    if (sortState.field === field) {
+      sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortState.field = field;
+      sortState.direction = field === 'ticker' ? 'asc' : 'desc';
+    }
+    sortRows();
+    applyFilters();
+  }
+
   function render(rows, volumeRows, primaryTable, { volumeAvailable = true } = {}) {
     if (!rows.length) {
       showEmpty('Основная таблица оценок пуста', 'Добавьте бумаги в таблицу №1 — они появятся здесь автоматически.');
@@ -159,10 +238,17 @@
       const ratio = latest?.ratio;
       const yieldPercent = dividendYield(row, year);
       const signalStatus = latest?.signal_status || '';
-      const upsideData = isFiniteValue(row.upside_percent_year1) ? String(Number(row.upside_percent_year1)) : '';
 
       return `
-        <tr data-watchlist-ticker="${escapeHtml(ticker)}" data-watchlist-upside="${escapeHtml(upsideData)}" data-watchlist-signal="${escapeHtml(signalStatus)}">
+        <tr
+          data-watchlist-ticker="${escapeHtml(ticker)}"
+          data-watchlist-current="${escapeHtml(dataNumber(row.current_price))}"
+          data-watchlist-fair="${escapeHtml(dataNumber(row.forecast_price_year1))}"
+          data-watchlist-upside="${escapeHtml(dataNumber(row.upside_percent_year1))}"
+          data-watchlist-dividend="${escapeHtml(dataNumber(yieldPercent))}"
+          data-watchlist-ratio="${escapeHtml(dataNumber(ratio))}"
+          data-watchlist-signal="${escapeHtml(signalStatus)}"
+        >
           <td>
             <a class="watchlist-ticker-link" href="/?ticker=${encodeURIComponent(ticker)}">${escapeHtml(ticker || '—')}</a>
           </td>
@@ -186,6 +272,7 @@
     empty.hidden = true;
     tableWrap.hidden = false;
     setControlsEnabled(true);
+    updateSortIndicators();
     applyFilters();
   }
 
@@ -221,5 +308,8 @@
 
   searchInput.addEventListener('input', applyFilters);
   filterSelect.addEventListener('change', applyFilters);
+  sortButtons.forEach((button) => {
+    button.addEventListener('click', () => changeSort(button.dataset.watchlistSort));
+  });
   load();
 })();
