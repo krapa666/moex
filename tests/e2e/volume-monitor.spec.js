@@ -192,7 +192,7 @@ test('copies the canonical volume deep link from ticker history', async ({ page 
   await page.getByRole('button', { name: 'SBER' }).click();
   await expect(page).toHaveURL('/volumes/?ticker=SBER');
 
-  const copyButton = page.locator('#detail-section').getByRole('button', { name: 'Копировать ссылку' });
+  const copyButton = page.locator('#detail-section [data-copy-current-url]');
   await copyButton.click();
 
   expect(await page.evaluate(() => window.__copiedMoexUrl)).toBe(page.url());
