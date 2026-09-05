@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session, load_only
 from .calculations import recalculate_fields
 from .database import SessionLocal, get_db
 from .models import AnalystTable, ForecastRevision, StockRow
-from .forecast_history import suppress_forecast_history
 from .schemas import (
     AnalystTableCreate,
     AnalystTableRead,
@@ -329,7 +328,7 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
 
     imported_rows = 0
     try:
-        with suppress_forecast_history(db.connection()):
+        with ForecastRevision.suppress_capture(db.connection()):
             db.query(ForecastRevision).delete(synchronize_session=False)
 
             existing_rows = db.scalars(select(StockRow)).all()
