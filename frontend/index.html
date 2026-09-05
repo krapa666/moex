@@ -4,9 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Справедливая цена акций MOEX</title>
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/shell.css" />
     <link rel="stylesheet" href="/forecast.css" />
+    <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
     <nav class="app-nav" aria-label="Основная навигация">
@@ -17,6 +19,7 @@
           <a class="app-nav-link" href="/volumes/">Объёмы</a>
         </div>
         <div class="app-nav-status">
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Переключить тему">☾</button>
           <span class="status-pill" id="global-status">Инициализация...</span>
           <span class="auth-user" id="auth-user-label">Гость</span>
         </div>
