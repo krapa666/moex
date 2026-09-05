@@ -57,8 +57,14 @@ require_cmd curl
 
 if [[ "$HTTPS" == "true" ]]; then
   TEMPLATE_PATH="$TEMPLATE_PATH_HTTPS"
-  SSL_CERT_PATH="${SSL_CERT_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem}"
-  SSL_CERT_KEY_PATH="${SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/privkey.pem}"
+  SSL_CERT_PATH="${SSL_CERT_PATH:-/etc/letsencrypt/live/junnylab.ru-0002/fullchain.pem}"
+  SSL_CERT_KEY_PATH="${SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/junnylab.ru-0002/privkey.pem}"
+  if [[ ! -r "$SSL_CERT_PATH" || ! -r "$SSL_CERT_KEY_PATH" ]]; then
+    echo "[nginx-k8s-proxy] error: TLS certificate or key is not readable" >&2
+    echo "[nginx-k8s-proxy] certificate: $SSL_CERT_PATH" >&2
+    echo "[nginx-k8s-proxy] key: $SSL_CERT_KEY_PATH" >&2
+    exit 1
+  fi
 else
   TEMPLATE_PATH="$TEMPLATE_PATH_HTTP"
 fi

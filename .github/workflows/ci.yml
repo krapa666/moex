@@ -40,6 +40,26 @@ jobs:
           node --check frontend/volumes/volumes.js
       - name: Check shell scripts
         run: bash -n scripts/*.sh
+      - name: Validate generated Nginx configs
+        run: |
+          output_dir="$(mktemp -d)"
+          trap 'rm -r "$output_dir"' EXIT
+          touch "$output_dir/fullchain.pem" "$output_dir/privkey.pem"
+          ./scripts/configure-nginx-compose-proxy.sh \
+            --https \
+            --server-name moex.junnylab.ru \
+            --ssl-cert "$output_dir/fullchain.pem" \
+            --ssl-key "$output_dir/privkey.pem" \
+            --output "$output_dir/moex.conf"
+          ./scripts/configure-nginx-torrent-proxy.sh \
+            --ssl-cert "$output_dir/fullchain.pem" \
+            --ssl-key "$output_dir/privkey.pem" \
+            --output "$output_dir/junibox-torrent.conf"
+          grep -q 'server_name moex.junnylab.ru;' "$output_dir/moex.conf"
+          grep -q 'server_name junibox junibox.junnylab.ru;' "$output_dir/junibox-torrent.conf"
+          grep -q 'proxy_pass http://127.0.0.1:9091/;' "$output_dir/junibox-torrent.conf"
+          ! grep -Eq 'PLACEHOLDER|torrent|9091' "$output_dir/moex.conf"
+          ! grep -q 'PLACEHOLDER' "$output_dir/junibox-torrent.conf"
       - name: Validate Compose file
         run: |
           docker compose config --quiet
