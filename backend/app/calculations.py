@@ -1,4 +1,29 @@
+from datetime import datetime, timezone
+
 from .models import StockRow
+
+
+def _remaining_dividend_totals(
+    row: StockRow,
+    dividend_totals_by_year_index: dict[int, float],
+) -> dict[int, float]:
+    """Convert full-year forecasts to dividend cash flows still receivable today."""
+
+    current_year = str(datetime.now(timezone.utc).year)
+    forecast_map = row.dividend_year_map or {}
+    paid_map = row.paid_dividend_year_map or {}
+
+    full_current_year = max(float(forecast_map.get(current_year) or 0.0), 0.0)
+    paid_current_year = max(float(paid_map.get(current_year) or 0.0), 0.0)
+    already_consumed = min(full_current_year, paid_current_year)
+
+    if already_consumed <= 0:
+        return dividend_totals_by_year_index
+
+    return {
+        year_index: max(float(total) - already_consumed, 0.0)
+        for year_index, total in dividend_totals_by_year_index.items()
+    }
 
 
 def recalculate_fields(
@@ -15,6 +40,11 @@ def recalculate_fields(
     for year in (1, 2):
         cumulative_dividends += getattr(row, f"dividends_year{year}") or 0.0
         default_dividend_totals[year] = cumulative_dividends
+
+    dividend_totals = _remaining_dividend_totals(
+        row,
+        dividend_totals_by_year_index or default_dividend_totals,
+    )
 
     for year in (1, 2, 3, 4):
         profit = getattr(row, f"forecast_profit_year{year}_billion_rub")
@@ -38,7 +68,6 @@ def recalculate_fields(
             and row.current_price is not None
             and row.current_price > 0
         ):
-            dividend_totals = dividend_totals_by_year_index or default_dividend_totals
             dividends_for_upside = dividend_totals.get(year, 0.0)
             upside = ((forecast_price - row.current_price + dividends_for_upside) / row.current_price) * 100
             setattr(row, upside_field, upside)
