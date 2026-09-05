@@ -1,3 +1,8 @@
+:root {
+  --ticker-col-width: 6.5%;
+  --price-col-width: 6.5%;
+}
+
 body {
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -180,6 +185,40 @@ input[readonly] {
   border-bottom-color: #bae6fd;
 }
 
+.forecast-table-compact .compact-hidden {
+  display: none;
+}
+
+.forecast-table-compact col.compact-hidden-col {
+  width: 0 !important;
+  visibility: collapse;
+}
+
+.forecast-table-compact tbody tr > td:nth-child(3),
+.forecast-table-compact tbody tr > td:nth-child(8),
+.forecast-table-compact tbody tr > td:nth-child(13),
+.forecast-table-compact tbody tr > td:nth-child(16) {
+  display: none;
+}
+
+.forecast-table-compact col:nth-child(1) { width: 6.5%; }
+.forecast-table-compact col:nth-child(2) { width: 6.5%; }
+.forecast-table-compact col:nth-child(4) { width: 8%; }
+.forecast-table-compact col:nth-child(5) { width: 5%; }
+.forecast-table-compact col:nth-child(6),
+.forecast-table-compact col:nth-child(11) { width: 7%; }
+.forecast-table-compact col:nth-child(7),
+.forecast-table-compact col:nth-child(12) { width: 7%; }
+.forecast-table-compact col:nth-child(9),
+.forecast-table-compact col:nth-child(14) { width: 7.5%; }
+.forecast-table-compact col:nth-child(10),
+.forecast-table-compact col:nth-child(15) { width: 8.5%; }
+.forecast-table-compact col:nth-child(17) { width: 8%; }
+
+.forecast-table-compact tbody tr:not(.comparison-inline-row) > td:nth-child(17) .source-note {
+  display: none;
+}
+
 .btn-detail {
   display: block;
   width: 100%;
@@ -322,6 +361,49 @@ input[readonly] {
   font-size: 14px;
   font-weight: 720;
   font-variant-numeric: tabular-nums;
+}
+
+.security-detail-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.security-detail-input:focus {
+  border-color: #60a5fa;
+  outline: 2px solid rgba(59, 130, 246, 0.14);
+}
+
+.security-detail-input[readonly] {
+  border-color: transparent;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.security-detail-editable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.security-detail-editable .security-detail-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.security-detail-editable > span {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .security-detail-wide {
