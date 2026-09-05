@@ -1,3 +1,9 @@
+@media (min-width: 761px) {
+  .watchlist-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .watchlist-score-guide strong {
   display: flex;
   align-items: baseline;
