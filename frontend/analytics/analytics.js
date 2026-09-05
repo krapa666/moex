@@ -50,6 +50,12 @@
     return date && !Number.isNaN(date.valueOf()) ? dateTimeFormatter.format(date) : '—';
   }
 
+  function publishRevisions(revisions) {
+    document.dispatchEvent(new CustomEvent('moex:analytics-revisions', {
+      detail: { revisions },
+    }));
+  }
+
   function setKpi(name, value) {
     const element = summary.querySelector(`[data-analytics-kpi="${name}"]`);
     if (element) element.textContent = value;
@@ -81,6 +87,7 @@
   }
 
   function render(revisions) {
+    publishRevisions(revisions);
     if (!revisions.length) {
       status.textContent = 'Ревизий: 0';
       setEmpty('История не найдена', 'Для выбранного тикера и аналитика сохранённых ревизий пока нет.');
@@ -153,6 +160,7 @@
     tickerInput.value = ticker;
 
     if (!ticker) {
+      publishRevisions([]);
       status.textContent = 'Введите тикер';
       setEmpty('История ещё не выбрана', 'Введите тикер, чтобы увидеть сохранённые ревизии прогноза.');
       if (sync) syncUrl('', '', { push });
@@ -160,6 +168,7 @@
     }
 
     if (sync) syncUrl(ticker, tableId, { push });
+    publishRevisions([]);
     status.textContent = `Загрузка ${ticker}…`;
     setEmpty('Загрузка истории…', `Получаем сохранённые ревизии ${ticker}.`);
 
@@ -170,6 +179,7 @@
       const revisions = await api(`/api/analytics/forecast-revisions?${params.toString()}`);
       render(revisions);
     } catch (error) {
+      publishRevisions([]);
       status.textContent = error.message;
       setEmpty('Не удалось загрузить историю', 'Проверьте доступность Analytics API и повторите запрос.');
     }

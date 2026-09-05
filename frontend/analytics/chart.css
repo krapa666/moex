@@ -1,0 +1,146 @@
+.analytics-chart-panel[hidden] {
+  display: none;
+}
+
+.analytics-chart-body {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px 16px;
+}
+
+.analytics-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-height: 18px;
+}
+
+.analytics-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.analytics-chart-swatch {
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.analytics-chart-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+
+.analytics-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 220px;
+}
+
+.analytics-chart-grid {
+  stroke: #e8edf4;
+  stroke-width: 1;
+}
+
+.analytics-chart-axis-label {
+  fill: #94a3b8;
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-chart-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.analytics-chart-point {
+  fill: #fff;
+  stroke: currentColor;
+  stroke-width: 2.5;
+}
+
+.analytics-chart-series-0 {
+  color: #2563eb;
+}
+
+.analytics-chart-series-1 {
+  color: #059669;
+}
+
+.analytics-chart-series-2 {
+  color: #7c3aed;
+}
+
+.analytics-chart-series-3 {
+  color: #d97706;
+}
+
+.analytics-chart-series-4 {
+  color: #db2777;
+}
+
+.analytics-chart-series-5 {
+  color: #0891b2;
+}
+
+[data-theme="dark"] .analytics-chart-grid {
+  stroke: #263449;
+}
+
+[data-theme="dark"] .analytics-chart-axis-label,
+[data-theme="dark"] .analytics-chart-legend-item {
+  fill: #8fa0b8;
+  color: #8fa0b8;
+}
+
+[data-theme="dark"] .analytics-chart-point {
+  fill: #111c2e;
+}
+
+[data-theme="dark"] .analytics-chart-series-0 {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .analytics-chart-series-1 {
+  color: #34d399;
+}
+
+[data-theme="dark"] .analytics-chart-series-2 {
+  color: #a78bfa;
+}
+
+[data-theme="dark"] .analytics-chart-series-3 {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .analytics-chart-series-4 {
+  color: #f472b6;
+}
+
+[data-theme="dark"] .analytics-chart-series-5 {
+  color: #22d3ee;
+}
+
+@media (max-width: 600px) {
+  .analytics-chart-body {
+    padding: 12px;
+  }
+
+  .analytics-chart-svg {
+    min-height: 190px;
+  }
+
+  .analytics-chart-axis-label {
+    font-size: 9px;
+  }
+}

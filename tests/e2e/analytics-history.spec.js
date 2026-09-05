@@ -90,7 +90,7 @@ async function mockAnalyticsApi(page) {
   });
 }
 
-test('renders direct-linked forecast history with summary and revision deltas', async ({ page }) => {
+test('renders direct-linked forecast history with summary, chart, and revision deltas', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=SBER');
 
@@ -100,6 +100,13 @@ test('renders direct-linked forecast history with summary and revision deltas', 
   await expect(page.locator('[data-analytics-kpi="revisions"]')).toHaveText('3');
   await expect(page.locator('[data-analytics-kpi="analysts"]')).toHaveText('2');
   await expect(page.locator('[data-analytics-kpi="latest-fair"]')).toHaveText('350 ₽');
+
+  const chartPanel = page.locator('[data-analytics-chart-panel]');
+  await expect(chartPanel).toBeVisible();
+  await expect(chartPanel.locator('.analytics-chart-legend-item')).toHaveCount(2);
+  await expect(chartPanel.locator('[data-chart-point]')).toHaveCount(3);
+  await expect(chartPanel.locator('[data-chart-series="1"]')).toHaveCount(1);
+  await expect(chartPanel.locator('svg')).toHaveAttribute('aria-label', 'Динамика fair value SBER по ревизиям прогнозов');
 
   const timeline = page.locator('[data-analytics-timeline]');
   await expect(timeline.locator('[data-analytics-revision]')).toHaveCount(3);
@@ -111,7 +118,7 @@ test('renders direct-linked forecast history with summary and revision deltas', 
   await expect(timeline.locator('[data-analytics-revision="3"]')).toContainText('Повышение прогноза после отчёта');
 });
 
-test('filters forecast history by analyst and keeps the selection in the URL', async ({ page }) => {
+test('filters forecast history and chart by analyst and keeps the selection in the URL', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=SBER');
   await expect(page.locator('[data-analytics-revision]')).toHaveCount(3);
@@ -122,9 +129,16 @@ test('filters forecast history by analyst and keeps the selection in the URL', a
   await expect(page.locator('[data-analytics-revision="2"]')).toContainText('Консервативный');
   expect(new URL(page.url()).searchParams.get('table_id')).toBe('2');
   await expect(page.locator('[data-analytics-kpi="analysts"]')).toHaveText('1');
+
+  const chartPanel = page.locator('[data-analytics-chart-panel]');
+  await expect(chartPanel).toBeVisible();
+  await expect(chartPanel.locator('.analytics-chart-legend-item')).toHaveCount(1);
+  await expect(chartPanel.locator('[data-chart-point]')).toHaveCount(1);
+  await expect(chartPanel.locator('[data-chart-table="2"]')).toHaveCount(1);
+  await expect(chartPanel.locator('.analytics-chart-line')).toHaveCount(0);
 });
 
-test('shows a clear empty state for a ticker without revisions', async ({ page }) => {
+test('shows a clear empty state for a ticker without revisions and hides the chart', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/');
 
@@ -134,14 +148,16 @@ test('shows a clear empty state for a ticker without revisions', async ({ page }
   await expect(page.locator('#analytics-status')).toHaveText('Ревизий: 0');
   await expect(page.locator('[data-analytics-empty]')).toContainText('История не найдена');
   await expect(page.locator('[data-analytics-timeline]')).toBeHidden();
+  await expect(page.locator('[data-analytics-chart-panel]')).toBeHidden();
   expect(new URL(page.url()).searchParams.get('ticker')).toBe('GAZP');
 });
 
-test('analytics history has no horizontal overflow on mobile', async ({ page }) => {
+test('analytics history and chart have no horizontal overflow on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=SBER');
   await expect(page.locator('[data-analytics-revision]')).toHaveCount(3);
+  await expect(page.locator('[data-analytics-chart-panel]')).toBeVisible();
 
   const layout = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
