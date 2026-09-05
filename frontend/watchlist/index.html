@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Watchlist — MOEX Analytics</title>
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/shell.css" />
+    <link rel="stylesheet" href="/watchlist/watchlist.css" />
+    <link rel="stylesheet" href="/theme.css" />
+  </head>
+  <body>
+    <nav class="app-nav" aria-label="Основная навигация">
+      <div class="app-nav-inner">
+        <a class="app-brand" href="/" aria-label="MOEX Analytics — главная">MOEX Analytics</a>
+        <div class="app-nav-links">
+          <a class="app-nav-link" href="/dashboard/">Обзор</a>
+          <a class="app-nav-link" href="/">Оценки</a>
+          <a class="app-nav-link active" href="/watchlist/" aria-current="page">Watchlist</a>
+          <a class="app-nav-link" href="/volumes/">Объёмы</a>
+        </div>
+        <div class="app-nav-status">
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Переключить тему">☾</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="page watchlist-page">
+      <header class="page-header watchlist-header">
+        <div class="page-heading">
+          <span class="eyebrow">Investor workspace</span>
+          <h1>Watchlist</h1>
+          <p class="subtitle">Единый список бумаг для контроля справедливой стоимости, дивидендов и аномальной рыночной активности.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="/">Открыть оценки</a>
+          <a class="btn" href="/volumes/">Открыть объёмы</a>
+        </div>
+      </header>
+
+      <section class="watchlist-summary" aria-label="Структура Watchlist">
+        <article class="watchlist-summary-card">
+          <span>Оценка</span>
+          <strong>Fair value + потенциал</strong>
+          <p>Текущая цена, справедливая цена и полная доходность.</p>
+        </article>
+        <article class="watchlist-summary-card">
+          <span>Доход</span>
+          <strong>Дивиденды</strong>
+          <p>Ожидаемые выплаты и дивидендная доходность.</p>
+        </article>
+        <article class="watchlist-summary-card">
+          <span>Активность</span>
+          <strong>Объёмы</strong>
+          <p>Последний коэффициент объёма и статус сигнала.</p>
+        </article>
+      </section>
+
+      <section class="watchlist-panel" aria-labelledby="watchlist-title">
+        <header class="watchlist-panel-heading">
+          <div>
+            <span class="watchlist-panel-kicker">Рабочий список</span>
+            <h2 id="watchlist-title">Отслеживаемые бумаги</h2>
+            <p>На следующем этапе сюда будут объединены данные основной таблицы оценок и мониторинга объёмов.</p>
+          </div>
+        </header>
+
+        <div class="watchlist-empty" data-watchlist-empty>
+          <strong>Watchlist готов к подключению данных</strong>
+          <span>Следующая итерация добавит строки бумаг, сортировку и основные инвестиционные показатели без нового backend API.</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
