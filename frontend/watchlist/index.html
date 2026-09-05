@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="/watchlist/watchlist.css" />
     <link rel="stylesheet" href="/watchlist/watchlist-sort.css" />
     <link rel="stylesheet" href="/watchlist/watchlist-pin.css" />
+    <link rel="stylesheet" href="/watchlist/watchlist-saved-views.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -79,6 +80,15 @@
             <option value="negative">Отрицательный потенциал</option>
           </select>
           <button class="btn" id="watchlist-reset-view" type="button" disabled>Сбросить вид</button>
+        </div>
+
+        <div class="watchlist-saved-views" aria-label="Сохранённые виды Watchlist">
+          <select id="watchlist-saved-view" aria-label="Сохранённый вид" disabled>
+            <option value="">Сохранённые виды</option>
+          </select>
+          <input id="watchlist-view-name" type="text" maxlength="32" placeholder="Название вида" aria-label="Название сохранённого вида" disabled />
+          <button class="btn" id="watchlist-save-view" type="button" disabled>Сохранить вид</button>
+          <button class="btn" id="watchlist-delete-view" type="button" disabled>Удалить вид</button>
         </div>
 
         <div class="watchlist-empty" data-watchlist-empty>
