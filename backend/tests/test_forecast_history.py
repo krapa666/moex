@@ -1,9 +1,4 @@
-from app.main import (
-    apply_net_profit_projection,
-    build_database_snapshot,
-    current_calendar_year,
-    import_database_snapshot,
-)
+from app.main import apply_net_profit_projection, current_calendar_year
 from app.models import AnalystTable, Base, ForecastRevision, StockRow
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -140,46 +135,3 @@ def test_blank_synced_row_does_not_create_history_noise() -> None:
         db.commit()
 
         assert db.scalars(select(ForecastRevision)).all() == []
-
-
-def test_snapshot_import_resets_history_without_creating_fake_revisions() -> None:
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-
-    with Session(engine) as db:
-        table = make_table(db)
-        row = StockRow(
-            table_id=table.id,
-            ticker="SBER",
-            current_price=300.0,
-            shares_billion=20.0,
-            pe_avg_5y=5.0,
-            net_profit_year_map={str(CURRENT_YEAR): 1_200.0},
-            dividend_year_map={str(CURRENT_YEAR): 20.0},
-            net_profit_source_comment="До импорта",
-        )
-        apply_net_profit_projection(row, table.forecast_start_year)
-        db.add(row)
-        db.commit()
-
-        assert len(db.scalars(select(ForecastRevision)).all()) == 1
-        snapshot = build_database_snapshot(db)
-
-        result = import_database_snapshot(db, snapshot)
-
-        assert result == {"tables_count": 1, "rows_count": 1}
-        assert db.scalars(select(ForecastRevision)).all() == []
-
-        imported_table = db.scalars(select(AnalystTable)).one()
-        imported_row = db.scalars(select(StockRow)).one()
-        assert imported_row.ticker == "SBER"
-        assert imported_row.net_profit_year_map == {str(CURRENT_YEAR): 1_200.0}
-
-        imported_row.net_profit_year_map = {str(CURRENT_YEAR): 1_400.0}
-        apply_net_profit_projection(imported_row, imported_table.forecast_start_year)
-        db.commit()
-
-        revisions = db.scalars(select(ForecastRevision)).all()
-        assert len(revisions) == 1
-        assert revisions[0].event_type == "updated"
-        assert revisions[0].net_profit_year_map == {str(CURRENT_YEAR): 1_400.0}

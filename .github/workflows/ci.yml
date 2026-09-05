@@ -64,7 +64,7 @@ jobs:
         run: |
           docker compose config --quiet
           services="$(docker compose config --services | sort | paste -sd ' ' -)"
-          test "$services" = "backend db frontend pgbackup volume-worker"
+          test "$services" = "arsagera-worker backend db frontend pgbackup volume-worker"
         env:
           POSTGRES_PASSWORD: ci-compose-validation-only
 
