@@ -67,9 +67,23 @@
           <span class="watchlist-status" id="watchlist-status" role="status" aria-live="polite">Загрузка…</span>
         </header>
 
+        <div class="watchlist-controls" aria-label="Фильтры Watchlist">
+          <input id="watchlist-search" type="search" placeholder="Поиск тикера" aria-label="Поиск тикера" disabled />
+          <select id="watchlist-filter" aria-label="Фильтр Watchlist" disabled>
+            <option value="all">Все бумаги</option>
+            <option value="signals">Объёмный сигнал</option>
+            <option value="positive">Положительный потенциал</option>
+            <option value="negative">Отрицательный потенциал</option>
+          </select>
+        </div>
+
         <div class="watchlist-empty" data-watchlist-empty>
           <strong>Загрузка Watchlist…</strong>
           <span>Получаем основную таблицу оценок и последние данные мониторинга объёмов.</span>
+        </div>
+
+        <div class="watchlist-filter-empty" data-watchlist-filter-empty hidden>
+          По заданному поиску и фильтру бумаг нет.
         </div>
 
         <div class="watchlist-table-wrap" data-watchlist-table hidden>
