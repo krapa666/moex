@@ -33,6 +33,7 @@ def test_forecast_row_insert_creates_initial_revision() -> None:
             pe_avg_5y=5.0,
             net_profit_year_map={str(CURRENT_YEAR): 1_200.0},
             dividend_year_map={str(CURRENT_YEAR): 20.0},
+            paid_dividend_year_map={str(CURRENT_YEAR): 0.0},
             net_profit_source_comment="Первичный прогноз",
         )
         apply_net_profit_projection(row, table.forecast_start_year)
@@ -68,6 +69,7 @@ def test_material_forecast_change_creates_revision_with_recalculated_values() ->
             pe_avg_5y=5.0,
             net_profit_year_map={str(CURRENT_YEAR): 1_200.0},
             dividend_year_map={str(CURRENT_YEAR): 20.0},
+            paid_dividend_year_map={str(CURRENT_YEAR): 0.0},
         )
         apply_net_profit_projection(row, table.forecast_start_year)
         db.add(row)
