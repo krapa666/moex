@@ -138,6 +138,32 @@ test('opens stock details and edits secondary fields from the drawer', async ({ 
   expect(new URL(page.url()).searchParams.get('ticker')).toBeNull();
 });
 
+test('copies the canonical forecast deep link from the stock drawer', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.__copiedMoexUrl = text;
+        },
+      },
+    });
+  });
+  await openTable(page);
+
+  const firstRow = page.locator('#rows-table-body > tr').first();
+  await firstRow.getByRole('button', { name: 'Подробнее' }).click();
+  await expect(page).toHaveURL('/?ticker=SBER');
+
+  const drawer = page.locator('#security-detail-overlay');
+  const copyButton = drawer.locator('[data-copy-current-url]');
+  await copyButton.click();
+
+  expect(await page.evaluate(() => window.__copiedMoexUrl)).toBe(page.url());
+  await expect(copyButton).toHaveText('Ссылка скопирована');
+  await expect(copyButton).toHaveAttribute('data-copy-state', 'success');
+});
+
 test('opens the requested stock drawer from a ticker deep link after rows load', async ({ page }) => {
   await mockApi(page);
   await page.goto('/?ticker=LKOH');

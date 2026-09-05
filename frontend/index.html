@@ -113,7 +113,10 @@
             <h2 id="security-detail-title" data-detail="ticker">—</h2>
             <p data-detail="subtitle">—</p>
           </div>
-          <button class="security-detail-close" type="button" data-detail-close aria-label="Закрыть">×</button>
+          <div class="page-actions">
+            <button class="btn" type="button" data-copy-current-url data-copy-label="Копировать ссылку">Копировать ссылку</button>
+            <button class="security-detail-close" type="button" data-detail-close aria-label="Закрыть">×</button>
+          </div>
         </header>
 
         <div class="security-detail-section">
@@ -173,5 +176,6 @@
 
     <script src="/app.js"></script>
     <script src="/security-details.js"></script>
+    <script src="/copy-link.js"></script>
   </body>
 </html>
