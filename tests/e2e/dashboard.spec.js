@@ -7,16 +7,16 @@ test('shows the dashboard shell with unified navigation', async ({ page }) => {
   await expect(page.locator('.app-nav-link.active')).toHaveText('Обзор');
   await expect(page.locator('.dashboard-kpi-card')).toHaveCount(4);
   await expect(page.locator('.dashboard-panel')).toHaveCount(2);
-  await expect(page.getByRole('link', { name: 'Оценки' })).toHaveAttribute('href', '/');
-  await expect(page.getByRole('link', { name: 'Объёмы' })).toHaveAttribute('href', '/volumes/');
+  await expect(page.getByRole('link', { name: 'Оценки', exact: true })).toHaveAttribute('href', '/');
+  await expect(page.getByRole('link', { name: 'Объёмы', exact: true })).toHaveAttribute('href', '/volumes/');
 });
 
 test('adds the dashboard entry to forecast and volume navigation', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('link', { name: 'Обзор' })).toHaveAttribute('href', '/dashboard/');
+  await expect(page.getByRole('link', { name: 'Обзор', exact: true })).toHaveAttribute('href', '/dashboard/');
 
   await page.goto('/volumes/');
-  await expect(page.getByRole('link', { name: 'Обзор' })).toHaveAttribute('href', '/dashboard/');
+  await expect(page.getByRole('link', { name: 'Обзор', exact: true })).toHaveAttribute('href', '/dashboard/');
 });
 
 for (const viewport of [
