@@ -82,13 +82,27 @@ def _table_snapshot(connection, table_id: int) -> tuple[str, int] | None:
     return str(result.analyst_name), int(result.forecast_start_year)
 
 
+def _remaining_dividends(row: StockRow, target_year: int) -> float:
+    current_year = datetime.now(timezone.utc).year
+    if target_year < current_year:
+        return 0.0
+    dividend_map = row.dividend_year_map or {}
+    total = sum(
+        float(dividend_map.get(str(year)) or 0.0)
+        for year in range(current_year, target_year + 1)
+    )
+    if row.paid_dividend_year_map is None:
+        return max(total - float(dividend_map.get(str(current_year)) or 0.0), 0.0)
+    paid_current = float(row.paid_dividend_year_map.get(str(current_year)) or 0.0)
+    full_current = float(dividend_map.get(str(current_year)) or 0.0)
+    return max(total - min(full_current, paid_current), 0.0)
+
+
 def _derived_values(
     row: StockRow,
     forecast_start_year: int,
 ) -> tuple[float | None, float | None, float | None, float | None]:
     profit_map = row.net_profit_year_map or {}
-    dividend_map = row.dividend_year_map or {}
-    current_year = datetime.now(timezone.utc).year
     prices: list[float | None] = []
     upsides: list[float | None] = []
 
@@ -107,12 +121,7 @@ def _derived_values(
         prices.append(forecast_price)
 
         if forecast_price is not None and row.current_price is not None and row.current_price > 0:
-            dividends = 0.0
-            if target_year >= current_year:
-                dividends = sum(
-                    float(dividend_map.get(str(year)) or 0.0)
-                    for year in range(current_year, target_year + 1)
-                )
+            dividends = _remaining_dividends(row, target_year)
             upside = ((forecast_price - row.current_price + dividends) / row.current_price) * 100
         else:
             upside = None
