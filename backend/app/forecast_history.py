@@ -82,6 +82,45 @@ def _table_snapshot(connection, table_id: int) -> tuple[str, int] | None:
     return str(result.analyst_name), int(result.forecast_start_year)
 
 
+def _derived_values(
+    row: StockRow,
+    forecast_start_year: int,
+) -> tuple[float | None, float | None, float | None, float | None]:
+    profit_map = row.net_profit_year_map or {}
+    dividend_map = row.dividend_year_map or {}
+    current_year = datetime.now(timezone.utc).year
+    prices: list[float | None] = []
+    upsides: list[float | None] = []
+
+    for year_index in range(2):
+        target_year = forecast_start_year + year_index
+        profit = profit_map.get(str(target_year))
+        if (
+            profit is not None
+            and row.pe_avg_5y is not None
+            and row.shares_billion is not None
+            and row.shares_billion > 0
+        ):
+            forecast_price = float(profit) * row.pe_avg_5y / row.shares_billion
+        else:
+            forecast_price = None
+        prices.append(forecast_price)
+
+        if forecast_price is not None and row.current_price is not None and row.current_price > 0:
+            dividends = 0.0
+            if target_year >= current_year:
+                dividends = sum(
+                    float(dividend_map.get(str(year)) or 0.0)
+                    for year in range(current_year, target_year + 1)
+                )
+            upside = ((forecast_price - row.current_price + dividends) / row.current_price) * 100
+        else:
+            upside = None
+        upsides.append(upside)
+
+    return prices[0], prices[1], upsides[0], upsides[1]
+
+
 def _insert_revision(connection, row: StockRow, event_type: str) -> None:
     ticker = (row.ticker or "").strip().upper()
     if not ticker:
@@ -91,6 +130,10 @@ def _insert_revision(connection, row: StockRow, event_type: str) -> None:
     if table is None:
         return
     analyst_name, forecast_start_year = table
+    forecast_price_year1, forecast_price_year2, upside_year1, upside_year2 = _derived_values(
+        row,
+        forecast_start_year,
+    )
 
     connection.execute(
         insert(ForecastRevision).values(
@@ -107,10 +150,10 @@ def _insert_revision(connection, row: StockRow, event_type: str) -> None:
             net_profit_year_map=dict(row.net_profit_year_map or {}),
             dividend_year_map=dict(row.dividend_year_map or {}),
             net_profit_source_comment=row.net_profit_source_comment,
-            forecast_price_year1=row.forecast_price_year1,
-            forecast_price_year2=row.forecast_price_year2,
-            upside_percent_year1=row.upside_percent_year1,
-            upside_percent_year2=row.upside_percent_year2,
+            forecast_price_year1=forecast_price_year1,
+            forecast_price_year2=forecast_price_year2,
+            upside_percent_year1=upside_year1,
+            upside_percent_year2=upside_year2,
             created_at=datetime.now(timezone.utc),
         )
     )
