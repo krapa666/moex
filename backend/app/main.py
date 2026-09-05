@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session, load_only
 
 from .calculations import recalculate_fields
 from .database import SessionLocal, get_db
-from .models import AnalystTable, StockRow
+from .models import AnalystTable, ForecastRevision, StockRow
+from .forecast_history import suppress_forecast_history
 from .schemas import (
     AnalystTableCreate,
     AnalystTableRead,
@@ -326,77 +327,86 @@ def import_database_snapshot(db: Session, payload: dict) -> dict:
     if not isinstance(tables_data, list) or not isinstance(rows_data, list):
         raise HTTPException(status_code=400, detail="Некорректный формат JSON-файла")
 
-    existing_rows = db.scalars(select(StockRow)).all()
-    for row in existing_rows:
-        db.delete(row)
-    existing_tables = db.scalars(select(AnalystTable)).all()
-    for table in existing_tables:
-        db.delete(table)
-    db.flush()
-
-    table_id_map: dict[int, int] = {}
-    for table_data in tables_data:
-        legacy_offset = int(table_data.get("year_offset") or 0)
-        forecast_start_year = int(
-            table_data.get("forecast_start_year") or current_calendar_year() + legacy_offset
-        )
-        new_table = AnalystTable(
-            analyst_name=str(table_data.get("analyst_name") or "Аналитик"),
-            year_offset=legacy_offset,
-            forecast_start_year=forecast_start_year,
-            sort_order=int(table_data.get("sort_order") or 0),
-        )
-        db.add(new_table)
-        db.flush()
-        source_id = int(table_data.get("id") or 0)
-        if source_id:
-            table_id_map[source_id] = new_table.id
-
     imported_rows = 0
-    for row_data in rows_data:
-        source_table_id = int(row_data.get("table_id") or 0)
-        mapped_table_id = table_id_map.get(source_table_id)
-        if mapped_table_id is None:
-            continue
-        price_updated_raw = row_data.get("price_updated_at")
-        price_updated = None
-        if isinstance(price_updated_raw, str) and price_updated_raw:
-            try:
-                price_updated = datetime.fromisoformat(price_updated_raw)
-            except ValueError:
+    try:
+        with suppress_forecast_history(db.connection()):
+            db.query(ForecastRevision).delete(synchronize_session=False)
+
+            existing_rows = db.scalars(select(StockRow)).all()
+            for row in existing_rows:
+                db.delete(row)
+            existing_tables = db.scalars(select(AnalystTable)).all()
+            for table in existing_tables:
+                db.delete(table)
+            db.flush()
+
+            table_id_map: dict[int, int] = {}
+            for table_data in tables_data:
+                legacy_offset = int(table_data.get("year_offset") or 0)
+                forecast_start_year = int(
+                    table_data.get("forecast_start_year") or current_calendar_year() + legacy_offset
+                )
+                new_table = AnalystTable(
+                    analyst_name=str(table_data.get("analyst_name") or "Аналитик"),
+                    year_offset=legacy_offset,
+                    forecast_start_year=forecast_start_year,
+                    sort_order=int(table_data.get("sort_order") or 0),
+                )
+                db.add(new_table)
+                db.flush()
+                source_id = int(table_data.get("id") or 0)
+                if source_id:
+                    table_id_map[source_id] = new_table.id
+
+            for row_data in rows_data:
+                source_table_id = int(row_data.get("table_id") or 0)
+                mapped_table_id = table_id_map.get(source_table_id)
+                if mapped_table_id is None:
+                    continue
+                price_updated_raw = row_data.get("price_updated_at")
                 price_updated = None
+                if isinstance(price_updated_raw, str) and price_updated_raw:
+                    try:
+                        price_updated = datetime.fromisoformat(price_updated_raw)
+                    except ValueError:
+                        price_updated = None
 
-        row = StockRow(
-            table_id=mapped_table_id,
-            ticker=str(row_data.get("ticker") or "").strip().upper(),
-            current_price=row_data.get("current_price"),
-            shares_billion=row_data.get("shares_billion"),
-            market_cap_billion_rub=row_data.get("market_cap_billion_rub"),
-            pe_avg_5y=row_data.get("pe_avg_5y"),
-            forecast_profit_year1_billion_rub=row_data.get("forecast_profit_year1_billion_rub"),
-            forecast_profit_year2_billion_rub=row_data.get("forecast_profit_year2_billion_rub"),
-            forecast_profit_year3_billion_rub=row_data.get("forecast_profit_year3_billion_rub"),
-            forecast_profit_year4_billion_rub=row_data.get("forecast_profit_year4_billion_rub"),
-            net_profit_year_map=row_data.get("net_profit_year_map"),
-            net_profit_source_comment=row_data.get("net_profit_source_comment"),
-            dividends_year1=row_data.get("dividends_year1"),
-            dividends_year2=row_data.get("dividends_year2"),
-            dividend_year_map=row_data.get("dividend_year_map"),
-            forecast_price_year1=row_data.get("forecast_price_year1"),
-            forecast_price_year2=row_data.get("forecast_price_year2"),
-            forecast_price_year3=row_data.get("forecast_price_year3"),
-            forecast_price_year4=row_data.get("forecast_price_year4"),
-            upside_percent_year1=row_data.get("upside_percent_year1"),
-            upside_percent_year2=row_data.get("upside_percent_year2"),
-            upside_percent_year3=row_data.get("upside_percent_year3"),
-            upside_percent_year4=row_data.get("upside_percent_year4"),
-            status_message=row_data.get("status_message"),
-            price_updated_at=price_updated,
-        )
-        db.add(row)
-        imported_rows += 1
+                row = StockRow(
+                    table_id=mapped_table_id,
+                    ticker=str(row_data.get("ticker") or "").strip().upper(),
+                    current_price=row_data.get("current_price"),
+                    shares_billion=row_data.get("shares_billion"),
+                    market_cap_billion_rub=row_data.get("market_cap_billion_rub"),
+                    pe_avg_5y=row_data.get("pe_avg_5y"),
+                    forecast_profit_year1_billion_rub=row_data.get("forecast_profit_year1_billion_rub"),
+                    forecast_profit_year2_billion_rub=row_data.get("forecast_profit_year2_billion_rub"),
+                    forecast_profit_year3_billion_rub=row_data.get("forecast_profit_year3_billion_rub"),
+                    forecast_profit_year4_billion_rub=row_data.get("forecast_profit_year4_billion_rub"),
+                    net_profit_year_map=row_data.get("net_profit_year_map"),
+                    net_profit_source_comment=row_data.get("net_profit_source_comment"),
+                    dividends_year1=row_data.get("dividends_year1"),
+                    dividends_year2=row_data.get("dividends_year2"),
+                    dividend_year_map=row_data.get("dividend_year_map"),
+                    forecast_price_year1=row_data.get("forecast_price_year1"),
+                    forecast_price_year2=row_data.get("forecast_price_year2"),
+                    forecast_price_year3=row_data.get("forecast_price_year3"),
+                    forecast_price_year4=row_data.get("forecast_price_year4"),
+                    upside_percent_year1=row_data.get("upside_percent_year1"),
+                    upside_percent_year2=row_data.get("upside_percent_year2"),
+                    upside_percent_year3=row_data.get("upside_percent_year3"),
+                    upside_percent_year4=row_data.get("upside_percent_year4"),
+                    status_message=row_data.get("status_message"),
+                    price_updated_at=price_updated,
+                )
+                db.add(row)
+                imported_rows += 1
 
-    db.commit()
+            db.flush()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     return {"tables_count": len(tables_data), "rows_count": imported_rows}
 
 
