@@ -55,6 +55,18 @@ const allTickers = (page) => page.locator('#watchlist-body > tr').evaluateAll(
   (rows) => rows.map((row) => row.dataset.watchlistTicker),
 );
 
+async function mobileLayout(page) {
+  return page.evaluate(() => {
+    const wrap = document.querySelector('.watchlist-table-wrap');
+    return {
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      tableClientWidth: wrap?.clientWidth || 0,
+      tableScrollWidth: wrap?.scrollWidth || 0,
+    };
+  });
+}
+
 test('calculates a transparent 0-100 priority score from existing Watchlist factors', async ({ page }) => {
   await mockWatchlistApi(page);
   await page.goto('/watchlist/');
@@ -103,17 +115,18 @@ test('sorts by priority with missing scores last and restores the score sort aft
   await expect(page.locator('[data-watchlist-sort="score"]').locator('xpath=..')).toHaveAttribute('aria-sort', 'ascending');
 });
 
-test('keeps the score explanation inside the mobile page viewport contract', async ({ page }) => {
+test('keeps the loaded Watchlist and score explanation inside the mobile page viewport contract', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await mockWatchlistApi(page);
   await page.goto('/watchlist/');
 
+  const before = await mobileLayout(page);
+  expect(before.tableScrollWidth).toBeGreaterThan(before.tableClientWidth);
+  expect(before.scrollWidth).toBeLessThanOrEqual(before.clientWidth + 1);
+
   await page.locator('[data-watchlist-ticker="SBER"] .watchlist-score > summary').click();
   await expect(page.locator('[data-watchlist-ticker="SBER"] .watchlist-score-breakdown')).toBeVisible();
 
-  const layout = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+  const after = await mobileLayout(page);
+  expect(after.scrollWidth).toBeLessThanOrEqual(after.clientWidth + 1);
 });
