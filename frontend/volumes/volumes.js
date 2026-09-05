@@ -22,6 +22,7 @@ const notificationStatus = document.getElementById('notification-status');
 const testEmailBtn = document.getElementById('test-email-btn');
 const securitySearch = document.getElementById('security-search');
 const indexFilter = document.getElementById('index-filter');
+const requestedTicker = new URLSearchParams(window.location.search).get('ticker')?.trim() || '';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -30,6 +31,16 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function setTickerQuery(ticker) {
+  const url = new URL(window.location.href);
+  if (ticker) {
+    url.searchParams.set('ticker', ticker);
+  } else {
+    url.searchParams.delete('ticker');
+  }
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 async function api(path, options = {}) {
@@ -226,9 +237,13 @@ async function loadAuthAndSettings() {
 }
 
 async function openDetail(ticker) {
-  setStatus(`Загрузка ${ticker}...`);
+  const normalizedTicker = String(ticker || '').trim().toLocaleUpperCase('ru');
+  if (!normalizedTicker) return;
+
+  setStatus(`Загрузка ${normalizedTicker}...`);
   try {
-    const data = await api(`/api/volume/securities/${encodeURIComponent(ticker)}/observations?limit=${state.config?.display_sessions || 60}`);
+    const data = await api(`/api/volume/securities/${encodeURIComponent(normalizedTicker)}/observations?limit=${state.config?.display_sessions || 60}`);
+    setTickerQuery(data.ticker || normalizedTicker);
     document.getElementById('detail-title').textContent = `${data.ticker} — история объёмов`;
     document.getElementById('detail-subtitle').textContent = data.short_name || '';
     detailBody.innerHTML = data.observations.map((item) => `
@@ -285,6 +300,7 @@ overviewBody.addEventListener('click', (event) => {
 document.getElementById('detail-back-btn').addEventListener('click', () => {
   detailSection.hidden = true;
   overviewSection.hidden = false;
+  setTickerQuery('');
   updateOverviewStatus();
 });
 
@@ -355,6 +371,9 @@ async function initialize() {
   try {
     await Promise.all([loadConfig(), loadAuthAndSettings(), loadLastRun(), loadOverview()]);
     updateOverviewStatus();
+    if (requestedTicker) {
+      await openDetail(requestedTicker);
+    }
   } catch (error) {
     setStatus(error.message);
   }
