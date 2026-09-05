@@ -1,5 +1,10 @@
 # Repository working rules
 
+## Project location
+
+- The production working copy of this project is located at `/home/krapa/moex`.
+- When giving server-side commands for this repository, use `/home/krapa/moex` as the default project path unless the user explicitly says otherwise.
+
 ## Delivery cadence
 
 - Make changes in small, reviewable iterations.
