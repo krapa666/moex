@@ -2,9 +2,13 @@
   const kpi = (name) => document.querySelector(`[data-dashboard-kpi="${name}"]`);
   const list = (name) => document.querySelector(`[data-dashboard-list="${name}"]`);
   const empty = (name) => document.querySelector(`[data-dashboard-empty="${name}"]`);
+  const freshnessItem = (name) => document.querySelector(`[data-dashboard-freshness="${name}"]`);
   const refreshButton = document.getElementById('dashboard-refresh-btn');
   const refreshStatus = document.getElementById('dashboard-refresh-status');
   let refreshPromise = null;
+
+  const FRESHNESS_FRESH_MS = 36 * 60 * 60 * 1000;
+  const FRESHNESS_DELAYED_MS = 96 * 60 * 60 * 1000;
 
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: 1,
@@ -71,6 +75,75 @@
   function setKpi(name, value, fallback = '—') {
     const element = kpi(name);
     if (element) element.textContent = value ?? fallback;
+  }
+
+  function parseTimestamp(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.valueOf()) ? null : date;
+  }
+
+  function freshnessState(date) {
+    if (!date) return 'unknown';
+    const ageMs = Math.max(0, Date.now() - date.valueOf());
+    if (ageMs <= FRESHNESS_FRESH_MS) return 'fresh';
+    if (ageMs <= FRESHNESS_DELAYED_MS) return 'delayed';
+    return 'stale';
+  }
+
+  function freshnessLabel(state) {
+    if (state === 'fresh') return 'Актуально';
+    if (state === 'delayed') return 'Задержка';
+    if (state === 'stale') return 'Устарело';
+    return 'Нет данных';
+  }
+
+  function setFreshness(name, state, detail) {
+    const item = freshnessItem(name);
+    if (!item) return;
+    item.dataset.state = state;
+    const status = item.querySelector('[data-freshness-status]');
+    const detailElement = item.querySelector('[data-freshness-detail]');
+    if (status) status.textContent = freshnessLabel(state);
+    if (detailElement) detailElement.textContent = detail;
+  }
+
+  function updateQuoteFreshness(rows) {
+    const pricedRows = rows.filter((row) => isFiniteValue(row.current_price));
+    if (!pricedRows.length) {
+      setFreshness('quotes', 'unknown', 'В основной таблице нет котировок');
+      return;
+    }
+
+    const dates = pricedRows
+      .map((row) => parseTimestamp(row.price_updated_at))
+      .filter(Boolean);
+    if (!dates.length) {
+      setFreshness('quotes', 'unknown', 'У котировок нет меток времени');
+      return;
+    }
+
+    const oldest = new Date(Math.min(...dates.map((date) => date.valueOf())));
+    const missing = pricedRows.length - dates.length;
+    let state = freshnessState(oldest);
+    if (missing > 0 && state === 'fresh') state = 'delayed';
+
+    const details = [`Старейшая: ${dateTimeFormatter.format(oldest)}`];
+    if (missing > 0) details.push(`без времени: ${missing}`);
+    setFreshness('quotes', state, details.join(' · '));
+  }
+
+  function updateVolumeFreshness(value) {
+    const date = parseTimestamp(value);
+    if (!date) {
+      setFreshness('volumes', 'unknown', 'Нет метки последнего сбора');
+      return;
+    }
+    setFreshness(
+      'volumes',
+      freshnessState(date),
+      `Последний сбор: ${dateTimeFormatter.format(date)}`,
+    );
   }
 
   function setEmptyState(name, message) {
@@ -186,6 +259,7 @@
       if (!primaryTable) {
         setKpi('securities', '0');
         setKpi('median-upside', '—');
+        setFreshness('quotes', 'unknown', 'Основная таблица оценок пока пуста');
         setEmptyState('opportunities', 'Основная таблица оценок пока пуста.');
         return true;
       }
@@ -198,11 +272,13 @@
         'median-upside',
         medianUpside == null ? '—' : `${percentFormatter.format(medianUpside)} %`,
       );
+      updateQuoteFreshness(rows);
       renderOpportunities(rows);
       return true;
     } catch (_error) {
       setKpi('securities', '—');
       setKpi('median-upside', '—');
+      setFreshness('quotes', 'unknown', 'Не удалось проверить котировки');
       setEmptyState('opportunities', 'Не удалось загрузить данные оценок.');
       return false;
     }
@@ -228,13 +304,19 @@
 
     if (runResult.status === 'fulfilled' && runResult.value) {
       const rawDate = runResult.value.finished_at || runResult.value.started_at;
-      const date = rawDate ? new Date(rawDate) : null;
+      const date = parseTimestamp(rawDate);
       setKpi(
         'last-volume-run',
-        date && !Number.isNaN(date.valueOf()) ? dateTimeFormatter.format(date) : '—',
+        date ? dateTimeFormatter.format(date) : '—',
       );
+      updateVolumeFreshness(rawDate);
     } else {
       setKpi('last-volume-run', '—');
+      setFreshness(
+        'volumes',
+        'unknown',
+        runResult.status === 'rejected' ? 'Не удалось проверить последний сбор' : 'Сборов пока нет',
+      );
     }
 
     return overviewResult.status === 'fulfilled' && runResult.status === 'fulfilled';
