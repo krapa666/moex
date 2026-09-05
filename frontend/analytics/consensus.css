@@ -36,7 +36,7 @@
 
 .analytics-consensus-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -63,6 +63,33 @@
   color: #0f172a;
   font-size: 16px;
   font-variant-numeric: tabular-nums;
+}
+
+.analytics-consensus-agreement {
+  font-size: 14px !important;
+}
+
+.analytics-consensus-agreement.high {
+  color: #047857;
+}
+
+.analytics-consensus-agreement.medium {
+  color: #a16207;
+}
+
+.analytics-consensus-agreement.low {
+  color: #b91c1c;
+}
+
+.analytics-consensus-agreement.insufficient {
+  color: #64748b;
+}
+
+.analytics-consensus-formula {
+  margin: -4px 0 0;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .analytics-consensus-range {
@@ -152,7 +179,8 @@
 [data-theme="dark"] .analytics-consensus-empty,
 [data-theme="dark"] .analytics-consensus-kpis span,
 [data-theme="dark"] .analytics-consensus-target span,
-[data-theme="dark"] .analytics-consensus-axis {
+[data-theme="dark"] .analytics-consensus-axis,
+[data-theme="dark"] .analytics-consensus-formula {
   color: #8fa0b8;
 }
 
@@ -163,6 +191,22 @@
 [data-theme="dark"] .analytics-consensus-kpis strong,
 [data-theme="dark"] .analytics-consensus-target strong {
   color: #e7edf7;
+}
+
+[data-theme="dark"] .analytics-consensus-agreement.high {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .analytics-consensus-agreement.medium {
+  color: #fde68a;
+}
+
+[data-theme="dark"] .analytics-consensus-agreement.low {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .analytics-consensus-agreement.insufficient {
+  color: #8fa0b8;
 }
 
 [data-theme="dark"] .analytics-consensus-track {
@@ -181,6 +225,12 @@
 
 [data-theme="dark"] .analytics-consensus-target {
   border-color: #263449;
+}
+
+@media (max-width: 1100px) {
+  .analytics-consensus-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
