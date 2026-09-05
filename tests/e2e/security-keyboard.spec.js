@@ -53,6 +53,7 @@ test('keeps Tab focus inside the stock drawer and restores the details trigger o
 
   const overlay = page.locator('#security-detail-overlay');
   const drawer = overlay.locator('.security-detail-drawer');
+  const historyLink = drawer.getByRole('link', { name: 'История прогноза' });
   const copyButton = drawer.locator('[data-copy-current-url]');
   const closeButton = drawer.getByRole('button', { name: 'Закрыть', exact: true });
   const lastInput = drawer.locator('[data-detail-input="dividends2"]');
@@ -63,7 +64,13 @@ test('keeps Tab focus inside the stock drawer and restores the details trigger o
 
   await copyButton.focus();
   await page.keyboard.press('Shift+Tab');
+  await expect(historyLink).toBeFocused();
+
+  await page.keyboard.press('Shift+Tab');
   await expect(lastInput).toBeFocused();
+
+  await page.keyboard.press('Tab');
+  await expect(historyLink).toBeFocused();
 
   await page.keyboard.press('Tab');
   await expect(copyButton).toBeFocused();
