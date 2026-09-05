@@ -50,7 +50,7 @@
 }
 
 .analytics-consensus-kpis span,
-.analytics-consensus-target span {
+.analytics-consensus-target > span {
   color: #64748b;
   font-size: 9.5px;
   font-weight: 800;
@@ -71,7 +71,8 @@
 }
 
 .analytics-consensus-agreement.high,
-.analytics-consensus-return.positive {
+.analytics-consensus-return.positive,
+.analytics-consensus-target-return.positive {
   color: #047857;
 }
 
@@ -80,12 +81,14 @@
 }
 
 .analytics-consensus-agreement.low,
-.analytics-consensus-return.negative {
+.analytics-consensus-return.negative,
+.analytics-consensus-target-return.negative {
   color: #b91c1c;
 }
 
 .analytics-consensus-agreement.insufficient,
-.analytics-consensus-return.neutral {
+.analytics-consensus-return.neutral,
+.analytics-consensus-target-return.neutral {
   color: #64748b;
 }
 
@@ -172,22 +175,35 @@
   border-radius: 9px;
 }
 
-.analytics-consensus-target span {
+.analytics-consensus-target > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.analytics-consensus-target strong {
+.analytics-consensus-target-values {
+  display: grid;
   flex: 0 0 auto;
+  gap: 2px;
+  justify-items: end;
+  text-align: right;
+}
+
+.analytics-consensus-target strong {
   font-size: 12px;
+}
+
+.analytics-consensus-target-return {
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 [data-theme="dark"] .analytics-consensus-status,
 [data-theme="dark"] .analytics-consensus-empty,
 [data-theme="dark"] .analytics-consensus-kpis span,
-[data-theme="dark"] .analytics-consensus-target span,
+[data-theme="dark"] .analytics-consensus-target > span,
 [data-theme="dark"] .analytics-consensus-axis,
 [data-theme="dark"] .analytics-consensus-formula {
   color: #8fa0b8;
@@ -203,7 +219,8 @@
 }
 
 [data-theme="dark"] .analytics-consensus-agreement.high,
-[data-theme="dark"] .analytics-consensus-return.positive {
+[data-theme="dark"] .analytics-consensus-return.positive,
+[data-theme="dark"] .analytics-consensus-target-return.positive {
   color: #6ee7b7;
 }
 
@@ -212,12 +229,14 @@
 }
 
 [data-theme="dark"] .analytics-consensus-agreement.low,
-[data-theme="dark"] .analytics-consensus-return.negative {
+[data-theme="dark"] .analytics-consensus-return.negative,
+[data-theme="dark"] .analytics-consensus-target-return.negative {
   color: #fca5a5;
 }
 
 [data-theme="dark"] .analytics-consensus-agreement.insufficient,
-[data-theme="dark"] .analytics-consensus-return.neutral {
+[data-theme="dark"] .analytics-consensus-return.neutral,
+[data-theme="dark"] .analytics-consensus-target-return.neutral {
   color: #8fa0b8;
 }
 
