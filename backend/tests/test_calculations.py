@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from app.calculations import recalculate_fields
 from app.models import StockRow
 
@@ -62,3 +64,27 @@ def test_second_year_upside_includes_dividends_from_both_forecast_years() -> Non
     assert row.forecast_price_year2 == 350.0
     assert round(row.upside_percent_year1 or 0, 2) == round((20.0 / 300.0) * 100, 2)
     assert round(row.upside_percent_year2 or 0, 2) == round(((350.0 - 300.0 + 20.0 + 30.0) / 300.0) * 100, 2)
+
+
+def test_current_year_upside_excludes_dividends_already_past_registry_date() -> None:
+    current_year = str(datetime.now(timezone.utc).year)
+    next_year = str(datetime.now(timezone.utc).year + 1)
+    row = StockRow(
+        ticker="SBER",
+        current_price=300.0,
+        shares_billion=20.0,
+        pe_avg_5y=5.0,
+        forecast_profit_year1_billion_rub=1_200.0,
+        forecast_profit_year2_billion_rub=1_400.0,
+        dividends_year1=40.0,
+        dividends_year2=30.0,
+        dividend_year_map={current_year: 40.0, next_year: 30.0},
+        paid_dividend_year_map={current_year: 25.0},
+    )
+
+    recalculate_fields(row)
+
+    assert row.forecast_price_year1 == 300.0
+    assert row.forecast_price_year2 == 350.0
+    assert round(row.upside_percent_year1 or 0, 2) == round((15.0 / 300.0) * 100, 2)
+    assert round(row.upside_percent_year2 or 0, 2) == round(((350.0 - 300.0 + 15.0 + 30.0) / 300.0) * 100, 2)
