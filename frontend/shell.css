@@ -300,3 +300,11 @@ body {
     max-height: calc(100vh - 320px);
   }
 }
+
+@media (max-width: 600px) {
+  .app-nav-links {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+}
