@@ -114,6 +114,7 @@ test('ranks valuation opportunities and anomalous volumes from the same API data
   )).toEqual(['LKOH', 'SBER']);
   await expect(opportunities.locator('.dashboard-list-row').first()).toContainText('40,0 %');
   await expect(opportunities.locator('.dashboard-list-row').first()).toContainText('8 400 ₽');
+  await expect(opportunities.locator('.dashboard-list-row').first()).toHaveAttribute('href', '/?ticker=LKOH');
 
   const volumes = page.locator('[data-dashboard-list="volumes"]');
   await expect(volumes).toBeVisible();
@@ -124,6 +125,7 @@ test('ranks valuation opportunities and anomalous volumes from the same API data
   )).toEqual(['LKOH', 'GAZP', 'SBER']);
   await expect(volumes.locator('.dashboard-list-row').first()).toContainText('7,1×');
   await expect(volumes.locator('.dashboard-list-row').first()).toContainText('Выше диапазона');
+  await expect(volumes.locator('.dashboard-list-row').first()).toHaveAttribute('href', '/volumes/?ticker=LKOH');
   await expect(volumes).not.toContainText('ROSN');
 });
 
