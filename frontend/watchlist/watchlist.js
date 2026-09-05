@@ -119,17 +119,17 @@
     return 'watchlist-value-muted';
   }
 
-  function priorityScore(row, dividendYieldPercent, signalStatus) {
+  function priorityScore(row, signalStatus) {
     if (typeof window.MoexWatchlistScore?.calculate !== 'function') return null;
     return window.MoexWatchlistScore.calculate({
       currentPrice: row.current_price,
       fairValue: row.forecast_price_year1,
-      dividendYield: dividendYieldPercent,
+      fullReturn: row.upside_percent_year1,
       signalStatus,
     });
   }
 
-  function scoreCell(score, ticker, dividendYieldPercent, signalStatus) {
+  function scoreCell(score, ticker, signalStatus) {
     if (!score) return '<td class="watchlist-score-cell watchlist-value-muted">—</td>';
     return `
       <td class="watchlist-score-cell">
@@ -144,7 +144,7 @@
               <b>+${formatPoints(score.pricePoints)} / 60</b>
             </span>
             <span class="watchlist-score-factor">
-              <span>Дивиденды · ${formatPercent(dividendYieldPercent)}</span>
+              <span>Ост. дивиденды · ${formatPercent(score.remainingDividendYield)}</span>
               <b>+${formatPoints(score.dividendPoints)} / 25</b>
             </span>
             <span class="watchlist-score-factor">
@@ -526,7 +526,7 @@
       const ratio = latest?.ratio;
       const yieldPercent = dividendYield(row, year);
       const signalStatus = latest?.signal_status || '';
-      const score = priorityScore(row, yieldPercent, signalStatus);
+      const score = priorityScore(row, signalStatus);
       const pinned = pinnedTickers.has(ticker);
 
       return `
@@ -565,7 +565,7 @@
               : '—'}
           </td>
           <td><span class="${signalClass(signalStatus)}">${signalLabel(signalStatus)}</span></td>
-          ${scoreCell(score, ticker, yieldPercent, signalStatus)}
+          ${scoreCell(score, ticker, signalStatus)}
         </tr>
       `;
     }).join('');
