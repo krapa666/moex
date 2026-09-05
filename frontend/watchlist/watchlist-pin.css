@@ -1,0 +1,54 @@
+.watchlist-pin-header,
+.watchlist-pin-cell {
+  width: 34px;
+  min-width: 34px;
+  padding-right: 4px !important;
+  padding-left: 4px !important;
+  text-align: center !important;
+}
+
+.watchlist-pin-btn {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.watchlist-pin-btn:hover {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.watchlist-pin-btn:active {
+  transform: scale(0.94);
+}
+
+.watchlist-pin-btn[aria-pressed="true"] {
+  color: #d97706;
+}
+
+.watchlist-pin-btn:focus-visible {
+  outline: 2px solid #93b4f7;
+  outline-offset: 1px;
+}
+
+[data-theme="dark"] .watchlist-pin-btn {
+  color: #52627a;
+}
+
+[data-theme="dark"] .watchlist-pin-btn:hover {
+  background: #1b2a40;
+  color: #8fa0b8;
+}
+
+[data-theme="dark"] .watchlist-pin-btn[aria-pressed="true"] {
+  color: #fbbf24;
+}
