@@ -191,7 +191,6 @@ input[readonly] {
 
 .forecast-table-compact col.compact-hidden-col {
   width: 0 !important;
-  visibility: collapse;
 }
 
 .forecast-table-compact tbody tr > td:nth-child(3),
