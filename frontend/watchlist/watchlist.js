@@ -6,8 +6,13 @@
   const status = document.getElementById('watchlist-status');
   const searchInput = document.getElementById('watchlist-search');
   const filterSelect = document.getElementById('watchlist-filter');
+  const resetViewBtn = document.getElementById('watchlist-reset-view');
   const sortButtons = [...document.querySelectorAll('[data-watchlist-sort]')];
-  if (!body || !tableWrap || !empty || !filterEmpty || !status || !searchInput || !filterSelect) return;
+  if (!body || !tableWrap || !empty || !filterEmpty || !status || !searchInput || !filterSelect || !resetViewBtn) return;
+
+  const VIEW_STORAGE_KEY = 'moex.watchlist.view.v1';
+  const validFilters = new Set(['all', 'signals', 'positive', 'negative']);
+  const validSortFields = new Set(['ticker', 'current', 'fair', 'upside', 'dividend', 'ratio']);
 
   const viewState = {
     total: 0,
@@ -93,9 +98,53 @@
     return 'watchlist-value-muted';
   }
 
+  function persistView() {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify({
+        search: searchInput.value,
+        filter: filterSelect.value,
+        sortField: sortState.field,
+        sortDirection: sortState.direction,
+      }));
+    } catch (_error) {
+      // Storage can be disabled by the browser; Watchlist remains fully usable without persistence.
+    }
+  }
+
+  function restoreView() {
+    try {
+      const raw = localStorage.getItem(VIEW_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (!saved || typeof saved !== 'object') return;
+
+      if (typeof saved.search === 'string') {
+        searchInput.value = saved.search.slice(0, 64);
+      }
+      if (validFilters.has(saved.filter)) {
+        filterSelect.value = saved.filter;
+      }
+      if (validSortFields.has(saved.sortField)) {
+        sortState.field = saved.sortField;
+        sortState.direction = saved.sortDirection === 'asc' ? 'asc' : 'desc';
+      }
+    } catch (_error) {
+      // Ignore malformed or inaccessible storage and keep the default view.
+    }
+  }
+
+  function clearPersistedView() {
+    try {
+      localStorage.removeItem(VIEW_STORAGE_KEY);
+    } catch (_error) {
+      // Nothing else is required when browser storage is unavailable.
+    }
+  }
+
   function setControlsEnabled(enabled) {
     searchInput.disabled = !enabled;
     filterSelect.disabled = !enabled;
+    resetViewBtn.disabled = !enabled;
     sortButtons.forEach((button) => {
       button.disabled = !enabled;
     });
@@ -198,11 +247,12 @@
   }
 
   function sortRows() {
-    if (!sortState.field) {
-      updateSortIndicators();
-      return;
+    const rows = [...body.querySelectorAll(':scope > tr')];
+    if (sortState.field) {
+      rows.sort(compareRows);
+    } else {
+      rows.sort((left, right) => Number(left.dataset.watchlistOrder) - Number(right.dataset.watchlistOrder));
     }
-    const rows = [...body.querySelectorAll(':scope > tr')].sort(compareRows);
     rows.forEach((row) => body.appendChild(row));
     updateSortIndicators();
   }
@@ -214,6 +264,17 @@
       sortState.field = field;
       sortState.direction = field === 'ticker' ? 'asc' : 'desc';
     }
+    persistView();
+    sortRows();
+    applyFilters();
+  }
+
+  function resetView() {
+    searchInput.value = '';
+    filterSelect.value = 'all';
+    sortState.field = null;
+    sortState.direction = 'asc';
+    clearPersistedView();
     sortRows();
     applyFilters();
   }
@@ -230,7 +291,7 @@
     const year = Number(primaryTable.forecast_start_year) || new Date().getFullYear();
     let matchedVolumes = 0;
 
-    body.innerHTML = rows.map((row) => {
+    body.innerHTML = rows.map((row, index) => {
       const ticker = String(row.ticker || '').trim().toLocaleUpperCase('ru');
       const volume = volumeMap.get(ticker) || null;
       if (volume) matchedVolumes += 1;
@@ -241,6 +302,7 @@
 
       return `
         <tr
+          data-watchlist-order="${index}"
           data-watchlist-ticker="${escapeHtml(ticker)}"
           data-watchlist-current="${escapeHtml(dataNumber(row.current_price))}"
           data-watchlist-fair="${escapeHtml(dataNumber(row.forecast_price_year1))}"
@@ -272,7 +334,7 @@
     empty.hidden = true;
     tableWrap.hidden = false;
     setControlsEnabled(true);
-    updateSortIndicators();
+    sortRows();
     applyFilters();
   }
 
@@ -306,10 +368,19 @@
     }
   }
 
-  searchInput.addEventListener('input', applyFilters);
-  filterSelect.addEventListener('change', applyFilters);
+  searchInput.addEventListener('input', () => {
+    persistView();
+    applyFilters();
+  });
+  filterSelect.addEventListener('change', () => {
+    persistView();
+    applyFilters();
+  });
+  resetViewBtn.addEventListener('click', resetView);
   sortButtons.forEach((button) => {
     button.addEventListener('click', () => changeSort(button.dataset.watchlistSort));
   });
+
+  restoreView();
   load();
 })();
