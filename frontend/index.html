@@ -7,32 +7,56 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="page">
-      <header class="header">
-        <div>
-          <h1>Оценка справедливой цены акций (MOEX)</h1>
-          <p class="subtitle">Двухлетняя оценка полной доходности от текущей цены с учётом будущих дивидендов.</p>
+    <nav class="app-nav" aria-label="Основная навигация">
+      <div class="app-nav-inner">
+        <a class="app-brand" href="/" aria-label="MOEX Analytics — главная">MOEX Analytics</a>
+        <div class="app-nav-links">
+          <a class="app-nav-link active" href="/" aria-current="page">Оценки</a>
+          <a class="app-nav-link" href="/volumes/">Объёмы</a>
         </div>
-        <div class="toolbar">
-          <a class="btn btn-nav" href="/volumes/">Объёмы акций</a>
+        <div class="app-nav-status">
           <span class="status-pill" id="global-status">Инициализация...</span>
-          <label class="toolbar-label" for="table-select">Таблица аналитика:</label>
-          <select id="table-select"></select>
-          <input id="analyst-name-input" placeholder="Имя аналитика" />
-          <button class="btn" id="save-analyst-btn">Сохранить имя</button>
-          <button class="btn" id="add-table-btn">+ Таблица</button>
-          <button class="btn" id="make-primary-table-btn">Сделать основной</button>
-          <button class="btn btn-danger" id="delete-table-btn">Удалить таблицу</button>
-          <button class="btn" id="shift-year-back-btn">Сдвиг -1 год</button>
-          <button class="btn" id="shift-year-btn">Сдвиг +1 год</button>
-          <button class="btn" id="refresh-prices-btn">Обновить цены</button>
-          <button class="btn btn-primary" id="add-row-btn">Добавить строку</button>
-          <button class="btn" id="export-data-btn">Выгрузить БД</button>
-          <button class="btn" id="import-data-btn">Загрузить в БД</button>
-          <input id="import-data-file-input" type="file" accept="application/json,.json" hidden />
           <span class="auth-user" id="auth-user-label">Гость</span>
         </div>
+      </div>
+    </nav>
+
+    <main class="page">
+      <header class="page-header">
+        <div class="page-heading">
+          <span class="eyebrow">Справедливая стоимость</span>
+          <h1>Оценки акций MOEX</h1>
+          <p class="subtitle">Двухлетняя оценка полной доходности от текущей цены с учётом будущих дивидендов.</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn" id="refresh-prices-btn">Обновить цены</button>
+          <button class="btn btn-primary" id="add-row-btn">+ Добавить компанию</button>
+        </div>
       </header>
+
+      <section class="workspace-toolbar" aria-label="Настройки таблицы аналитика">
+        <div class="workspace-primary">
+          <label class="toolbar-label" for="table-select">Аналитик</label>
+          <select id="table-select"></select>
+          <input id="analyst-name-input" placeholder="Имя аналитика" aria-label="Имя аналитика" />
+          <button class="btn" id="save-analyst-btn">Сохранить имя</button>
+        </div>
+        <div class="workspace-secondary">
+          <button class="btn" id="add-table-btn">+ Таблица</button>
+          <details class="action-menu">
+            <summary class="btn">Управление</summary>
+            <div class="action-menu-panel">
+              <button class="action-menu-item" id="make-primary-table-btn">Сделать основной</button>
+              <button class="action-menu-item" id="shift-year-back-btn">Сдвинуть на год назад</button>
+              <button class="action-menu-item" id="shift-year-btn">Сдвинуть на год вперёд</button>
+              <button class="action-menu-item" id="export-data-btn">Выгрузить БД</button>
+              <button class="action-menu-item" id="import-data-btn">Загрузить в БД</button>
+              <button class="action-menu-item action-menu-danger" id="delete-table-btn">Удалить таблицу</button>
+            </div>
+          </details>
+          <input id="import-data-file-input" type="file" accept="application/json,.json" hidden />
+        </div>
+      </section>
 
       <section class="card">
         <div class="table-wrap">
