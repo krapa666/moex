@@ -6,6 +6,7 @@
   const detail = (name) => overlay.querySelector(`[data-detail="${name}"]`);
   const closeTargets = overlay.querySelectorAll('[data-detail-close]');
   const detailInputs = overlay.querySelectorAll('[data-detail-input]');
+  const globalStatus = document.getElementById('global-status');
   const requestedTicker = new URLSearchParams(window.location.search).get('ticker')?.trim() || '';
   let deepLinkHandled = !requestedTicker;
   let lastTrigger = null;
@@ -148,14 +149,22 @@
     setTickerQuery('', 'replace');
   }
 
-  function openRequestedTicker() {
+  function openRequestedTicker({ finalizeMissing = false } = {}) {
     if (deepLinkHandled) return;
     const targetRow = findTickerRow(requestedTicker);
     const button = targetRow?.querySelector('[data-action="details"]');
-    if (!targetRow || !button) return;
+    if (targetRow && button) {
+      deepLinkHandled = true;
+      openDetails(targetRow, button, 'replace');
+      return;
+    }
+    if (!finalizeMissing) return;
 
     deepLinkHandled = true;
-    openDetails(targetRow, button, 'replace');
+    setTickerQuery('', 'replace');
+    if (globalStatus) {
+      globalStatus.textContent = `Тикер ${requestedTicker.toLocaleUpperCase('ru')} не найден в текущей таблице`;
+    }
   }
 
   function syncWithHistory() {
@@ -224,5 +233,16 @@
 
   const observer = new MutationObserver(attachButtons);
   observer.observe(tbody, { childList: true });
+
+  const statusObserver = globalStatus && !deepLinkHandled
+    ? new MutationObserver(() => {
+      if (globalStatus.textContent.startsWith('Обновлено:')) {
+        attachButtons();
+        openRequestedTicker({ finalizeMissing: true });
+      }
+    })
+    : null;
+  statusObserver?.observe(globalStatus, { childList: true, characterData: true, subtree: true });
+
   attachButtons();
 })();
