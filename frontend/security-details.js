@@ -5,17 +5,52 @@
 
   const detail = (name) => overlay.querySelector(`[data-detail="${name}"]`);
   const closeTargets = overlay.querySelectorAll('[data-detail-close]');
+  const detailInputs = overlay.querySelectorAll('[data-detail-input]');
   let lastTrigger = null;
+  let activeRow = null;
+
+  const inputBindings = {
+    shares: {
+      selector: 'input[data-field="shares_billion"]',
+    },
+    dividends1: {
+      selector: 'input[data-field="dividends_year1"]',
+      yieldCell: '[data-cell="dividend_yield_year1"]',
+      yieldDetail: 'dividend_yield1',
+    },
+    dividends2: {
+      selector: 'input[data-field="dividends_year2"]',
+      yieldCell: '[data-cell="dividend_yield_year2"]',
+      yieldDetail: 'dividend_yield2',
+    },
+  };
 
   const text = (row, selector) => row.querySelector(selector)?.textContent?.trim() || '—';
   const value = (row, selector) => row.querySelector(selector)?.value?.trim() || '—';
 
   function setDetail(name, nextValue) {
     const element = detail(name);
-    if (element) element.textContent = nextValue || '—';
+    if (!element) return;
+    if (element.matches('input')) {
+      element.value = nextValue === '—' ? '' : (nextValue || '');
+      return;
+    }
+    element.textContent = nextValue || '—';
+  }
+
+  function syncEditableField(name, row) {
+    const binding = inputBindings[name];
+    const drawerInput = detail(name);
+    const sourceInput = binding ? row.querySelector(binding.selector) : null;
+    if (!drawerInput || !drawerInput.matches('input')) return;
+
+    drawerInput.value = sourceInput?.value ?? '';
+    drawerInput.readOnly = !sourceInput || sourceInput.readOnly || sourceInput.disabled;
+    drawerInput.title = drawerInput.readOnly ? 'Поле недоступно для редактирования в текущем режиме' : '';
   }
 
   function openDetails(row, trigger) {
+    activeRow = row;
     lastTrigger = trigger;
     const ticker = value(row, 'input[data-field="ticker"]');
     const year1 = document.getElementById('header-year1-group')?.textContent?.trim() || 'Год 1';
@@ -24,7 +59,7 @@
     setDetail('ticker', ticker);
     setDetail('subtitle', `${text(row, '[data-cell="current_price"]')} · обновлено ${text(row, '[data-cell="price_updated_at"]')}`);
     setDetail('current_price', text(row, '[data-cell="current_price"]'));
-    setDetail('shares', value(row, 'input[data-field="shares_billion"]'));
+    syncEditableField('shares', row);
     setDetail('market_cap', text(row, '[data-cell="market_cap"]'));
     setDetail('pe', value(row, 'input[data-field="pe_avg_5y"]'));
     setDetail('updated', text(row, '[data-cell="price_updated_at"]'));
@@ -32,14 +67,14 @@
     setDetail('year1', year1);
     setDetail('profit1', value(row, 'input[data-field="forecast_profit_year1_billion_rub"]'));
     setDetail('price1', text(row, '[data-cell="forecast_price_year1"]'));
-    setDetail('dividends1', value(row, 'input[data-field="dividends_year1"]'));
+    syncEditableField('dividends1', row);
     setDetail('dividend_yield1', text(row, '[data-cell="dividend_yield_year1"]'));
     setDetail('upside1', text(row, '[data-cell="upside_year1"]'));
 
     setDetail('year2', year2);
     setDetail('profit2', value(row, 'input[data-field="forecast_profit_year2_billion_rub"]'));
     setDetail('price2', text(row, '[data-cell="forecast_price_year2"]'));
-    setDetail('dividends2', value(row, 'input[data-field="dividends_year2"]'));
+    syncEditableField('dividends2', row);
     setDetail('dividend_yield2', text(row, '[data-cell="dividend_yield_year2"]'));
     setDetail('upside2', text(row, '[data-cell="upside_year2"]'));
 
@@ -64,6 +99,7 @@
     overlay.hidden = true;
     overlay.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('security-detail-open');
+    activeRow = null;
     lastTrigger?.focus();
     lastTrigger = null;
   }
@@ -86,6 +122,33 @@
       actionCell.prepend(button);
     });
   }
+
+  detailInputs.forEach((drawerInput) => {
+    const name = drawerInput.dataset.detailInput;
+    const binding = inputBindings[name];
+    if (!binding) return;
+
+    drawerInput.addEventListener('input', () => {
+      if (!activeRow || drawerInput.readOnly) return;
+      const sourceInput = activeRow.querySelector(binding.selector);
+      if (!sourceInput || sourceInput.readOnly || sourceInput.disabled) return;
+
+      sourceInput.value = drawerInput.value;
+      sourceInput.dispatchEvent(new Event('input', { bubbles: true }));
+      drawerInput.value = sourceInput.value;
+
+      if (binding.yieldCell && binding.yieldDetail) {
+        setDetail(binding.yieldDetail, text(activeRow, binding.yieldCell));
+      }
+    });
+
+    drawerInput.addEventListener('blur', () => {
+      if (!activeRow || drawerInput.readOnly) return;
+      const sourceInput = activeRow.querySelector(binding.selector);
+      if (!sourceInput || sourceInput.readOnly || sourceInput.disabled) return;
+      sourceInput.dispatchEvent(new Event('blur'));
+    });
+  });
 
   closeTargets.forEach((element) => element.addEventListener('click', closeDetails));
   document.addEventListener('keydown', (event) => {
