@@ -20,6 +20,7 @@ REQUEST_TIMEOUT_SECONDS = 20.0
 MAX_RETRIES = 3
 RETRY_DELAYS_SECONDS = (0.5, 1.5)
 _YEAR_RE = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
+_SHEET_ITEM_RE = re.compile(r'items\.push\(\{name:\s*"([^"]+)"[^}]*?gid:\s*"(\d+)"')
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class ArsageraParseError(ValueError):
 
 
 class _CatalogHTMLParser(HTMLParser):
+    """Legacy fallback for catalogue pages that contain explicit sheet links."""
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.rows: list[tuple[str, list[str]]] = []
@@ -84,24 +87,39 @@ def _ticker_present(text: str, ticker: str) -> bool:
     return re.search(rf"(?<![A-Z0-9]){re.escape(ticker.upper())}(?![A-Z0-9])", normalized) is not None
 
 
+def _menu_sheet_candidates(html: str, wanted: set[str]) -> dict[str, list[str]]:
+    candidates = {ticker: [] for ticker in wanted}
+    for raw_name, gid in _SHEET_ITEM_RE.findall(html):
+        name = raw_name.strip().upper()
+        if name in candidates and gid != ARSAGERA_CATALOG_GID:
+            candidates[name].append(gid)
+    return candidates
+
+
 def parse_catalog_gids(html: str, tickers: Iterable[str]) -> tuple[dict[str, str], dict[str, str]]:
-    parser = _CatalogHTMLParser()
-    parser.feed(html)
     wanted = {ticker.strip().upper() for ticker in tickers if ticker.strip()}
     found: dict[str, str] = {}
     errors: dict[str, str] = {}
 
+    # Google Published Sheets exposes the complete workbook tab list in the
+    # page switcher's JavaScript as items.push({name: "SBER", ..., gid: "..."}).
+    # This is more reliable than reading links from the visible catalogue tab.
+    menu_candidates = _menu_sheet_candidates(html, wanted)
+
+    parser = _CatalogHTMLParser()
+    parser.feed(html)
     for ticker in sorted(wanted):
-        candidates: list[str] = []
-        for text, gids in parser.rows:
-            if not _ticker_present(text, ticker):
-                continue
-            candidates.extend(gid for gid in gids if gid != ARSAGERA_CATALOG_GID)
+        candidates = list(menu_candidates.get(ticker, []))
+        if not candidates:
+            for text, gids in parser.rows:
+                if not _ticker_present(text, ticker):
+                    continue
+                candidates.extend(gid for gid in gids if gid != ARSAGERA_CATALOG_GID)
         candidates = list(dict.fromkeys(candidates))
         if len(candidates) == 1:
             found[ticker] = candidates[0]
         elif not candidates:
-            errors[ticker] = "тикер не найден в каталоге Арсагеры"
+            errors[ticker] = "тикер не найден среди листов Арсагеры"
         else:
             errors[ticker] = f"неоднозначное сопоставление листа: {', '.join(candidates)}"
     return found, errors
@@ -261,7 +279,9 @@ class ArsageraClient:
     async def fetch_catalog_mapping(
         self, tickers: Iterable[str]
     ) -> tuple[dict[str, str], dict[str, str]]:
-        url = f"{ARSAGERA_BASE_URL}/pubhtml?gid={ARSAGERA_CATALOG_GID}&single=true"
+        # Do not use single=true: the complete workbook page contains the
+        # page-switcher metadata with every published sheet name and gid.
+        url = f"{ARSAGERA_BASE_URL}/pubhtml?gid={ARSAGERA_CATALOG_GID}"
         html = await self._get_text(url)
         return parse_catalog_gids(html, tickers)
 
