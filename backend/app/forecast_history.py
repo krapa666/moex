@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, DateTime, Float, Index, Integer, String, event, insert, inspect, select
 from sqlalchemy.orm import Mapped, mapped_column
@@ -111,7 +111,7 @@ def _insert_revision(connection, row: StockRow, event_type: str) -> None:
             forecast_price_year2=row.forecast_price_year2,
             upside_percent_year1=row.upside_percent_year1,
             upside_percent_year2=row.upside_percent_year2,
-            created_at=datetime.now().astimezone(),
+            created_at=datetime.now(timezone.utc),
         )
     )
 
