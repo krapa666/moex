@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from sqlalchemy import JSON, DateTime, Float, Index, Integer, String, event, insert, inspect, select
@@ -7,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
 from .models import AnalystTable, StockRow
+
+_HISTORY_SUPPRESSION_KEY = "moex_suppress_forecast_history"
 
 
 class ForecastRevision(Base):
@@ -36,6 +39,21 @@ class ForecastRevision(Base):
     upside_percent_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
+    @staticmethod
+    @contextmanager
+    def suppress_capture(connection):
+        """Temporarily disable revision capture for bulk state replacement."""
+        marker = object()
+        previous = connection.info.get(_HISTORY_SUPPRESSION_KEY, marker)
+        connection.info[_HISTORY_SUPPRESSION_KEY] = True
+        try:
+            yield
+        finally:
+            if previous is marker:
+                connection.info.pop(_HISTORY_SUPPRESSION_KEY, None)
+            else:
+                connection.info[_HISTORY_SUPPRESSION_KEY] = previous
+
 
 _DIRECT_FORECAST_FIELDS = (
     "ticker",
@@ -50,6 +68,10 @@ _MAP_OR_COMMENT_FIELDS = (
     "dividend_year_map",
     "net_profit_source_comment",
 )
+
+
+def _history_suppressed(connection) -> bool:
+    return bool(connection.info.get(_HISTORY_SUPPRESSION_KEY))
 
 
 def _has_forecast_content(row: StockRow) -> bool:
@@ -161,11 +183,15 @@ def _insert_revision(connection, row: StockRow, event_type: str) -> None:
 
 @event.listens_for(StockRow, "after_insert")
 def _record_created_forecast(_mapper, connection, row: StockRow) -> None:
+    if _history_suppressed(connection):
+        return
     if _has_forecast_content(row):
         _insert_revision(connection, row, "created")
 
 
 @event.listens_for(StockRow, "after_update")
 def _record_updated_forecast(_mapper, connection, row: StockRow) -> None:
+    if _history_suppressed(connection):
+        return
     if _material_change(row):
         _insert_revision(connection, row, "updated")
