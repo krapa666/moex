@@ -135,8 +135,9 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#volume-overview-body > tr')).toHaveCount(3);
 });
 
-test('navigates from forecasts and shows the integrated volume table', async ({ page }) => {
-  await expect(page.getByRole('link', { name: 'Прогнозы и потенциалы' })).toHaveAttribute('href', '/');
+test('shows unified navigation and the integrated volume table', async ({ page }) => {
+  await expect(page.getByRole('link', { name: 'Оценки' })).toHaveAttribute('href', '/');
+  await expect(page.getByRole('link', { name: 'Объёмы' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('3,6×–6,5×', { exact: true })).toBeVisible();
   await expect(page.getByText(/Сбор по будням в 18:20, 18:35, 18:45/)).toBeVisible();
   await expect(page.locator('#notification-scope')).toHaveValue('imoex');
