@@ -1,8 +1,7 @@
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
-
 from app.main import apply_net_profit_projection, current_calendar_year
 from app.models import AnalystTable, Base, ForecastRevision, StockRow
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
 
 
 CURRENT_YEAR = current_calendar_year()
@@ -84,7 +83,10 @@ def test_material_forecast_change_creates_revision_with_recalculated_values() ->
         assert revisions[1].event_type == "updated"
         assert revisions[1].net_profit_year_map == {str(CURRENT_YEAR): 1_400.0}
         assert revisions[1].forecast_price_year1 == 350.0
-        assert round(revisions[1].upside_percent_year1 or 0.0, 2) == round(((350.0 - 300.0 + 20.0) / 300.0) * 100, 2)
+        assert round(revisions[1].upside_percent_year1 or 0.0, 2) == round(
+            ((350.0 - 300.0 + 20.0) / 300.0) * 100,
+            2,
+        )
 
 
 def test_market_price_only_update_does_not_create_forecast_revision() -> None:
