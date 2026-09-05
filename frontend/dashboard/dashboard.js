@@ -2,6 +2,9 @@
   const kpi = (name) => document.querySelector(`[data-dashboard-kpi="${name}"]`);
   const list = (name) => document.querySelector(`[data-dashboard-list="${name}"]`);
   const empty = (name) => document.querySelector(`[data-dashboard-empty="${name}"]`);
+  const refreshButton = document.getElementById('dashboard-refresh-btn');
+  const refreshStatus = document.getElementById('dashboard-refresh-status');
+  let refreshPromise = null;
 
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: 1,
@@ -17,6 +20,11 @@
   const dateTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
     dateStyle: 'short',
     timeStyle: 'short',
+  });
+  const refreshTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   });
   const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
@@ -179,7 +187,7 @@
         setKpi('securities', '0');
         setKpi('median-upside', '—');
         setEmptyState('opportunities', 'Основная таблица оценок пока пуста.');
-        return;
+        return true;
       }
 
       const rows = await api(`/api/rows?table_id=${encodeURIComponent(primaryTable.id)}`);
@@ -191,10 +199,12 @@
         medianUpside == null ? '—' : `${percentFormatter.format(medianUpside)} %`,
       );
       renderOpportunities(rows);
+      return true;
     } catch (_error) {
       setKpi('securities', '—');
       setKpi('median-upside', '—');
       setEmptyState('opportunities', 'Не удалось загрузить данные оценок.');
+      return false;
     }
   }
 
@@ -226,7 +236,47 @@
     } else {
       setKpi('last-volume-run', '—');
     }
+
+    return overviewResult.status === 'fulfilled' && runResult.status === 'fulfilled';
   }
 
-  Promise.allSettled([loadValuationData(), loadVolumeData()]);
+  function setRefreshStatus(message, state = '') {
+    if (!refreshStatus) return;
+    refreshStatus.textContent = message;
+    if (state) refreshStatus.dataset.state = state;
+    else delete refreshStatus.dataset.state;
+  }
+
+  function setRefreshing(refreshing) {
+    if (!refreshButton) return;
+    refreshButton.disabled = refreshing;
+    refreshButton.setAttribute('aria-busy', refreshing ? 'true' : 'false');
+    refreshButton.textContent = refreshing ? 'Обновление…' : 'Обновить данные';
+  }
+
+  function refreshDashboard() {
+    if (refreshPromise) return refreshPromise;
+
+    setRefreshing(true);
+    setRefreshStatus('Обновление…', 'loading');
+    refreshPromise = Promise.all([loadValuationData(), loadVolumeData()])
+      .then(([valuationOk, volumeOk]) => {
+        const updatedAt = refreshTimeFormatter.format(new Date());
+        const complete = valuationOk && volumeOk;
+        setRefreshStatus(
+          complete ? `Обновлено ${updatedAt}` : `Обновлено частично ${updatedAt}`,
+          complete ? 'success' : 'warning',
+        );
+        return complete;
+      })
+      .finally(() => {
+        setRefreshing(false);
+        refreshPromise = null;
+      });
+
+    return refreshPromise;
+  }
+
+  refreshButton?.addEventListener('click', refreshDashboard);
+  refreshDashboard();
 })();
