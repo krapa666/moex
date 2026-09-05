@@ -1,6 +1,5 @@
-import pytest
-
 from app.arsagera_source import ArsageraClient
+import pytest
 
 
 @pytest.mark.asyncio
