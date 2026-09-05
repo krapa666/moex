@@ -36,7 +36,7 @@
 
 .analytics-consensus-kpis {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -65,11 +65,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-.analytics-consensus-agreement {
+.analytics-consensus-agreement,
+.analytics-consensus-return {
   font-size: 14px !important;
 }
 
-.analytics-consensus-agreement.high {
+.analytics-consensus-agreement.high,
+.analytics-consensus-return.positive {
   color: #047857;
 }
 
@@ -77,16 +79,23 @@
   color: #a16207;
 }
 
-.analytics-consensus-agreement.low {
+.analytics-consensus-agreement.low,
+.analytics-consensus-return.negative {
   color: #b91c1c;
 }
 
-.analytics-consensus-agreement.insufficient {
+.analytics-consensus-agreement.insufficient,
+.analytics-consensus-return.neutral {
   color: #64748b;
 }
 
+.analytics-consensus-notes {
+  display: grid;
+  gap: 4px;
+}
+
 .analytics-consensus-formula {
-  margin: -4px 0 0;
+  margin: 0;
   color: #64748b;
   font-size: 10px;
   line-height: 1.45;
@@ -193,7 +202,8 @@
   color: #e7edf7;
 }
 
-[data-theme="dark"] .analytics-consensus-agreement.high {
+[data-theme="dark"] .analytics-consensus-agreement.high,
+[data-theme="dark"] .analytics-consensus-return.positive {
   color: #6ee7b7;
 }
 
@@ -201,11 +211,13 @@
   color: #fde68a;
 }
 
-[data-theme="dark"] .analytics-consensus-agreement.low {
+[data-theme="dark"] .analytics-consensus-agreement.low,
+[data-theme="dark"] .analytics-consensus-return.negative {
   color: #fca5a5;
 }
 
-[data-theme="dark"] .analytics-consensus-agreement.insufficient {
+[data-theme="dark"] .analytics-consensus-agreement.insufficient,
+[data-theme="dark"] .analytics-consensus-return.neutral {
   color: #8fa0b8;
 }
 
@@ -227,9 +239,9 @@
   border-color: #263449;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .analytics-consensus-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -240,10 +252,6 @@
 
   .analytics-consensus-status {
     white-space: normal;
-  }
-
-  .analytics-consensus-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .analytics-consensus-targets {
