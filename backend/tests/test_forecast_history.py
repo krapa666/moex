@@ -3,7 +3,6 @@ from app.models import AnalystTable, Base, ForecastRevision, StockRow
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-
 CURRENT_YEAR = current_calendar_year()
 
 
