@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/shell.css" />
     <link rel="stylesheet" href="/dashboard/dashboard.css" />
+    <link rel="stylesheet" href="/dashboard/freshness.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -41,6 +42,25 @@
           <a class="btn" href="/volumes/">Открыть объёмы</a>
         </div>
       </header>
+
+      <section class="dashboard-freshness" aria-label="Свежесть данных">
+        <div class="dashboard-freshness-heading">
+          <strong>Свежесть данных</strong>
+          <span title="Актуально: до 36 часов; задержка: до 96 часов; устарело: более 96 часов">Актуально ≤ 36 ч · задержка ≤ 96 ч</span>
+        </div>
+        <div class="dashboard-freshness-items">
+          <article class="dashboard-freshness-item" data-dashboard-freshness="quotes" data-state="unknown">
+            <span class="dashboard-freshness-label">Котировки</span>
+            <strong class="dashboard-freshness-status" data-freshness-status>Проверка…</strong>
+            <span class="dashboard-freshness-detail" data-freshness-detail>Нет данных</span>
+          </article>
+          <article class="dashboard-freshness-item" data-dashboard-freshness="volumes" data-state="unknown">
+            <span class="dashboard-freshness-label">Объёмы</span>
+            <strong class="dashboard-freshness-status" data-freshness-status>Проверка…</strong>
+            <span class="dashboard-freshness-detail" data-freshness-detail>Нет данных</span>
+          </article>
+        </div>
+      </section>
 
       <section class="dashboard-kpi-grid" aria-label="Ключевые показатели">
         <article class="dashboard-kpi-card">
