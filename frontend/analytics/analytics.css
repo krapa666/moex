@@ -370,6 +370,12 @@
 }
 
 @media (max-width: 600px) {
+  .app-nav-links {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
   .analytics-summary {
     grid-template-columns: 1fr 1fr;
   }
