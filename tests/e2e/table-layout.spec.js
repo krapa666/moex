@@ -153,6 +153,16 @@ test('opens the requested stock drawer from a ticker deep link after rows load',
   await expect(page).toHaveURL('/');
 });
 
+test('cleans a missing forecast ticker deep link after rows finish loading', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/?ticker=UNKNOWN');
+  await expect(page.locator('#rows-table-body > tr')).toHaveCount(2);
+
+  await expect(page.locator('#security-detail-overlay')).toBeHidden();
+  await expect(page).toHaveURL('/');
+  await expect(page.locator('#global-status')).toHaveText('Тикер UNKNOWN не найден в текущей таблице');
+});
+
 test('uses browser back and forward for forecast details opened inside the app', async ({ page }) => {
   await openTable(page);
   const drawer = page.locator('#security-detail-overlay');

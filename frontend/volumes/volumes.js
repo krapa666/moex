@@ -289,7 +289,9 @@ async function openDetail(ticker, historyMode = 'replace') {
     setTickerQuery(data.ticker || normalizedTicker, historyMode);
     renderDetail(data);
   } catch (error) {
-    setStatus(error.message);
+    closeDetailVisual();
+    setTickerQuery('', 'replace');
+    setStatus(`Не удалось открыть ${normalizedTicker}: ${error.message}`);
   }
 }
 
