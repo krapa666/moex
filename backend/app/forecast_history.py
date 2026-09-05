@@ -7,7 +7,6 @@ from sqlalchemy import JSON, DateTime, Float, Index, Integer, String, event, ins
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
-from .models import AnalystTable, StockRow
 
 _HISTORY_SUPPRESSION_KEY = "moex_suppress_forecast_history"
 
@@ -53,6 +52,12 @@ class ForecastRevision(Base):
                 connection.info.pop(_HISTORY_SUPPRESSION_KEY, None)
             else:
                 connection.info[_HISTORY_SUPPRESSION_KEY] = previous
+
+
+# Import the stock models only after ForecastRevision exists. models.py imports this
+# class at module teardown so Alembic can discover the history table; importing the
+# models earlier creates a cycle when production starts via app.application.
+from .models import AnalystTable, StockRow  # noqa: E402
 
 
 _DIRECT_FORECAST_FIELDS = (
