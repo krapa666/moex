@@ -45,11 +45,19 @@ const todayRevisions = [
   },
 ];
 
+const tables = [
+  { id: 1, table_number: 1, analyst_name: 'Основной' },
+  { id: 2, table_number: 2, analyst_name: 'Консервативный' },
+];
+
 async function mockTodayApi(page, revisions = todayRevisions) {
   let sinceValue = null;
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/api/tables') return route.fulfill({ json: [] });
+    if (url.pathname === '/api/auth/me') {
+      return route.fulfill({ json: { username: 'local-network', is_admin: true } });
+    }
+    if (url.pathname === '/api/tables') return route.fulfill({ json: tables });
     if (url.pathname === '/api/analytics/forecast-revisions') {
       if (url.searchParams.has('since')) {
         sinceValue = url.searchParams.get('since');
@@ -57,6 +65,7 @@ async function mockTodayApi(page, revisions = todayRevisions) {
       }
       return route.fulfill({ json: [] });
     }
+    if (url.pathname === '/api/ticker-comparison') return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { detail: `Unexpected ${url.pathname}` } });
   });
   return () => sinceValue;

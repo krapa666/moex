@@ -6,7 +6,8 @@
   const summary = document.querySelector('[data-analytics-summary]');
   const empty = document.querySelector('[data-analytics-empty]');
   const timeline = document.querySelector('[data-analytics-timeline]');
-  if (!form || !tickerInput || !tableSelect || !status || !summary || !empty || !timeline) return;
+  const access = window.MoexAnalyticsAccess;
+  if (!form || !tickerInput || !tableSelect || !status || !summary || !empty || !timeline || !access) return;
 
   const numberFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
@@ -86,7 +87,8 @@
     return null;
   }
 
-  function render(revisions) {
+  function render(rawRevisions) {
+    const revisions = access.maskRevisions(rawRevisions);
     publishRevisions(revisions);
     if (!revisions.length) {
       status.textContent = 'Ревизий: 0';
@@ -185,11 +187,10 @@
     }
   }
 
-  async function loadTables() {
+  function loadTables(tables) {
     try {
-      const tables = await api('/api/tables');
       const options = tables.map((table) => (
-        `<option value="${table.id}">${escapeHtml(table.analyst_name)} · таблица ${table.table_number}</option>`
+        `<option value="${table.id}">${escapeHtml(access.displayAnalystName(table.table_number, table.analyst_name))} · таблица ${table.table_number}</option>`
       )).join('');
       tableSelect.insertAdjacentHTML('beforeend', options);
     } catch (_error) {
@@ -216,7 +217,8 @@
   async function initialize() {
     const params = new URLSearchParams(window.location.search);
     tickerInput.value = params.get('ticker') || '';
-    await loadTables();
+    const accessState = await access.load();
+    loadTables(accessState.tables);
     const requestedTable = params.get('table_id') || '';
     if ([...tableSelect.options].some((option) => option.value === requestedTable)) {
       tableSelect.value = requestedTable;

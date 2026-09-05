@@ -6,7 +6,8 @@
   const form = document.getElementById('analytics-history-form');
   const tickerInput = document.getElementById('analytics-ticker');
   const tableSelect = document.getElementById('analytics-table');
-  if (!panel || !status || !empty || !body || !form || !tickerInput || !tableSelect) return;
+  const access = window.MoexAnalyticsAccess;
+  if (!panel || !status || !empty || !body || !form || !tickerInput || !tableSelect || !access) return;
 
   const numberFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
@@ -104,7 +105,7 @@
       return {
         tableId: item.table_id,
         tableNumber: item.table_number,
-        analystName: item.analyst_name,
+        analystName: access.displayAnalystName(item.table_number, item.analyst_name),
         value: Number(yearData.forecast_price),
       };
     }).filter(Boolean);
@@ -188,6 +189,7 @@
     status.textContent = `Загрузка ${ticker}…`;
 
     try {
+      await access.load();
       const response = await fetch(`/api/ticker-comparison?ticker=${encodeURIComponent(ticker)}`, {
         headers: { 'Content-Type': 'application/json' },
       });
