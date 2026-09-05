@@ -79,6 +79,7 @@ test('merges the primary valuation table with volume monitoring by ticker', asyn
   await expect(page.locator('#watchlist-status')).toHaveAttribute('data-state', 'partial');
   await expect(page.locator('#watchlist-search')).toBeEnabled();
   await expect(page.locator('#watchlist-filter')).toBeEnabled();
+  await expect(page.locator('#watchlist-reset-view')).toBeEnabled();
 
   const sber = page.locator('[data-watchlist-ticker="SBER"]');
   await expect(sber).toContainText('320,45');
@@ -175,6 +176,45 @@ test('sorts numeric Watchlist columns while keeping missing values last and filt
   await expect.poll(allTickers).toEqual(['GAZP', 'SBER', 'LKOH']);
   await ratioSort.click();
   await expect.poll(allTickers).toEqual(['SBER', 'GAZP', 'LKOH']);
+});
+
+test('restores the last Watchlist view after reload and resets it to the source order', async ({ page }) => {
+  await mockWatchlistApi(page);
+  await page.goto('/watchlist/');
+
+  const allTickers = () => page.locator('#watchlist-body > tr').evaluateAll(
+    (rows) => rows.map((row) => row.dataset.watchlistTicker),
+  );
+  const visibleTickers = () => page.locator('#watchlist-body > tr:visible').evaluateAll(
+    (rows) => rows.map((row) => row.dataset.watchlistTicker),
+  );
+
+  await page.locator('#watchlist-filter').selectOption('signals');
+  await page.locator('#watchlist-search').fill('G');
+  const ratioSort = page.locator('[data-watchlist-sort="ratio"]');
+  await ratioSort.click();
+
+  await expect.poll(allTickers).toEqual(['GAZP', 'SBER', 'LKOH']);
+  await expect.poll(visibleTickers).toEqual(['GAZP']);
+  await expect(ratioSort.locator('xpath=..')).toHaveAttribute('aria-sort', 'descending');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('moex.watchlist.view.v1'))).not.toBeNull();
+
+  await page.reload();
+
+  await expect(page.locator('#watchlist-search')).toHaveValue('G');
+  await expect(page.locator('#watchlist-filter')).toHaveValue('signals');
+  await expect(page.locator('[data-watchlist-sort="ratio"]').locator('xpath=..')).toHaveAttribute('aria-sort', 'descending');
+  await expect.poll(allTickers).toEqual(['GAZP', 'SBER', 'LKOH']);
+  await expect.poll(visibleTickers).toEqual(['GAZP']);
+
+  await page.locator('#watchlist-reset-view').click();
+
+  await expect(page.locator('#watchlist-search')).toHaveValue('');
+  await expect(page.locator('#watchlist-filter')).toHaveValue('all');
+  await expect(page.locator('[data-watchlist-sort="ratio"]').locator('xpath=..')).not.toHaveAttribute('aria-sort', /.+/);
+  await expect.poll(allTickers).toEqual(['SBER', 'LKOH', 'GAZP']);
+  await expect.poll(visibleTickers).toEqual(['SBER', 'LKOH', 'GAZP']);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('moex.watchlist.view.v1'))).toBeNull();
 });
 
 test('keeps valuation rows usable when the volume API is unavailable', async ({ page }) => {
