@@ -37,6 +37,13 @@
     return finite(value) ? `${percentFormatter.format(Number(value))} %` : '—';
   }
 
+  function formatSignedPercent(value) {
+    if (!finite(value)) return '—';
+    const number = Number(value);
+    const sign = number > 0 ? '+' : '';
+    return `${sign}${percentFormatter.format(number)} %`;
+  }
+
   function median(values) {
     const numbers = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
     if (!numbers.length) return null;
@@ -68,6 +75,13 @@
       return { spreadPercent, label: 'Средняя', className: 'medium' };
     }
     return { spreadPercent, label: 'Низкая', className: 'low' };
+  }
+
+  function returnClass(value) {
+    if (!finite(value)) return 'neutral';
+    if (Number(value) > 0) return 'positive';
+    if (Number(value) < 0) return 'negative';
+    return 'neutral';
   }
 
   function resetConsensus() {
@@ -107,6 +121,7 @@
         tableNumber: item.table_number,
         analystName: access.displayAnalystName(item.table_number, item.analyst_name),
         value: Number(yearData.forecast_price),
+        totalReturn: finite(yearData.upside_percent) ? Number(yearData.upside_percent) : null,
       };
     }).filter(Boolean);
 
@@ -116,9 +131,13 @@
     }
 
     const values = targets.map((item) => item.value).sort((a, b) => a - b);
+    const returns = targets.map((item) => item.totalReturn).filter(finite).map(Number);
     const minValue = values[0];
     const maxValue = values[values.length - 1];
     const medianValue = median(values);
+    const medianReturn = median(returns);
+    const positiveReturns = returns.filter((value) => value > 0).length;
+    const positiveReturnLabel = returns.length ? `${positiveReturns}/${returns.length}` : '—';
     const currentPrice = median(ordered.map((item) => item.current_price).filter(finite));
     const agreement = agreementSummary(values, medianValue);
     const medianPosition = position(medianValue, minValue, maxValue);
@@ -140,6 +159,9 @@
     const agreementNote = agreement.spreadPercent === null
       ? 'Для оценки согласованности нужны минимум две сопоставимые цели.'
       : 'Разброс = (максимум − минимум) / медиана. ≤10% — высокая, >10–25% — средняя, >25% — низкая согласованность.';
+    const returnNote = returns.length
+      ? `Медианная полная доходность использует рассчитанный backend upside_percent тех же целей на ${year} год и уже учитывает оставшиеся дивиденды до этого горизонта. Положительных — прогнозы с доходностью выше 0%.`
+      : 'Для сопоставимых целей пока нет рассчитанной полной доходности.';
 
     body.innerHTML = `
       <div class="analytics-consensus-kpis" aria-label="Сводка консенсуса ${escapeHtml(ticker)}">
@@ -147,10 +169,15 @@
         <article><span>Медиана</span><strong data-consensus-kpi="median">${formatPrice(medianValue)}</strong></article>
         <article><span>Максимум</span><strong data-consensus-kpi="max">${formatPrice(maxValue)}</strong></article>
         <article><span>Рынок</span><strong data-consensus-kpi="market">${formatPrice(currentPrice)}</strong></article>
+        <article><span>Медианная доходность</span><strong class="analytics-consensus-return ${returnClass(medianReturn)}" data-consensus-kpi="return">${formatSignedPercent(medianReturn)}</strong></article>
+        <article><span>Положительных</span><strong data-consensus-kpi="positive">${escapeHtml(positiveReturnLabel)}</strong></article>
         <article><span>Разброс</span><strong data-consensus-kpi="spread">${formatPercent(agreement.spreadPercent)}</strong></article>
         <article><span>Согласованность</span><strong class="analytics-consensus-agreement ${agreement.className}" data-consensus-kpi="agreement">${escapeHtml(agreement.label)}</strong></article>
       </div>
-      <p class="analytics-consensus-formula">${escapeHtml(agreementNote)}</p>
+      <div class="analytics-consensus-notes">
+        <p class="analytics-consensus-formula">${escapeHtml(returnNote)}</p>
+        <p class="analytics-consensus-formula">${escapeHtml(agreementNote)}</p>
+      </div>
       <div class="analytics-consensus-range" role="img" aria-label="${escapeHtml(rangeLabel)}">
         <div class="analytics-consensus-track">
           ${markers}
