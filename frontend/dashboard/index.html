@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Обзор рынка — MOEX Analytics</title>
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/shell.css" />
+    <link rel="stylesheet" href="/dashboard/dashboard.css" />
+    <link rel="stylesheet" href="/theme.css" />
+  </head>
+  <body>
+    <nav class="app-nav" aria-label="Основная навигация">
+      <div class="app-nav-inner">
+        <a class="app-brand" href="/" aria-label="MOEX Analytics — оценки">MOEX Analytics</a>
+        <div class="app-nav-links">
+          <a class="app-nav-link active" href="/dashboard/" aria-current="page">Обзор</a>
+          <a class="app-nav-link" href="/">Оценки</a>
+          <a class="app-nav-link" href="/volumes/">Объёмы</a>
+        </div>
+        <div class="app-nav-status">
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Переключить тему">☾</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="page dashboard-page">
+      <header class="page-header dashboard-header">
+        <div class="page-heading">
+          <span class="eyebrow">Единая картина</span>
+          <h1>Обзор рынка</h1>
+          <p class="subtitle">Ключевые показатели оценок и объёмов в одном рабочем экране.</p>
+        </div>
+        <div class="page-actions dashboard-shortcuts" aria-label="Быстрые переходы">
+          <a class="btn" href="/">Открыть оценки</a>
+          <a class="btn" href="/volumes/">Открыть объёмы</a>
+        </div>
+      </header>
+
+      <section class="dashboard-kpi-grid" aria-label="Ключевые показатели">
+        <article class="dashboard-kpi-card">
+          <span class="dashboard-kpi-label">Акций в оценке</span>
+          <strong data-dashboard-kpi="securities">—</strong>
+          <span class="dashboard-kpi-note">Основная таблица аналитика</span>
+        </article>
+        <article class="dashboard-kpi-card">
+          <span class="dashboard-kpi-label">Медианный потенциал</span>
+          <strong data-dashboard-kpi="median-upside">—</strong>
+          <span class="dashboard-kpi-note">Первый прогнозный год</span>
+        </article>
+        <article class="dashboard-kpi-card">
+          <span class="dashboard-kpi-label">Сигналов по объёму</span>
+          <strong data-dashboard-kpi="volume-signals">—</strong>
+          <span class="dashboard-kpi-note">Последняя торговая сессия</span>
+        </article>
+        <article class="dashboard-kpi-card">
+          <span class="dashboard-kpi-label">Последний сбор</span>
+          <strong class="dashboard-kpi-date" data-dashboard-kpi="last-volume-run">—</strong>
+          <span class="dashboard-kpi-note">Мониторинг торговых объёмов</span>
+        </article>
+      </section>
+
+      <section class="dashboard-main-grid">
+        <article class="dashboard-panel" id="dashboard-opportunities">
+          <header class="dashboard-panel-heading">
+            <div>
+              <span class="dashboard-panel-kicker">Оценки</span>
+              <h2>Лидеры потенциала</h2>
+              <p>Бумаги с максимальной полной доходностью на ближайший прогнозный год.</p>
+            </div>
+            <a href="/">Все оценки →</a>
+          </header>
+          <div class="dashboard-empty" data-dashboard-empty="opportunities">
+            Данные появятся после подключения агрегатов оценочной таблицы.
+          </div>
+          <div class="dashboard-list" data-dashboard-list="opportunities" hidden></div>
+        </article>
+
+        <article class="dashboard-panel" id="dashboard-volume-signals">
+          <header class="dashboard-panel-heading">
+            <div>
+              <span class="dashboard-panel-kicker">Активность</span>
+              <h2>Аномальные объёмы</h2>
+              <p>Свежие отклонения торгового оборота от исторической средней.</p>
+            </div>
+            <a href="/volumes/">Все объёмы →</a>
+          </header>
+          <div class="dashboard-empty" data-dashboard-empty="volumes">
+            Данные появятся после подключения мониторинга объёмов.
+          </div>
+          <div class="dashboard-list" data-dashboard-list="volumes" hidden></div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
