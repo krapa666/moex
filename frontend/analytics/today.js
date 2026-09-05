@@ -3,7 +3,8 @@
   const status = document.querySelector('[data-analytics-today-status]');
   const list = document.querySelector('[data-analytics-today-list]');
   const empty = document.querySelector('[data-analytics-today-empty]');
-  if (!panel || !status || !list || !empty) return;
+  const access = window.MoexAnalyticsAccess;
+  if (!panel || !status || !list || !empty || !access) return;
 
   const timeFormatter = new Intl.DateTimeFormat('ru-RU', {
     hour: '2-digit',
@@ -75,12 +76,14 @@
     });
 
     try {
+      await access.load();
       const response = await fetch(`/api/analytics/forecast-revisions?${params.toString()}`);
       if (!response.ok) throw new Error(`Ошибка API: ${response.status}`);
-      const revisions = await response.json();
+      const rawRevisions = await response.json();
+      const revisions = access.maskRevisions(rawRevisions);
 
       list.replaceChildren();
-      if (!Array.isArray(revisions) || !revisions.length) {
+      if (!revisions.length) {
         status.textContent = 'Ревизий сегодня: 0';
         empty.hidden = false;
         list.hidden = true;
