@@ -23,6 +23,7 @@ const testEmailBtn = document.getElementById('test-email-btn');
 const securitySearch = document.getElementById('security-search');
 const indexFilter = document.getElementById('index-filter');
 const requestedTicker = new URLSearchParams(window.location.search).get('ticker')?.trim() || '';
+const detailCache = new Map();
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -33,14 +34,28 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-function setTickerQuery(ticker) {
+function tickerFromUrl() {
+  return new URLSearchParams(window.location.search).get('ticker')?.trim() || '';
+}
+
+function setTickerQuery(ticker, mode = 'replace') {
+  if (mode === 'none') return;
   const url = new URL(window.location.href);
   if (ticker) {
     url.searchParams.set('ticker', ticker);
   } else {
     url.searchParams.delete('ticker');
   }
-  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const nextState = {
+    ...(window.history.state || {}),
+    moexTickerView: mode === 'push' && ticker ? 'volume' : null,
+  };
+  if (mode === 'push') {
+    window.history.pushState(nextState, '', nextUrl);
+  } else {
+    window.history.replaceState(nextState, '', nextUrl);
+  }
 }
 
 async function api(path, options = {}) {
@@ -236,33 +251,71 @@ async function loadAuthAndSettings() {
     : 'Настройте SMTP и VOLUME_NOTIFICATION_EMAIL в .env.';
 }
 
-async function openDetail(ticker) {
+function renderDetail(data) {
+  document.getElementById('detail-title').textContent = `${data.ticker} — история объёмов`;
+  document.getElementById('detail-subtitle').textContent = data.short_name || '';
+  detailBody.innerHTML = data.observations.map((item) => `
+    <tr>
+      <td>${formatDate(item.trade_date)}</td>
+      <td>${formatMillions(item.turnover_rub)}</td>
+      <td>${item.volume_units == null ? '—' : numberFormatter.format(Number(item.volume_units))}</td>
+      <td>${formatNumber(item.close_price, 4)}</td>
+      <td>${formatMillions(item.baseline_average_rub)}</td>
+      <td>${item.baseline_count}</td>
+      <td>${item.ratio == null ? '—' : `${formatNumber(item.ratio, 2)}×`}</td>
+      <td>${statusHtml(item)}</td>
+    </tr>`).join('');
+  overviewSection.hidden = true;
+  detailSection.hidden = false;
+  setStatus(`${data.ticker}: ${data.observations.length} сессий`);
+}
+
+async function loadDetailData(ticker) {
+  const cached = detailCache.get(ticker);
+  if (cached) return cached;
+  const data = await api(`/api/volume/securities/${encodeURIComponent(ticker)}/observations?limit=${state.config?.display_sessions || 60}`);
+  detailCache.set(ticker, data);
+  if (data.ticker) detailCache.set(String(data.ticker).toLocaleUpperCase('ru'), data);
+  return data;
+}
+
+async function openDetail(ticker, historyMode = 'replace') {
   const normalizedTicker = String(ticker || '').trim().toLocaleUpperCase('ru');
   if (!normalizedTicker) return;
 
   setStatus(`Загрузка ${normalizedTicker}...`);
   try {
-    const data = await api(`/api/volume/securities/${encodeURIComponent(normalizedTicker)}/observations?limit=${state.config?.display_sessions || 60}`);
-    setTickerQuery(data.ticker || normalizedTicker);
-    document.getElementById('detail-title').textContent = `${data.ticker} — история объёмов`;
-    document.getElementById('detail-subtitle').textContent = data.short_name || '';
-    detailBody.innerHTML = data.observations.map((item) => `
-      <tr>
-        <td>${formatDate(item.trade_date)}</td>
-        <td>${formatMillions(item.turnover_rub)}</td>
-        <td>${item.volume_units == null ? '—' : numberFormatter.format(Number(item.volume_units))}</td>
-        <td>${formatNumber(item.close_price, 4)}</td>
-        <td>${formatMillions(item.baseline_average_rub)}</td>
-        <td>${item.baseline_count}</td>
-        <td>${item.ratio == null ? '—' : `${formatNumber(item.ratio, 2)}×`}</td>
-        <td>${statusHtml(item)}</td>
-      </tr>`).join('');
-    overviewSection.hidden = true;
-    detailSection.hidden = false;
-    setStatus(`${data.ticker}: ${data.observations.length} сессий`);
+    const data = await loadDetailData(normalizedTicker);
+    setTickerQuery(data.ticker || normalizedTicker, historyMode);
+    renderDetail(data);
   } catch (error) {
     setStatus(error.message);
   }
+}
+
+function closeDetailVisual() {
+  detailSection.hidden = true;
+  overviewSection.hidden = false;
+  updateOverviewStatus();
+}
+
+function closeDetail() {
+  if (detailSection.hidden) return;
+  if (window.history.state?.moexTickerView === 'volume') {
+    window.history.back();
+    return;
+  }
+  closeDetailVisual();
+  setTickerQuery('', 'replace');
+}
+
+async function syncWithHistory() {
+  const ticker = tickerFromUrl();
+  if (!ticker) {
+    closeDetailVisual();
+    return;
+  }
+  await openDetail(ticker, 'none');
 }
 
 async function pollCollection() {
@@ -294,15 +347,11 @@ document.querySelectorAll('.volume-sort').forEach((button) => {
 
 overviewBody.addEventListener('click', (event) => {
   const button = event.target.closest('[data-ticker]');
-  if (button) openDetail(button.dataset.ticker);
+  if (button) openDetail(button.dataset.ticker, 'push');
 });
 
-document.getElementById('detail-back-btn').addEventListener('click', () => {
-  detailSection.hidden = true;
-  overviewSection.hidden = false;
-  setTickerQuery('');
-  updateOverviewStatus();
-});
+document.getElementById('detail-back-btn').addEventListener('click', closeDetail);
+window.addEventListener('popstate', syncWithHistory);
 
 securitySearch.addEventListener('input', () => {
   state.filters.query = securitySearch.value.trim();
@@ -372,7 +421,7 @@ async function initialize() {
     await Promise.all([loadConfig(), loadAuthAndSettings(), loadLastRun(), loadOverview()]);
     updateOverviewStatus();
     if (requestedTicker) {
-      await openDetail(requestedTicker);
+      await openDetail(requestedTicker, 'replace');
     }
   } catch (error) {
     setStatus(error.message);
