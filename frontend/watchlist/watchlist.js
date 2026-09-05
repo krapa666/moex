@@ -15,7 +15,7 @@
     volumeAvailable: true,
   };
   const sortState = {
-    field: 'ticker',
+    field: null,
     direction: 'asc',
   };
 
@@ -198,6 +198,10 @@
   }
 
   function sortRows() {
+    if (!sortState.field) {
+      updateSortIndicators();
+      return;
+    }
     const rows = [...body.querySelectorAll(':scope > tr')].sort(compareRows);
     rows.forEach((row) => body.appendChild(row));
     updateSortIndicators();
@@ -268,7 +272,7 @@
     empty.hidden = true;
     tableWrap.hidden = false;
     setControlsEnabled(true);
-    sortRows();
+    updateSortIndicators();
     applyFilters();
   }
 
