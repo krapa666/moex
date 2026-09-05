@@ -100,6 +100,65 @@
       </section>
     </main>
 
+    <aside id="security-detail-overlay" class="security-detail-overlay" aria-hidden="true" hidden>
+      <button class="security-detail-backdrop" type="button" data-detail-close aria-label="Закрыть карточку акции"></button>
+      <section class="security-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="security-detail-title">
+        <header class="security-detail-header">
+          <div>
+            <span class="eyebrow">Карточка акции</span>
+            <h2 id="security-detail-title" data-detail="ticker">—</h2>
+            <p data-detail="subtitle">—</p>
+          </div>
+          <button class="security-detail-close" type="button" data-detail-close aria-label="Закрыть">×</button>
+        </header>
+
+        <div class="security-detail-section">
+          <h3>Рыночные данные</h3>
+          <dl class="security-detail-grid">
+            <div><dt>Текущая цена</dt><dd data-detail="current_price">—</dd></div>
+            <div><dt>Капитализация</dt><dd data-detail="market_cap">—</dd></div>
+            <div><dt>Акций, млрд шт.</dt><dd data-detail="shares">—</dd></div>
+            <div><dt>P/E 5 лет</dt><dd data-detail="pe">—</dd></div>
+            <div class="security-detail-wide"><dt>Котировка обновлена</dt><dd data-detail="updated">—</dd></div>
+          </dl>
+        </div>
+
+        <div class="security-detail-years">
+          <article class="security-year-card">
+            <h3 data-detail="year1">Год 1</h3>
+            <dl>
+              <div><dt>Прогноз ЧП</dt><dd><span data-detail="profit1">—</span> млрд ₽</dd></div>
+              <div><dt>Справедливая цена</dt><dd data-detail="price1">—</dd></div>
+              <div><dt>Дивиденды</dt><dd><span data-detail="dividends1">—</span> ₽/акц.</dd></div>
+              <div><dt>Див. доходность</dt><dd data-detail="dividend_yield1">—</dd></div>
+              <div class="security-year-highlight"><dt>Полная доходность</dt><dd data-detail="upside1">—</dd></div>
+            </dl>
+          </article>
+          <article class="security-year-card">
+            <h3 data-detail="year2">Год 2</h3>
+            <dl>
+              <div><dt>Прогноз ЧП</dt><dd><span data-detail="profit2">—</span> млрд ₽</dd></div>
+              <div><dt>Справедливая цена</dt><dd data-detail="price2">—</dd></div>
+              <div><dt>Дивиденды</dt><dd><span data-detail="dividends2">—</span> ₽/акц.</dd></div>
+              <div><dt>Див. доходность</dt><dd data-detail="dividend_yield2">—</dd></div>
+              <div class="security-year-highlight"><dt>Полная доходность</dt><dd data-detail="upside2">—</dd></div>
+            </dl>
+          </article>
+        </div>
+
+        <div class="security-detail-section">
+          <h3>Источник / комментарий</h3>
+          <p class="security-detail-note" data-detail="source">Источник или комментарий не указан.</p>
+        </div>
+
+        <div class="security-detail-alert" data-detail-status-block hidden>
+          <strong>Статус данных</strong>
+          <span data-detail="status"></span>
+        </div>
+      </section>
+    </aside>
+
     <script src="/app.js"></script>
+    <script src="/security-details.js"></script>
   </body>
 </html>

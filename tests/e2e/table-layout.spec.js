@@ -95,6 +95,26 @@ test('renders the two-year forecast as a 17-column row with dividend yields', as
   await expect(page.locator('[data-cell="dividend_yield_year1"]').first()).toHaveText('20,0 %');
 });
 
+test('opens a focused stock detail drawer from a forecast row', async ({ page }) => {
+  await openTable(page);
+
+  const firstRow = page.locator('#rows-table-body > tr').first();
+  const detailsButton = firstRow.getByRole('button', { name: 'Подробнее' });
+  await expect(detailsButton).toBeVisible();
+  await detailsButton.click();
+
+  const drawer = page.locator('#security-detail-overlay');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('[data-detail="ticker"]')).toHaveText('SBER');
+  await expect(drawer.locator('[data-detail="current_price"]')).toHaveText('320,45 ₽');
+  await expect(drawer.locator('[data-detail="year1"]')).toHaveText('2026');
+  await expect(drawer.locator('[data-detail="price1"]')).toHaveText('516,99 ₽');
+  await expect(drawer.locator('[data-detail="source"]')).toContainText('Тестовая строка');
+
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+});
+
 test('sorts rows by dividend yield for each forecast year', async ({ page }) => {
   await openTable(page);
 
