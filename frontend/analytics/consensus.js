@@ -9,6 +9,10 @@
   if (!panel || !status || !empty || !body || !form || !tickerInput || !tableSelect) return;
 
   const numberFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
+  const percentFormatter = new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
   let requestSeq = 0;
 
   function escapeHtml(value) {
@@ -28,6 +32,10 @@
     return finite(value) ? `${numberFormatter.format(Number(value))} ₽` : '—';
   }
 
+  function formatPercent(value) {
+    return finite(value) ? `${percentFormatter.format(Number(value))} %` : '—';
+  }
+
   function median(values) {
     const numbers = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
     if (!numbers.length) return null;
@@ -38,6 +46,27 @@
   function position(value, minValue, maxValue) {
     if (Math.abs(maxValue - minValue) < 0.000001) return 50;
     return Math.max(0, Math.min(100, ((value - minValue) / (maxValue - minValue)) * 100));
+  }
+
+  function agreementSummary(values, medianValue) {
+    if (values.length < 2 || !finite(medianValue) || Number(medianValue) <= 0) {
+      return {
+        spreadPercent: null,
+        label: 'Недостаточно данных',
+        className: 'insufficient',
+      };
+    }
+
+    const minValue = values[0];
+    const maxValue = values[values.length - 1];
+    const spreadPercent = ((maxValue - minValue) / Number(medianValue)) * 100;
+    if (spreadPercent <= 10) {
+      return { spreadPercent, label: 'Высокая', className: 'high' };
+    }
+    if (spreadPercent <= 25) {
+      return { spreadPercent, label: 'Средняя', className: 'medium' };
+    }
+    return { spreadPercent, label: 'Низкая', className: 'low' };
   }
 
   function resetConsensus() {
@@ -90,6 +119,7 @@
     const maxValue = values[values.length - 1];
     const medianValue = median(values);
     const currentPrice = median(ordered.map((item) => item.current_price).filter(finite));
+    const agreement = agreementSummary(values, medianValue);
     const medianPosition = position(medianValue, minValue, maxValue);
     const rangeLabel = `Диапазон целей ${ticker} на ${year}: минимум ${formatPrice(minValue)}, медиана ${formatPrice(medianValue)}, максимум ${formatPrice(maxValue)}`;
 
@@ -106,13 +136,20 @@
         </div>
       `).join('');
 
+    const agreementNote = agreement.spreadPercent === null
+      ? 'Для оценки согласованности нужны минимум две сопоставимые цели.'
+      : 'Разброс = (максимум − минимум) / медиана. ≤10% — высокая, >10–25% — средняя, >25% — низкая согласованность.';
+
     body.innerHTML = `
       <div class="analytics-consensus-kpis" aria-label="Сводка консенсуса ${escapeHtml(ticker)}">
         <article><span>Минимум</span><strong data-consensus-kpi="min">${formatPrice(minValue)}</strong></article>
         <article><span>Медиана</span><strong data-consensus-kpi="median">${formatPrice(medianValue)}</strong></article>
         <article><span>Максимум</span><strong data-consensus-kpi="max">${formatPrice(maxValue)}</strong></article>
         <article><span>Рынок</span><strong data-consensus-kpi="market">${formatPrice(currentPrice)}</strong></article>
+        <article><span>Разброс</span><strong data-consensus-kpi="spread">${formatPercent(agreement.spreadPercent)}</strong></article>
+        <article><span>Согласованность</span><strong class="analytics-consensus-agreement ${agreement.className}" data-consensus-kpi="agreement">${escapeHtml(agreement.label)}</strong></article>
       </div>
+      <p class="analytics-consensus-formula">${escapeHtml(agreementNote)}</p>
       <div class="analytics-consensus-range" role="img" aria-label="${escapeHtml(rangeLabel)}">
         <div class="analytics-consensus-track">
           ${markers}
