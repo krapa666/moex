@@ -19,7 +19,7 @@
   const SAVED_VIEWS_STORAGE_KEY = 'moex.watchlist.saved_views.v1';
   const MAX_SAVED_VIEWS = 10;
   const validFilters = new Set(['all', 'pinned', 'signals', 'positive', 'negative']);
-  const validSortFields = new Set(['ticker', 'current', 'fair', 'upside', 'dividend', 'ratio']);
+  const validSortFields = new Set(['ticker', 'current', 'fair', 'upside', 'dividend', 'ratio', 'score']);
 
   const viewState = {
     total: 0,
@@ -39,6 +39,10 @@
     maximumFractionDigits: 1,
   });
   const ratioFormatter = new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const pointFormatter = new Intl.NumberFormat('ru-RU', {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
@@ -78,6 +82,10 @@
     return isFiniteValue(value) ? `${percentFormatter.format(Number(value))} %` : '—';
   }
 
+  function formatPoints(value) {
+    return isFiniteValue(value) ? pointFormatter.format(Number(value)) : '0,0';
+  }
+
   function dividendYield(row, year) {
     const dividendMap = row.dividend_year_map || {};
     const dividend = dividendMap[String(year)] ?? row.dividends_year1;
@@ -109,6 +117,45 @@
     if (number > 0) return 'watchlist-value-positive';
     if (number < 0) return 'watchlist-value-negative';
     return 'watchlist-value-muted';
+  }
+
+  function priorityScore(row, dividendYieldPercent, signalStatus) {
+    if (typeof window.MoexWatchlistScore?.calculate !== 'function') return null;
+    return window.MoexWatchlistScore.calculate({
+      currentPrice: row.current_price,
+      fairValue: row.forecast_price_year1,
+      dividendYield: dividendYieldPercent,
+      signalStatus,
+    });
+  }
+
+  function scoreCell(score, ticker, dividendYieldPercent, signalStatus) {
+    if (!score) return '<td class="watchlist-score-cell watchlist-value-muted">—</td>';
+    return `
+      <td class="watchlist-score-cell">
+        <details class="watchlist-score">
+          <summary aria-label="Приоритет ${escapeHtml(ticker)}: ${score.score} из 100. Показать расчёт">
+            <strong>${score.score}</strong><span>/100</span>
+          </summary>
+          <div class="watchlist-score-breakdown">
+            <strong>Как получен ${score.score}/100</strong>
+            <span class="watchlist-score-factor">
+              <span>Цена · ${formatPercent(score.pricePotential)}</span>
+              <b>+${formatPoints(score.pricePoints)} / 60</b>
+            </span>
+            <span class="watchlist-score-factor">
+              <span>Дивиденды · ${formatPercent(dividendYieldPercent)}</span>
+              <b>+${formatPoints(score.dividendPoints)} / 25</b>
+            </span>
+            <span class="watchlist-score-factor">
+              <span>Объём · ${escapeHtml(signalLabel(signalStatus))}</span>
+              <b>+${formatPoints(score.activityPoints)} / 15</b>
+            </span>
+            <p class="watchlist-score-note">Итог — сумма трёх вкладов. Отрицательный ценовой потенциал даёт 0 баллов; ценовой вклад ограничен 60.</p>
+          </div>
+        </details>
+      </td>
+    `;
   }
 
   function loadPinnedTickers() {
@@ -366,6 +413,7 @@
       upside: 'watchlistUpside',
       dividend: 'watchlistDividend',
       ratio: 'watchlistRatio',
+      score: 'watchlistScore',
     }[field];
     const raw = datasetKey ? row.dataset[datasetKey] : '';
     return raw === '' || raw == null ? null : Number(raw);
@@ -478,6 +526,7 @@
       const ratio = latest?.ratio;
       const yieldPercent = dividendYield(row, year);
       const signalStatus = latest?.signal_status || '';
+      const score = priorityScore(row, yieldPercent, signalStatus);
       const pinned = pinnedTickers.has(ticker);
 
       return `
@@ -491,6 +540,7 @@
           data-watchlist-dividend="${escapeHtml(dataNumber(yieldPercent))}"
           data-watchlist-ratio="${escapeHtml(dataNumber(ratio))}"
           data-watchlist-signal="${escapeHtml(signalStatus)}"
+          data-watchlist-score="${escapeHtml(dataNumber(score?.score))}"
         >
           <td class="watchlist-pin-cell">
             <button
@@ -515,6 +565,7 @@
               : '—'}
           </td>
           <td><span class="${signalClass(signalStatus)}">${signalLabel(signalStatus)}</span></td>
+          ${scoreCell(score, ticker, yieldPercent, signalStatus)}
         </tr>
       `;
     }).join('');
