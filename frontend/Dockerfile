@@ -4,6 +4,7 @@ WORKDIR /assets
 COPY index.html app.js security-details.js security-keyboard.js copy-link.js theme.js styles.css shell.css forecast.css theme.css ./
 COPY volumes ./volumes
 COPY dashboard ./dashboard
+COPY watchlist ./watchlist
 COPY nginx.conf /tmp/nginx.conf
 
 
@@ -21,6 +22,7 @@ COPY --from=assets /assets/forecast.css /usr/share/nginx/html/forecast.css
 COPY --from=assets /assets/theme.css /usr/share/nginx/html/theme.css
 COPY --from=assets /assets/volumes /usr/share/nginx/html/volumes
 COPY --from=assets /assets/dashboard /usr/share/nginx/html/dashboard
+COPY --from=assets /assets/watchlist /usr/share/nginx/html/watchlist
 COPY --from=assets /tmp/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
