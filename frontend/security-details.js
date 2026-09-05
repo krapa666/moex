@@ -30,14 +30,27 @@
   const text = (row, selector) => row.querySelector(selector)?.textContent?.trim() || '—';
   const value = (row, selector) => row.querySelector(selector)?.value?.trim() || '—';
 
-  function setTickerQuery(ticker) {
+  function tickerFromUrl() {
+    return new URLSearchParams(window.location.search).get('ticker')?.trim() || '';
+  }
+
+  function setTickerQuery(ticker, mode = 'replace') {
+    if (mode === 'none') return;
     const url = new URL(window.location.href);
     if (ticker && ticker !== '—') {
       url.searchParams.set('ticker', ticker);
     } else {
       url.searchParams.delete('ticker');
     }
-    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    const nextState = ticker
+      ? { ...(window.history.state || {}), moexTickerView: 'forecast' }
+      : { ...(window.history.state || {}), moexTickerView: null };
+    if (mode === 'push') {
+      window.history.pushState(nextState, '', nextUrl);
+    } else {
+      window.history.replaceState(nextState, '', nextUrl);
+    }
   }
 
   function setDetail(name, nextValue) {
@@ -61,14 +74,21 @@
     drawerInput.title = drawerInput.readOnly ? 'Поле недоступно для редактирования в текущем режиме' : '';
   }
 
-  function openDetails(row, trigger) {
+  function findTickerRow(ticker) {
+    const normalizedTicker = String(ticker || '').toLocaleUpperCase('ru');
+    if (!normalizedTicker) return null;
+    return [...tbody.querySelectorAll(':scope > tr:not(.comparison-inline-row)')]
+      .find((row) => value(row, 'input[data-field="ticker"]').toLocaleUpperCase('ru') === normalizedTicker) || null;
+  }
+
+  function openDetails(row, trigger, historyMode = 'replace') {
     activeRow = row;
     lastTrigger = trigger;
     const ticker = value(row, 'input[data-field="ticker"]');
     const year1 = document.getElementById('header-year1-group')?.textContent?.trim() || 'Год 1';
     const year2 = document.getElementById('header-year2-group')?.textContent?.trim() || 'Год 2';
 
-    setTickerQuery(ticker);
+    setTickerQuery(ticker, historyMode);
     setDetail('ticker', ticker);
     setDetail('subtitle', `${text(row, '[data-cell="current_price"]')} · обновлено ${text(row, '[data-cell="price_updated_at"]')}`);
     setDetail('current_price', text(row, '[data-cell="current_price"]'));
@@ -107,27 +127,45 @@
     overlay.querySelector('.security-detail-close')?.focus();
   }
 
-  function closeDetails() {
+  function closeDetailsVisual({ restoreFocus = true } = {}) {
     if (overlay.hidden) return;
     overlay.hidden = true;
     overlay.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('security-detail-open');
-    setTickerQuery('');
     activeRow = null;
-    lastTrigger?.focus();
+    if (restoreFocus) lastTrigger?.focus();
     lastTrigger = null;
+  }
+
+  function closeDetails() {
+    if (overlay.hidden) return;
+    if (window.history.state?.moexTickerView === 'forecast') {
+      window.history.back();
+      return;
+    }
+    closeDetailsVisual();
+    setTickerQuery('', 'replace');
   }
 
   function openRequestedTicker() {
     if (deepLinkHandled) return;
-    const normalizedTicker = requestedTicker.toLocaleUpperCase('ru');
-    const targetRow = [...tbody.querySelectorAll(':scope > tr:not(.comparison-inline-row)')]
-      .find((row) => value(row, 'input[data-field="ticker"]').toLocaleUpperCase('ru') === normalizedTicker);
+    const targetRow = findTickerRow(requestedTicker);
     const button = targetRow?.querySelector('[data-action="details"]');
     if (!targetRow || !button) return;
 
     deepLinkHandled = true;
-    openDetails(targetRow, button);
+    openDetails(targetRow, button, 'replace');
+  }
+
+  function syncWithHistory() {
+    const ticker = tickerFromUrl();
+    if (!ticker) {
+      closeDetailsVisual({ restoreFocus: false });
+      return;
+    }
+    const targetRow = findTickerRow(ticker);
+    const button = targetRow?.querySelector('[data-action="details"]');
+    if (targetRow && button) openDetails(targetRow, button, 'none');
   }
 
   function attachButtons() {
@@ -143,7 +181,7 @@
       button.textContent = 'Подробнее';
       button.addEventListener('click', (event) => {
         event.stopPropagation();
-        openDetails(row, button);
+        openDetails(row, button, 'push');
       });
       actionCell.prepend(button);
     });
@@ -181,6 +219,7 @@
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !overlay.hidden) closeDetails();
   });
+  window.addEventListener('popstate', syncWithHistory);
 
   const observer = new MutationObserver(attachButtons);
   observer.observe(tbody, { childList: true });
