@@ -1,0 +1,217 @@
+.analytics-consensus-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.analytics-consensus-status {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.analytics-consensus-body {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.analytics-consensus-body[hidden],
+.analytics-consensus-empty[hidden],
+.analytics-consensus-panel[hidden] {
+  display: none;
+}
+
+.analytics-consensus-empty {
+  padding: 26px 18px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.analytics-consensus-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-consensus-kpis article {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.analytics-consensus-kpis span,
+.analytics-consensus-target span {
+  color: #64748b;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.analytics-consensus-kpis strong,
+.analytics-consensus-target strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-consensus-range {
+  min-width: 0;
+  padding: 12px 4px 2px;
+}
+
+.analytics-consensus-track {
+  position: relative;
+  height: 6px;
+  margin: 9px 8px 0;
+  border-radius: 999px;
+  background: #dbe5f2;
+}
+
+.analytics-consensus-marker,
+.analytics-consensus-median {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.analytics-consensus-marker {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.26);
+}
+
+.analytics-consensus-median {
+  width: 2px;
+  height: 22px;
+  border-radius: 999px;
+  background: #0f172a;
+}
+
+.analytics-consensus-axis {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-consensus-axis span:nth-child(2) {
+  text-align: center;
+}
+
+.analytics-consensus-axis span:last-child {
+  text-align: right;
+}
+
+.analytics-consensus-targets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analytics-consensus-target {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e7edf4;
+  border-radius: 9px;
+}
+
+.analytics-consensus-target span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analytics-consensus-target strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+[data-theme="dark"] .analytics-consensus-status,
+[data-theme="dark"] .analytics-consensus-empty,
+[data-theme="dark"] .analytics-consensus-kpis span,
+[data-theme="dark"] .analytics-consensus-target span,
+[data-theme="dark"] .analytics-consensus-axis {
+  color: #8fa0b8;
+}
+
+[data-theme="dark"] .analytics-consensus-kpis article {
+  background: #162338;
+}
+
+[data-theme="dark"] .analytics-consensus-kpis strong,
+[data-theme="dark"] .analytics-consensus-target strong {
+  color: #e7edf7;
+}
+
+[data-theme="dark"] .analytics-consensus-track {
+  background: #31415a;
+}
+
+[data-theme="dark"] .analytics-consensus-marker {
+  border-color: #111c2e;
+  background: #7fb0ff;
+  box-shadow: 0 0 0 1px rgba(127, 176, 255, 0.3);
+}
+
+[data-theme="dark"] .analytics-consensus-median {
+  background: #e7edf7;
+}
+
+[data-theme="dark"] .analytics-consensus-target {
+  border-color: #263449;
+}
+
+@media (max-width: 760px) {
+  .analytics-consensus-heading {
+    flex-direction: column;
+  }
+
+  .analytics-consensus-status {
+    white-space: normal;
+  }
+
+  .analytics-consensus-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analytics-consensus-targets {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .analytics-consensus-body {
+    padding: 14px;
+  }
+
+  .analytics-consensus-axis {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .analytics-consensus-axis span:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

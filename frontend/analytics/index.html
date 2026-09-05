@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/shell.css" />
     <link rel="stylesheet" href="/analytics/analytics.css" />
     <link rel="stylesheet" href="/analytics/chart.css" />
+    <link rel="stylesheet" href="/analytics/consensus.css" />
     <link rel="stylesheet" href="/analytics/today.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
@@ -87,6 +88,19 @@
         </article>
       </section>
 
+      <section class="analytics-panel analytics-consensus-panel" data-analytics-consensus hidden aria-labelledby="analytics-consensus-title">
+        <header class="analytics-panel-heading analytics-consensus-heading">
+          <div>
+            <span class="analytics-panel-kicker">Current consensus</span>
+            <h2 id="analytics-consensus-title">Консенсус аналитиков</h2>
+            <p>Текущие целевые цены для одного и того же прогнозного года: минимум, медиана, максимум и положение каждой оценки в диапазоне.</p>
+          </div>
+          <span class="analytics-consensus-status" data-analytics-consensus-status role="status" aria-live="polite">—</span>
+        </header>
+        <div class="analytics-consensus-empty" data-analytics-consensus-empty hidden></div>
+        <div class="analytics-consensus-body" data-analytics-consensus-body hidden></div>
+      </section>
+
       <section class="analytics-panel analytics-chart-panel" data-analytics-chart-panel hidden aria-labelledby="analytics-chart-title">
         <header class="analytics-panel-heading">
           <div>
@@ -119,6 +133,7 @@
     </main>
     <script src="/analytics/today.js"></script>
     <script src="/analytics/chart.js"></script>
+    <script src="/analytics/consensus.js"></script>
     <script src="/analytics/analytics.js"></script>
   </body>
 </html>
