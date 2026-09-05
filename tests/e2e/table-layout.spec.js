@@ -146,7 +146,7 @@ test('opens the requested stock drawer from a ticker deep link after rows load',
   const drawer = page.locator('#security-detail-overlay');
   await expect(drawer).toBeVisible();
   await expect(drawer.locator('[data-detail="ticker"]')).toHaveText('LKOH');
-  await expect(drawer.locator('[data-detail="current_price"]')).toHaveText('6 000,00 ₽');
+  await expect(drawer.locator('[data-detail="current_price"]')).toHaveText('6 000 ₽');
 });
 
 test('sorts rows by dividend yield for each forecast year', async ({ page }) => {
