@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="/analytics/analytics.css" />
     <link rel="stylesheet" href="/analytics/chart.css" />
     <link rel="stylesheet" href="/analytics/consensus.css" />
+    <link rel="stylesheet" href="/analytics/consensus-history.css" />
     <link rel="stylesheet" href="/analytics/today.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
@@ -101,6 +102,39 @@
         <div class="analytics-consensus-body" data-analytics-consensus-body hidden></div>
       </section>
 
+      <section class="analytics-panel consensus-history-panel" data-consensus-history-panel hidden aria-labelledby="consensus-history-title">
+        <header class="analytics-panel-heading">
+          <div>
+            <span class="analytics-panel-kicker">Consensus revisions</span>
+            <h2 id="consensus-history-title">Динамика консенсуса</h2>
+            <p>После каждой сохранённой ревизии восстанавливается последнее известное состояние всех аналитиков: медианная цель и разброс для года основной таблицы.</p>
+          </div>
+          <span class="consensus-history-status" data-consensus-history-status role="status" aria-live="polite">—</span>
+        </header>
+        <div class="consensus-history-empty" data-consensus-history-empty hidden></div>
+        <div class="consensus-history-body" data-consensus-history-body hidden>
+          <div class="consensus-history-summary" data-consensus-history-summary aria-label="Сводка динамики консенсуса">
+            <article><span>Изменений консенсуса</span><strong data-consensus-history-kpi="points">—</strong></article>
+            <article><span>Последняя медиана</span><strong data-consensus-history-kpi="median">—</strong></article>
+            <article><span>Последний разброс</span><strong data-consensus-history-kpi="spread">—</strong></article>
+            <article><span>Целей в последней точке</span><strong data-consensus-history-kpi="targets">—</strong></article>
+          </div>
+          <div class="consensus-history-charts">
+            <article class="consensus-history-chart-card">
+              <h3>Медианная цель</h3>
+              <p>Только сохранённые прогнозные ревизии; линии не соединяются через смену прогнозного года.</p>
+              <div class="consensus-history-chart" data-consensus-history-median-chart></div>
+            </article>
+            <article class="consensus-history-chart-card">
+              <h3>Разброс целей</h3>
+              <p>(максимум − минимум) / медиана; точка появляется, когда доступны минимум две сопоставимые цели.</p>
+              <div class="consensus-history-chart" data-consensus-history-spread-chart></div>
+            </article>
+          </div>
+          <div class="consensus-history-list" data-consensus-history-list aria-label="Последние изменения консенсуса"></div>
+        </div>
+      </section>
+
       <section class="analytics-panel analytics-chart-panel" data-analytics-chart-panel hidden aria-labelledby="analytics-chart-title">
         <header class="analytics-panel-heading">
           <div>
@@ -135,6 +169,7 @@
     <script src="/analytics/today.js"></script>
     <script src="/analytics/chart.js"></script>
     <script src="/analytics/consensus.js"></script>
+    <script src="/analytics/consensus-history.js"></script>
     <script src="/analytics/analytics.js"></script>
   </body>
 </html>
