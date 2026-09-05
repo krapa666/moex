@@ -156,7 +156,7 @@ test('copies the canonical forecast deep link from the stock drawer', async ({ p
   await expect(page).toHaveURL('/?ticker=SBER');
 
   const drawer = page.locator('#security-detail-overlay');
-  const copyButton = drawer.getByRole('button', { name: 'Копировать ссылку' });
+  const copyButton = drawer.locator('[data-copy-current-url]');
   await copyButton.click();
 
   expect(await page.evaluate(() => window.__copiedMoexUrl)).toBe(page.url());
