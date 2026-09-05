@@ -57,7 +57,7 @@ class ForecastRevision(Base):
 # Import the stock models only after ForecastRevision exists. models.py imports this
 # class at module teardown so Alembic can discover the history table; importing the
 # models earlier creates a cycle when production starts via app.application.
-from .models import AnalystTable, StockRow  # noqa: E402
+from .models import AnalystTable, StockRow  # noqa: E402,I001
 
 
 _DIRECT_FORECAST_FIELDS = (
