@@ -120,12 +120,16 @@ test('keeps the loaded Watchlist and score explanation inside the mobile page vi
   await mockWatchlistApi(page);
   await page.goto('/watchlist/');
 
+  const sber = page.locator('[data-watchlist-ticker="SBER"]');
+  await expect(sber).toBeVisible();
+  await expect(page.locator('.watchlist-table-wrap')).toBeVisible();
+
   const before = await mobileLayout(page);
   expect(before.tableScrollWidth).toBeGreaterThan(before.tableClientWidth);
   expect(before.scrollWidth).toBeLessThanOrEqual(before.clientWidth + 1);
 
-  await page.locator('[data-watchlist-ticker="SBER"] .watchlist-score > summary').click();
-  await expect(page.locator('[data-watchlist-ticker="SBER"] .watchlist-score-breakdown')).toBeVisible();
+  await sber.locator('.watchlist-score > summary').click();
+  await expect(sber.locator('.watchlist-score-breakdown')).toBeVisible();
 
   const after = await mobileLayout(page);
   expect(after.scrollWidth).toBeLessThanOrEqual(after.clientWidth + 1);
