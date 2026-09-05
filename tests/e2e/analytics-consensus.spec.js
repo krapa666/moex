@@ -81,7 +81,7 @@ async function mockAnalyticsApi(page, { isAdmin = true } = {}) {
   });
 }
 
-test('shows same-year analyst targets with individual and aggregate return metrics', async ({ page }) => {
+test('shows same-year price gap, analyst targets and return metrics', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=SBER');
 
@@ -92,12 +92,16 @@ test('shows same-year analyst targets with individual and aggregate return metri
   await expect(panel.locator('[data-consensus-kpi="median"]')).toHaveText('300 ₽');
   await expect(panel.locator('[data-consensus-kpi="max"]')).toHaveText('350 ₽');
   await expect(panel.locator('[data-consensus-kpi="market"]')).toHaveText('300 ₽');
+  await expect(panel.locator('[data-consensus-kpi="market-gap"]')).toHaveText('0,0 %');
+  await expect(panel.locator('[data-consensus-kpi="market-gap"]')).toHaveClass(/neutral/);
+  await expect(panel.locator('[data-consensus-kpi="above-market"]')).toHaveText('1/2');
   await expect(panel.locator('[data-consensus-kpi="return"]')).toHaveText('+6,3 %');
   await expect(panel.locator('[data-consensus-kpi="return"]')).toHaveClass(/positive/);
   await expect(panel.locator('[data-consensus-kpi="positive"]')).toHaveText('1/2');
   await expect(panel.locator('[data-consensus-kpi="spread"]')).toHaveText('33,3 %');
   await expect(panel.locator('[data-consensus-kpi="agreement"]')).toHaveText('Низкая');
   await expect(panel.locator('[data-consensus-kpi="agreement"]')).toHaveClass(/low/);
+  await expect(panel.locator('.analytics-consensus-notes')).toContainText('не включает дивиденды');
   await expect(panel.locator('.analytics-consensus-notes')).toContainText('уже учитывает оставшиеся дивиденды');
   await expect(panel.locator('.analytics-consensus-notes')).toContainText('(максимум − минимум) / медиана');
 
@@ -117,7 +121,7 @@ test('shows same-year analyst targets with individual and aggregate return metri
   );
 });
 
-test('masks real analyst names for a guest while preserving return values', async ({ page }) => {
+test('masks real analyst names for a guest while preserving public consensus metrics', async ({ page }) => {
   await mockAnalyticsApi(page, { isAdmin: false });
   await page.goto('/analytics/?ticker=SBER');
 
@@ -132,19 +136,24 @@ test('masks real analyst names for a guest while preserving return values', asyn
   await expect(panel.locator('[data-consensus-target="2"]')).toContainText('Аналитик 2');
   await expect(panel.locator('[data-consensus-target-return="1"]')).toHaveText('+23,3 %');
   await expect(panel.locator('[data-consensus-target-return="2"]')).toHaveText('-10,7 %');
+  await expect(panel.locator('[data-consensus-kpi="market-gap"]')).toHaveText('0,0 %');
+  await expect(panel.locator('[data-consensus-kpi="above-market"]')).toHaveText('1/2');
   await expect(panel.locator('[data-consensus-kpi="return"]')).toHaveText('+6,3 %');
   await expect(panel).not.toContainText('Основной');
   await expect(panel).not.toContainText('Консервативный');
   await expect(page.locator('body')).not.toContainText('Дальний горизонт');
 });
 
-test('does not infer analyst agreement from a single comparable target', async ({ page }) => {
+test('keeps market gap useful with a single comparable target without inferring agreement', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=LKOH');
 
   const panel = page.locator('[data-analytics-consensus]');
   await expect(panel).toBeVisible();
   await expect(panel.locator('[data-analytics-consensus-status]')).toHaveText('2026 · целей: 1/1');
+  await expect(panel.locator('[data-consensus-kpi="market-gap"]')).toHaveText('+14,8 %');
+  await expect(panel.locator('[data-consensus-kpi="market-gap"]')).toHaveClass(/positive/);
+  await expect(panel.locator('[data-consensus-kpi="above-market"]')).toHaveText('1/1');
   await expect(panel.locator('[data-consensus-kpi="return"]')).toHaveText('+23,8 %');
   await expect(panel.locator('[data-consensus-kpi="positive"]')).toHaveText('1/1');
   await expect(panel.locator('[data-consensus-target-return="1"]')).toHaveText('+23,8 %');
@@ -162,6 +171,8 @@ test('consensus panel stays inside the mobile page viewport', async ({ page }) =
   await expect(page.locator('[data-analytics-consensus]')).toBeVisible();
   await expect(page.locator('[data-consensus-target]')).toHaveCount(2);
   await expect(page.locator('[data-consensus-target-return="1"]')).toHaveText('+23,3 %');
+  await expect(page.locator('[data-consensus-kpi="market-gap"]')).toHaveText('0,0 %');
+  await expect(page.locator('[data-consensus-kpi="above-market"]')).toHaveText('1/2');
   await expect(page.locator('[data-consensus-kpi="return"]')).toHaveText('+6,3 %');
   await expect(page.locator('[data-consensus-kpi="spread"]')).toHaveText('33,3 %');
 
