@@ -7,8 +7,39 @@
   margin-bottom: 0;
 }
 
+.dashboard-shortcuts {
+  align-items: center;
+}
+
 .dashboard-shortcuts .btn {
   text-decoration: none;
+}
+
+.dashboard-refresh-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-refresh-status {
+  min-width: 112px;
+  color: #64748b;
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dashboard-refresh-status[data-state="success"] {
+  color: #047857;
+}
+
+.dashboard-refresh-status[data-state="warning"] {
+  color: #b45309;
+}
+
+.dashboard-refresh-status[data-state="loading"] {
+  color: #64748b;
 }
 
 .dashboard-kpi-grid,
@@ -277,8 +308,17 @@
 [data-theme="dark"] .dashboard-panel-heading p,
 [data-theme="dark"] .dashboard-empty,
 [data-theme="dark"] .dashboard-list-name,
-[data-theme="dark"] .dashboard-metric-label {
+[data-theme="dark"] .dashboard-metric-label,
+[data-theme="dark"] .dashboard-refresh-status[data-state="loading"] {
   color: #8fa0b8;
+}
+
+[data-theme="dark"] .dashboard-refresh-status[data-state="success"] {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .dashboard-refresh-status[data-state="warning"] {
+  color: #fdba74;
 }
 
 [data-theme="dark"] .dashboard-kpi-card strong,
@@ -343,6 +383,15 @@
 
   .dashboard-kpi-card {
     min-height: 108px;
+  }
+
+  .dashboard-refresh-control {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .dashboard-refresh-status {
+    min-width: 0;
   }
 
   .dashboard-panel-heading {
