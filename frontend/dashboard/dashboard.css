@@ -136,6 +136,11 @@
   padding-top: 4px;
 }
 
+.dashboard-empty[hidden],
+.dashboard-list[hidden] {
+  display: none;
+}
+
 .dashboard-list-row {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto;
