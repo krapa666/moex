@@ -156,7 +156,7 @@ def _year_columns(row: list[str]) -> dict[int, str]:
 
 def _nearest_year_columns(rows: list[list[str]], metric_row_index: int) -> dict[int, str]:
     candidates: list[tuple[int, dict[int, str]]] = []
-    start = max(0, metric_row_index - 15)
+    start = max(0, metric_row_index - 20)
     end = min(len(rows), metric_row_index + 4)
     for index in range(start, end):
         columns = _year_columns(rows[index])
@@ -170,6 +170,25 @@ def _nearest_year_columns(rows: list[list[str]], metric_row_index: int) -> dict[
 
 def _row_label(row: list[str]) -> str:
     return " ".join(cell.strip() for cell in row if cell.strip()).lower()
+
+
+def _latest_forecast_block(rows: list[list[str]]) -> tuple[list[list[str]], dict[int, str] | None]:
+    headers = [
+        index
+        for index, row in enumerate(rows)
+        if "прогноз финансовых показателей" in _row_label(row)
+    ]
+    if not headers:
+        # Support simpler input layouts while retaining the explicit latest-block
+        # rule for the real Arsagera workbook.
+        return rows, None
+
+    start = headers[0]
+    end = headers[1] if len(headers) > 1 else len(rows)
+    year_columns = _year_columns(rows[start])
+    if len(year_columns) < 2:
+        raise ArsageraParseError("в последнем прогнозном блоке не определены годы")
+    return rows[start:end], year_columns
 
 
 def _select_metric_row(rows: list[list[str]], *, ticker: str, metric: str) -> int:
@@ -210,7 +229,7 @@ def _select_metric_row(rows: list[list[str]], *, ticker: str, metric: str) -> in
 
 
 def _profit_multiplier(rows: list[list[str]], metric_row_index: int) -> float:
-    start = max(0, metric_row_index - 3)
+    start = max(0, metric_row_index - 10)
     context = " ".join(_row_label(rows[index]) for index in range(start, metric_row_index + 1))
     if "млрд" in context:
         return 1.0
@@ -226,8 +245,9 @@ def _values_by_year(
     metric_row_index: int,
     *,
     multiplier: float = 1.0,
+    year_columns: dict[int, str] | None = None,
 ) -> dict[str, float]:
-    columns = _nearest_year_columns(rows, metric_row_index)
+    columns = year_columns or _nearest_year_columns(rows, metric_row_index)
     row = rows[metric_row_index]
     values: dict[str, float] = {}
     for column_index, year in columns.items():
@@ -247,10 +267,16 @@ def parse_forecast_csv(ticker: str, gid: str, content: str) -> ArsageraForecast:
     if not rows:
         raise ArsageraParseError("лист Арсагеры пуст")
 
+    rows, year_columns = _latest_forecast_block(rows)
     profit_row = _select_metric_row(rows, ticker=ticker, metric="profit")
     dividend_row = _select_metric_row(rows, ticker=ticker, metric="dividend")
-    profit = _values_by_year(rows, profit_row, multiplier=_profit_multiplier(rows, profit_row))
-    dividends = _values_by_year(rows, dividend_row)
+    profit = _values_by_year(
+        rows,
+        profit_row,
+        multiplier=_profit_multiplier(rows, profit_row),
+        year_columns=year_columns,
+    )
+    dividends = _values_by_year(rows, dividend_row, year_columns=year_columns)
     return ArsageraForecast(
         ticker=ticker.strip().upper(),
         gid=gid,
