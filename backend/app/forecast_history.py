@@ -9,6 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
 from .models import AnalystTable, StockRow
 
+_HISTORY_SUPPRESSION_KEY = "moex_suppress_forecast_history"
+
 
 class ForecastRevision(Base):
     __tablename__ = "forecast_revisions"
@@ -37,6 +39,21 @@ class ForecastRevision(Base):
     upside_percent_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
+    @staticmethod
+    @contextmanager
+    def suppress_capture(connection):
+        """Temporarily disable revision capture for bulk state replacement."""
+        marker = object()
+        previous = connection.info.get(_HISTORY_SUPPRESSION_KEY, marker)
+        connection.info[_HISTORY_SUPPRESSION_KEY] = True
+        try:
+            yield
+        finally:
+            if previous is marker:
+                connection.info.pop(_HISTORY_SUPPRESSION_KEY, None)
+            else:
+                connection.info[_HISTORY_SUPPRESSION_KEY] = previous
+
 
 _DIRECT_FORECAST_FIELDS = (
     "ticker",
@@ -51,22 +68,6 @@ _MAP_OR_COMMENT_FIELDS = (
     "dividend_year_map",
     "net_profit_source_comment",
 )
-_HISTORY_SUPPRESSION_KEY = "moex_suppress_forecast_history"
-
-
-@contextmanager
-def suppress_forecast_history(connection):
-    """Temporarily disable revision capture for bulk state replacement."""
-    marker = object()
-    previous = connection.info.get(_HISTORY_SUPPRESSION_KEY, marker)
-    connection.info[_HISTORY_SUPPRESSION_KEY] = True
-    try:
-        yield
-    finally:
-        if previous is marker:
-            connection.info.pop(_HISTORY_SUPPRESSION_KEY, None)
-        else:
-            connection.info[_HISTORY_SUPPRESSION_KEY] = previous
 
 
 def _history_suppressed(connection) -> bool:
