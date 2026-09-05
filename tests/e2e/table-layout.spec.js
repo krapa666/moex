@@ -197,3 +197,29 @@ test('centers visible column labels while keeping numeric inputs right-aligned',
   await page.locator('#rows-table-body > tr').first().getByRole('button', { name: 'Подробнее' }).click();
   await expect(page.locator('[data-detail="shares"]')).toHaveCSS('text-align', 'right');
 });
+
+test('toggles dark theme and keeps the choice after reload', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await mockApi(page);
+  await page.goto('/');
+  await page.evaluate(() => localStorage.removeItem('moex-theme'));
+  await page.reload();
+  await expect(page.locator('#rows-table-body > tr')).toHaveCount(2);
+
+  const root = page.locator('html');
+  const toggle = page.locator('[data-theme-toggle]');
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  const lightBackground = await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor);
+
+  await toggle.click();
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  const darkBackground = await page.locator('body').evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(darkBackground).not.toBe(lightBackground);
+
+  await page.reload();
+  await expect(page.locator('#rows-table-body > tr')).toHaveCount(2);
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+});
