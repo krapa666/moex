@@ -59,9 +59,12 @@ const singleTargetComparison = [
   },
 ];
 
-async function mockAnalyticsApi(page) {
+async function mockAnalyticsApi(page, { isAdmin = true } = {}) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/auth/me') {
+      return route.fulfill({ json: { username: isAdmin ? 'local-network' : 'guest', is_admin: isAdmin } });
+    }
     if (url.pathname === '/api/tables') {
       return route.fulfill({ json: tables });
     }
@@ -104,6 +107,24 @@ test('shows same-year analyst targets with range and agreement metrics', async (
     'aria-label',
     'Диапазон целей SBER на 2026: минимум 250 ₽, медиана 300 ₽, максимум 350 ₽',
   );
+});
+
+test('masks real analyst names for a guest in selector and consensus', async ({ page }) => {
+  await mockAnalyticsApi(page, { isAdmin: false });
+  await page.goto('/analytics/?ticker=SBER');
+
+  const select = page.locator('#analytics-table');
+  await expect(select.locator('option[value="1"]')).toHaveText('Аналитик 1 · таблица 1');
+  await expect(select.locator('option[value="2"]')).toHaveText('Аналитик 2 · таблица 2');
+  await expect(select.locator('option[value="3"]')).toHaveText('Аналитик 3 · таблица 3');
+
+  const panel = page.locator('[data-analytics-consensus]');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('[data-consensus-target="1"]')).toContainText('Аналитик 1');
+  await expect(panel.locator('[data-consensus-target="2"]')).toContainText('Аналитик 2');
+  await expect(panel).not.toContainText('Основной');
+  await expect(panel).not.toContainText('Консервативный');
+  await expect(page.locator('body')).not.toContainText('Дальний горизонт');
 });
 
 test('does not infer analyst agreement from a single comparable target', async ({ page }) => {
