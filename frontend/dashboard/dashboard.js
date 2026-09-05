@@ -113,18 +113,19 @@
       leaders.map((row, index) => {
         const upside = Number(row.upside_percent_year1);
         const upsideClass = upside >= 0 ? 'dashboard-upside-positive' : 'dashboard-upside-negative';
+        const ticker = row.ticker || '';
         return `
-          <div class="dashboard-list-row" data-dashboard-opportunity="${escapeHtml(row.ticker)}">
+          <a class="dashboard-list-row dashboard-list-link" href="/?ticker=${encodeURIComponent(ticker)}" data-dashboard-opportunity="${escapeHtml(ticker)}" aria-label="Открыть оценку ${escapeHtml(ticker)}">
             <div class="dashboard-list-rank">${index + 1}</div>
             <div class="dashboard-list-main">
-              <strong class="dashboard-list-ticker">${escapeHtml(row.ticker || '—')}</strong>
+              <strong class="dashboard-list-ticker">${escapeHtml(ticker || '—')}</strong>
               <span class="dashboard-list-name">Текущая ${formatPrice(row.current_price)} · цель ${formatPrice(row.forecast_price_year1)}</span>
             </div>
             <div class="dashboard-list-metrics">
               <span class="dashboard-metric-label">Потенциал</span>
               <strong class="${upsideClass}">${percentFormatter.format(upside)} %</strong>
             </div>
-          </div>
+          </a>
         `;
       }).join(''),
     );
@@ -152,18 +153,19 @@
       'volumes',
       anomalies.map((row, index) => {
         const status = volumeStatus(row.latest.signal_status);
+        const ticker = row.ticker || '';
         return `
-          <div class="dashboard-list-row" data-dashboard-volume="${escapeHtml(row.ticker)}">
+          <a class="dashboard-list-row dashboard-list-link" href="/volumes/?ticker=${encodeURIComponent(ticker)}" data-dashboard-volume="${escapeHtml(ticker)}" aria-label="Открыть историю объёмов ${escapeHtml(ticker)}">
             <div class="dashboard-list-rank">${index + 1}</div>
             <div class="dashboard-list-main">
-              <strong class="dashboard-list-ticker">${escapeHtml(row.ticker || '—')}</strong>
+              <strong class="dashboard-list-ticker">${escapeHtml(ticker || '—')}</strong>
               <span class="dashboard-list-name">${escapeHtml(row.short_name || '')}${row.latest?.trade_date ? ` · ${formatTradeDate(row.latest.trade_date)}` : ''}</span>
             </div>
             <div class="dashboard-list-metrics dashboard-volume-metrics">
               <strong>${ratioFormatter.format(Number(row.latest.ratio))}×</strong>
               <span class="dashboard-volume-status ${status.className}">${status.label}</span>
             </div>
-          </div>
+          </a>
         `;
       }).join(''),
     );

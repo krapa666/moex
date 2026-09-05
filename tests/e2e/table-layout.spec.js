@@ -116,6 +116,7 @@ test('opens stock details and edits secondary fields from the drawer', async ({ 
   const detailsButton = firstRow.getByRole('button', { name: 'Подробнее' });
   await expect(detailsButton).toBeVisible();
   await detailsButton.click();
+  expect(new URL(page.url()).searchParams.get('ticker')).toBe('SBER');
 
   const drawer = page.locator('#security-detail-overlay');
   await expect(drawer).toBeVisible();
@@ -134,6 +135,18 @@ test('opens stock details and edits secondary fields from the drawer', async ({ 
 
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
+  expect(new URL(page.url()).searchParams.get('ticker')).toBeNull();
+});
+
+test('opens the requested stock drawer from a ticker deep link after rows load', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/?ticker=LKOH');
+  await expect(page.locator('#rows-table-body > tr')).toHaveCount(2);
+
+  const drawer = page.locator('#security-detail-overlay');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator('[data-detail="ticker"]')).toHaveText('LKOH');
+  await expect(drawer.locator('[data-detail="current_price"]')).toHaveText('6 000 ₽');
 });
 
 test('sorts rows by dividend yield for each forecast year', async ({ page }) => {

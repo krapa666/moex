@@ -150,12 +150,26 @@ test('opens per-ticker history without horizontal scrolling', async ({ page }) =
   await page.getByRole('button', { name: 'SBER' }).click();
   await expect(page.locator('#detail-title')).toHaveText('SBER — история объёмов');
   await expect(page.locator('#volume-detail-body > tr')).toHaveCount(1);
+  expect(new URL(page.url()).searchParams.get('ticker')).toBe('SBER');
 
   const layout = await page.locator('#detail-section .table-wrap').evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
   }));
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+
+  await page.getByRole('button', { name: '← К списку' }).click();
+  expect(new URL(page.url()).searchParams.get('ticker')).toBeNull();
+});
+
+test('opens per-ticker history directly from a ticker query parameter', async ({ page }) => {
+  await page.goto('/volumes/?ticker=sber');
+
+  await expect(page.locator('#detail-title')).toHaveText('SBER — история объёмов');
+  await expect(page.locator('#detail-section')).toBeVisible();
+  await expect(page.locator('#overview-section')).toBeHidden();
+  await expect(page.locator('#volume-detail-body > tr')).toHaveCount(1);
+  expect(new URL(page.url()).searchParams.get('ticker')).toBe('SBER');
 });
 
 test('sorts overview by ratio', async ({ page }) => {
