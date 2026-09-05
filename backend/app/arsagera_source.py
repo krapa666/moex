@@ -21,6 +21,11 @@ MAX_RETRIES = 3
 RETRY_DELAYS_SECONDS = (0.5, 1.5)
 _YEAR_RE = re.compile(r"(?<!\d)(20\d{2})(?!\d)")
 _SHEET_ITEM_RE = re.compile(r'items\.push\(\{name:\s*"([^"]+)"[^}]*?gid:\s*"(\d+)"')
+_SHEET_ALIASES = {
+    "BANEP": "BANE",
+    "SNGSP": "SNGS",
+    "TRNFP": "TRNF",
+}
 
 
 @dataclass(frozen=True)
@@ -87,12 +92,20 @@ def _ticker_present(text: str, ticker: str) -> bool:
     return re.search(rf"(?<![A-Z0-9]){re.escape(ticker.upper())}(?![A-Z0-9])", normalized) is not None
 
 
+def _sheet_name_for_ticker(ticker: str) -> str:
+    normalized = ticker.strip().upper()
+    return _SHEET_ALIASES.get(normalized, normalized)
+
+
 def _menu_sheet_candidates(html: str, wanted: set[str]) -> dict[str, list[str]]:
     candidates = {ticker: [] for ticker in wanted}
     for raw_name, gid in _SHEET_ITEM_RE.findall(html):
         name = raw_name.strip().upper()
-        if name in candidates and gid != ARSAGERA_CATALOG_GID:
-            candidates[name].append(gid)
+        if gid == ARSAGERA_CATALOG_GID:
+            continue
+        for ticker in wanted:
+            if name == _sheet_name_for_ticker(ticker):
+                candidates[ticker].append(gid)
     return candidates
 
 
@@ -111,8 +124,9 @@ def parse_catalog_gids(html: str, tickers: Iterable[str]) -> tuple[dict[str, str
     for ticker in sorted(wanted):
         candidates = list(menu_candidates.get(ticker, []))
         if not candidates:
+            sheet_name = _sheet_name_for_ticker(ticker)
             for text, gids in parser.rows:
-                if not _ticker_present(text, ticker):
+                if not _ticker_present(text, sheet_name):
                     continue
                 candidates.extend(gid for gid in gids if gid != ARSAGERA_CATALOG_GID)
         candidates = list(dict.fromkeys(candidates))
@@ -191,6 +205,10 @@ def _latest_forecast_block(rows: list[list[str]]) -> tuple[list[list[str]], dict
     return rows[start:end], year_columns
 
 
+def _is_preferred_ticker(ticker: str) -> bool:
+    return ticker.strip().upper().endswith("P")
+
+
 def _select_metric_row(rows: list[list[str]], *, ticker: str, metric: str) -> int:
     scored: list[tuple[int, int]] = []
     for index, row in enumerate(rows):
@@ -213,6 +231,14 @@ def _select_metric_row(rows: list[list[str]], *, ticker: str, metric: str) -> in
                 score += 2
             if _ticker_present(label, ticker):
                 score += 8
+
+            has_common_marker = re.search(r"(?:^|\W)ао(?:\W|$)", label) is not None
+            has_preferred_marker = re.search(r"(?:^|\W)ап(?:\W|$)", label) is not None
+            if has_common_marker or has_preferred_marker:
+                if _is_preferred_ticker(ticker):
+                    score += 12 if has_preferred_marker else -12
+                else:
+                    score += 12 if has_common_marker else -12
         if score > 0:
             scored.append((score, index))
 

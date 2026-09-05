@@ -19,6 +19,22 @@ def test_catalog_maps_existing_tickers_to_sheet_gid() -> None:
     assert errors == {"GAZP": "тикер не найден среди листов Арсагеры"}
 
 
+def test_catalog_maps_known_preferred_tickers_to_base_sheet_names() -> None:
+    html = """
+    <script>
+    var items = [];
+    items.push({name: "BANE", pageUrl: "...gid=101", gid: "101"});
+    items.push({name: "SNGS", pageUrl: "...gid=102", gid: "102"});
+    items.push({name: "TRNF", pageUrl: "...gid=103", gid: "103"});
+    </script>
+    """
+
+    mapping, errors = parse_catalog_gids(html, ["BANEP", "SNGSP", "TRNFP"])
+
+    assert mapping == {"BANEP": "101", "SNGSP": "102", "TRNFP": "103"}
+    assert errors == {}
+
+
 def test_catalog_keeps_legacy_explicit_link_fallback() -> None:
     html = """
     <table>
@@ -65,6 +81,30 @@ def test_forecast_parser_prefers_ticker_specific_dividend_row() -> None:
     forecast = parse_forecast_csv("SBERP", "12345", content)
 
     assert forecast.dividends_per_share_rub == {"2026": 41.0, "2027": 45.0}
+
+
+def test_forecast_parser_selects_common_dividend_row_for_common_ticker() -> None:
+    content = """Прогноз финансовых показателей,2026П,2027П
+\"Чистая прибыль, млрд руб.\",40,62
+\"Дивиденд на акцию ао, руб.\",6.19,7.61
+\"Дивиденд на акцию ап, руб.\",6.91,8.12
+"""
+
+    forecast = parse_forecast_csv("RTKM", "12345", content)
+
+    assert forecast.dividends_per_share_rub == {"2026": 6.19, "2027": 7.61}
+
+
+def test_forecast_parser_selects_preferred_dividend_row_for_preferred_ticker() -> None:
+    content = """Прогноз финансовых показателей,2026П,2027П
+\"Чистая прибыль, млрд руб.\",270,293
+\"Дивиденд на акцию ао, руб.\",81.25,88.17
+\"Дивиденд на акцию ап, руб.\",82.50,90.10
+"""
+
+    forecast = parse_forecast_csv("TATNP", "12345", content)
+
+    assert forecast.dividends_per_share_rub == {"2026": 82.5, "2027": 90.1}
 
 
 def test_forecast_parser_uses_latest_revision_block_only() -> None:
