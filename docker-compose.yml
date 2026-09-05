@@ -90,6 +90,24 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  arsagera-worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.arsagera_worker"]
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-fair_price}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      ARSAGERA_ANALYST_NAME: ${ARSAGERA_ANALYST_NAME:-Арсагера}
+      ARSAGERA_SYNC_INTERVAL_HOURS: ${ARSAGERA_SYNC_INTERVAL_HOURS:-6}
+      ARSAGERA_SYNC_CONCURRENCY: ${ARSAGERA_SYNC_CONCURRENCY:-4}
+      ARSAGERA_RUN_ON_STARTUP: ${ARSAGERA_RUN_ON_STARTUP:-true}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   pgbackup:
     image: prodrigestivill/postgres-backup-local:16
     environment:

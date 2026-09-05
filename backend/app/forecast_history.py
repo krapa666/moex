@@ -174,7 +174,7 @@ def _insert_revision(connection, row: StockRow, event_type: str) -> None:
             analyst_name=analyst_name,
             forecast_start_year=forecast_start_year,
             event_type=event_type,
-            changed_by="local-network",
+            changed_by=getattr(row, "_forecast_changed_by", None) or "local-network",
             shares_billion=row.shares_billion,
             pe_avg_5y=row.pe_avg_5y,
             current_price=row.current_price,
