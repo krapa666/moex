@@ -177,6 +177,29 @@ test('opens per-ticker history directly from a ticker query parameter', async ({
   await expect(page).toHaveURL('/volumes/');
 });
 
+test('copies the canonical volume deep link from ticker history', async ({ page }) => {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.__copiedMoexUrl = text;
+        },
+      },
+    });
+  });
+
+  await page.getByRole('button', { name: 'SBER' }).click();
+  await expect(page).toHaveURL('/volumes/?ticker=SBER');
+
+  const copyButton = page.locator('#detail-section').getByRole('button', { name: 'Копировать ссылку' });
+  await copyButton.click();
+
+  expect(await page.evaluate(() => window.__copiedMoexUrl)).toBe(page.url());
+  await expect(copyButton).toHaveText('Ссылка скопирована');
+  await expect(copyButton).toHaveAttribute('data-copy-state', 'success');
+});
+
 test('cleans a missing volume ticker deep link and keeps the overview usable', async ({ page }) => {
   await page.goto('/volumes/?ticker=UNKNOWN');
 
