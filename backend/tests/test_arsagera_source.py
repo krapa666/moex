@@ -1,3 +1,4 @@
+import pytest
 from app.arsagera_source import parse_catalog_gids, parse_forecast_csv
 
 
@@ -79,15 +80,19 @@ def test_forecast_parser_uses_latest_revision_block_only() -> None:
 
     forecast = parse_forecast_csv("SBER", "12345", content)
 
-    assert forecast.net_profit_billion_rub == {
-        "2026": 1986.44809,
-        "2027": 2157.251823,
-        "2028": 2403.912346,
-        "2029": 2704.642949,
-    }
-    assert forecast.dividends_per_share_rub == {
-        "2026": 43.76,
-        "2027": 47.52,
-        "2028": 52.95,
-        "2029": 59.58,
-    }
+    assert forecast.net_profit_billion_rub == pytest.approx(
+        {
+            "2026": 1986.44809,
+            "2027": 2157.251823,
+            "2028": 2403.912346,
+            "2029": 2704.642949,
+        }
+    )
+    assert forecast.dividends_per_share_rub == pytest.approx(
+        {
+            "2026": 43.76,
+            "2027": 47.52,
+            "2028": 52.95,
+            "2029": 59.58,
+        }
+    )
