@@ -62,34 +62,34 @@
 
       <section class="card">
         <div class="table-wrap">
-          <table>
+          <table class="forecast-table forecast-table-compact">
             <colgroup>
-              <col /><col /><col /><col /><col />
-              <col /><col /><col /><col /><col />
-              <col /><col /><col /><col /><col />
-              <col /><col />
+              <col /><col /><col class="compact-hidden-col" /><col /><col />
+              <col /><col /><col class="compact-hidden-col" /><col /><col />
+              <col /><col /><col class="compact-hidden-col" /><col /><col />
+              <col class="compact-hidden-col" /><col />
             </colgroup>
             <thead>
               <tr class="year-group-row">
                 <th rowspan="2" class="sticky-col-1"><button class="th-sort" id="sort-ticker" data-sort="ticker">Тикер ⇅</button></th>
                 <th rowspan="2" class="sticky-col-2">Текущая, ₽</th>
-                <th rowspan="2">Акций, млрд шт</th>
+                <th rowspan="2" class="compact-hidden">Акций, млрд шт</th>
                 <th rowspan="2"><button class="th-sort" id="sort-market-cap" data-sort="market_cap_billion_rub">Капитализация, млрд ₽ ⇅</button></th>
                 <th rowspan="2">P/E 5 лет</th>
-                <th colspan="5" class="forecast-year-group" id="header-year1-group">2026</th>
-                <th colspan="5" class="forecast-year-group" id="header-year2-group">2027</th>
-                <th rowspan="2">Обновлено</th>
+                <th colspan="4" class="forecast-year-group" id="header-year1-group">2026</th>
+                <th colspan="4" class="forecast-year-group" id="header-year2-group">2027</th>
+                <th rowspan="2" class="compact-hidden">Обновлено</th>
                 <th rowspan="2">Действия</th>
               </tr>
               <tr class="year-columns-row">
                 <th id="header-profit-year1">ЧП, млрд ₽</th>
                 <th id="header-price-year1">Цена, ₽</th>
-                <th id="header-dividends-year1" title="Остаток дивидендов к выплате за год, ₽ на акцию">Дивиденды, ₽/акц.</th>
+                <th class="compact-hidden" id="header-dividends-year1" title="Остаток дивидендов к выплате за год, ₽ на акцию">Дивиденды, ₽/акц.</th>
                 <th title="Дивиденды этого года / текущая цена × 100%"><button class="th-sort" id="sort-dividend-yield-year1" data-sort="dividend_yield_year1">Див. доходность, % ⇅</button></th>
                 <th><button class="th-sort" id="sort-upside-year1" data-sort="upside_percent_year1">Полная доходность, % ⇅</button></th>
                 <th id="header-profit-year2">ЧП, млрд ₽</th>
                 <th id="header-price-year2">Цена, ₽</th>
-                <th id="header-dividends-year2" title="Остаток дивидендов к выплате за год, ₽ на акцию">Дивиденды, ₽/акц.</th>
+                <th class="compact-hidden" id="header-dividends-year2" title="Остаток дивидендов к выплате за год, ₽ на акцию">Дивиденды, ₽/акц.</th>
                 <th title="Дивиденды этого года / текущая цена × 100%"><button class="th-sort" id="sort-dividend-yield-year2" data-sort="dividend_yield_year2">Див. доходность, % ⇅</button></th>
                 <th><button class="th-sort" id="sort-upside-year2" data-sort="upside_percent_year2">Полная доходность, % ⇅</button></th>
               </tr>
@@ -117,7 +117,10 @@
           <dl class="security-detail-grid">
             <div><dt>Текущая цена</dt><dd data-detail="current_price">—</dd></div>
             <div><dt>Капитализация</dt><dd data-detail="market_cap">—</dd></div>
-            <div><dt>Акций, млрд шт.</dt><dd data-detail="shares">—</dd></div>
+            <div>
+              <dt>Акций, млрд шт.</dt>
+              <dd><input class="security-detail-input" data-detail="shares" data-detail-input="shares" inputmode="decimal" aria-label="Количество акций, млрд шт." /></dd>
+            </div>
             <div><dt>P/E 5 лет</dt><dd data-detail="pe">—</dd></div>
             <div class="security-detail-wide"><dt>Котировка обновлена</dt><dd data-detail="updated">—</dd></div>
           </dl>
@@ -129,7 +132,10 @@
             <dl>
               <div><dt>Прогноз ЧП</dt><dd><span data-detail="profit1">—</span> млрд ₽</dd></div>
               <div><dt>Справедливая цена</dt><dd data-detail="price1">—</dd></div>
-              <div><dt>Дивиденды</dt><dd><span data-detail="dividends1">—</span> ₽/акц.</dd></div>
+              <div>
+                <dt>Дивиденды</dt>
+                <dd class="security-detail-editable"><input class="security-detail-input" data-detail="dividends1" data-detail-input="dividends1" inputmode="decimal" aria-label="Дивиденды первого прогнозного года" /><span>₽/акц.</span></dd>
+              </div>
               <div><dt>Див. доходность</dt><dd data-detail="dividend_yield1">—</dd></div>
               <div class="security-year-highlight"><dt>Полная доходность</dt><dd data-detail="upside1">—</dd></div>
             </dl>
@@ -139,7 +145,10 @@
             <dl>
               <div><dt>Прогноз ЧП</dt><dd><span data-detail="profit2">—</span> млрд ₽</dd></div>
               <div><dt>Справедливая цена</dt><dd data-detail="price2">—</dd></div>
-              <div><dt>Дивиденды</dt><dd><span data-detail="dividends2">—</span> ₽/акц.</dd></div>
+              <div>
+                <dt>Дивиденды</dt>
+                <dd class="security-detail-editable"><input class="security-detail-input" data-detail="dividends2" data-detail-input="dividends2" inputmode="decimal" aria-label="Дивиденды второго прогнозного года" /><span>₽/акц.</span></dd>
+              </div>
               <div><dt>Див. доходность</dt><dd data-detail="dividend_yield2">—</dd></div>
               <div class="security-year-highlight"><dt>Полная доходность</dt><dd data-detail="upside2">—</dd></div>
             </dl>
