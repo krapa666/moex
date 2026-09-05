@@ -45,8 +45,14 @@ done
 
 if [[ "$HTTPS" == "true" ]]; then
   TEMPLATE_PATH="$TEMPLATE_PATH_HTTPS"
-  SSL_CERT_PATH="${SSL_CERT_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem}"
-  SSL_CERT_KEY_PATH="${SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${SERVER_NAME}/privkey.pem}"
+  SSL_CERT_PATH="${SSL_CERT_PATH:-/etc/letsencrypt/live/junnylab.ru-0002/fullchain.pem}"
+  SSL_CERT_KEY_PATH="${SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/junnylab.ru-0002/privkey.pem}"
+  if [[ ! -r "$SSL_CERT_PATH" || ! -r "$SSL_CERT_KEY_PATH" ]]; then
+    echo "[nginx-compose-proxy] error: TLS certificate or key is not readable" >&2
+    echo "[nginx-compose-proxy] certificate: $SSL_CERT_PATH" >&2
+    echo "[nginx-compose-proxy] key: $SSL_CERT_KEY_PATH" >&2
+    exit 1
+  fi
 else
   TEMPLATE_PATH="$TEMPLATE_PATH_HTTP"
 fi

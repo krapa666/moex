@@ -16,9 +16,11 @@ SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 RESTORE_SYNC_SNAPSHOT="${MOEX_RESTORE_SYNC_SNAPSHOT:-auto}"
 PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.junnylab.ru}}"
 SERVER_NAMES="${MOEX_NGINX_SERVER_NAMES:-${PUBLIC_DOMAIN}}"
-SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
-SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
-FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
+SSL_CERT_NAME="${MOEX_SSL_CERT_NAME:-junnylab.ru-0002}"
+SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${SSL_CERT_NAME}/fullchain.pem}"
+SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${SSL_CERT_NAME}/privkey.pem}"
+FORCE_HTTPS="${MOEX_FORCE_HTTPS:-true}"
+TORRENT_SERVER_NAMES="${MOEX_TORRENT_SERVER_NAMES:-junibox junibox.junnylab.ru}"
 
 COMPOSE_PROJECT="${MOEX_COMPOSE_PROJECT:-moex}"
 BACKEND_BIND="${MOEX_BACKEND_BIND:-127.0.0.1}"
@@ -83,17 +85,29 @@ build_nginx_args() {
   local args=("--server-name" "${SERVER_NAMES}")
   local https_enabled=0
 
-  if [[ "${FORCE_HTTPS}" == "1" || "${FORCE_HTTPS,,}" == "true" || "${FORCE_HTTPS,,}" == "yes" ]]; then
-    https_enabled=1
-  elif cert_files_accessible; then
-    https_enabled=1
-  fi
+  case "${FORCE_HTTPS,,}" in
+    1|true|yes)
+      https_enabled=1
+      ;;
+    0|false|no)
+      https_enabled=0
+      ;;
+    auto|"")
+      if cert_files_accessible; then
+        https_enabled=1
+      fi
+      ;;
+    *)
+      echo "[compose-up] error: MOEX_FORCE_HTTPS must be true, false, or auto" >&2
+      return 1
+      ;;
+  esac
 
   if [[ "${https_enabled}" == "1" ]]; then
     args+=("--https" "--ssl-cert" "${SSL_CERT_PATH}" "--ssl-key" "${SSL_CERT_KEY_PATH}")
     echo "[compose-up] nginx HTTPS mode enabled for ${PUBLIC_DOMAIN}" >&2
   else
-    echo "[compose-up] nginx HTTP mode (certs are not accessible and MOEX_FORCE_HTTPS not enabled)" >&2
+    echo "[compose-up] nginx HTTP mode explicitly enabled" >&2
   fi
 
   printf '%s\n' "${args[@]}"
@@ -128,13 +142,32 @@ echo "[compose-up] public URL: https://${PUBLIC_DOMAIN}/"
 if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
   log_step "switching nginx reverse-proxy to compose mode"
   if [[ -w "/etc/nginx/conf.d" ]]; then
-    mapfile -t nginx_args < <(build_nginx_args)
-    ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
+    nginx_args_output="$(build_nginx_args)"
+    mapfile -t nginx_args <<< "${nginx_args_output}"
+    ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload
   elif command -v sudo >/dev/null 2>&1; then
-    mapfile -t nginx_args < <(build_nginx_args)
-    sudo ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload || true
+    nginx_args_output="$(build_nginx_args)"
+    mapfile -t nginx_args <<< "${nginx_args_output}"
+    sudo ./scripts/configure-nginx-compose-proxy.sh "${nginx_args[@]}" --reload
   else
     echo "[compose-up] warning: no permissions to reload nginx. Run manually:" >&2
     echo "  sudo ./scripts/configure-nginx-compose-proxy.sh --reload" >&2
+  fi
+fi
+
+if [[ -x "./scripts/configure-nginx-torrent-proxy.sh" ]]; then
+  log_step "configuring the separate junibox Transmission reverse-proxy"
+  torrent_args=(
+    "--server-name" "${TORRENT_SERVER_NAMES}"
+    "--ssl-cert" "${SSL_CERT_PATH}"
+    "--ssl-key" "${SSL_CERT_KEY_PATH}"
+    "--reload"
+  )
+  if [[ -w "/etc/nginx/conf.d" ]]; then
+    ./scripts/configure-nginx-torrent-proxy.sh "${torrent_args[@]}"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ./scripts/configure-nginx-torrent-proxy.sh "${torrent_args[@]}"
+  else
+    echo "[compose-up] warning: no permissions to configure the junibox Transmission proxy" >&2
   fi
 fi

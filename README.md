@@ -216,7 +216,17 @@ sudo ./scripts/configure-nginx-compose-proxy.sh \
 ```
 
 Боевой адрес приложения: `https://moex.junnylab.ru`. Если параметры не переданы явно,
-скрипты используют этот домен и сертификат `/etc/letsencrypt/live/moex.junnylab.ru/`.
+скрипты используют этот домен и wildcard-сертификат
+`/etc/letsencrypt/live/junnylab.ru-0002/`. HTTPS включён по умолчанию, чтобы запросы
+не попадали в чужой TLS-vhost при отсутствии отдельного сертификата поддомена.
+Для локального HTTP-запуска укажите `MOEX_FORCE_HTTPS=false`; режим автоматического
+определения сертификата включается через `MOEX_FORCE_HTTPS=auto`.
+
+Локальный Transmission публикуется отдельно от MOEX через
+`/etc/nginx/conf.d/junibox-torrent.conf`: `https://junibox/torrent/` и
+`https://junibox.junnylab.ru/torrent/` проксируются на `127.0.0.1:9091` только для
+локальных адресов. Отдельный server-блок не возвращает посторонний маршрут в
+`moex.junnylab.ru` и не связывает жизненный цикл Transmission с контейнерами MOEX.
 
 ## 10. Основные API
 
