@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/shell.css" />
     <link rel="stylesheet" href="/analytics/analytics.css" />
+    <link rel="stylesheet" href="/analytics/chart.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -72,6 +73,20 @@
         </article>
       </section>
 
+      <section class="analytics-panel analytics-chart-panel" data-analytics-chart-panel hidden aria-labelledby="analytics-chart-title">
+        <header class="analytics-panel-heading">
+          <div>
+            <span class="analytics-panel-kicker">Fair value</span>
+            <h2 id="analytics-chart-title">Динамика справедливой цены</h2>
+            <p>Каждая линия — отдельный аналитик. На графике только сохранённые ревизии прогноза, а не рыночная история цены.</p>
+          </div>
+        </header>
+        <div class="analytics-chart-body">
+          <div class="analytics-chart-legend" data-analytics-chart-legend aria-label="Аналитики"></div>
+          <div class="analytics-chart-wrap" data-analytics-chart></div>
+        </div>
+      </section>
+
       <section class="analytics-panel" aria-labelledby="analytics-history-title">
         <header class="analytics-panel-heading">
           <div>
@@ -88,6 +103,7 @@
         <div class="analytics-timeline" data-analytics-timeline hidden></div>
       </section>
     </main>
+    <script src="/analytics/chart.js"></script>
     <script src="/analytics/analytics.js"></script>
   </body>
 </html>
