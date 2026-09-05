@@ -64,3 +64,30 @@ def test_forecast_parser_prefers_ticker_specific_dividend_row() -> None:
     forecast = parse_forecast_csv("SBERP", "12345", content)
 
     assert forecast.dividends_per_share_rub == {"2026": 41.0, "2027": 45.0}
+
+
+def test_forecast_parser_uses_latest_revision_block_only() -> None:
+    content = """2 квартал 2026,,,,,
+\"Прогноз финансовых показателей, тыс. руб.\",,2026П,2027П,2028П,2029П
+Чистая прибыль,,1986448090,2157251823,2403912346,2704642949
+\"Дивиденд на акцию ао, руб.\",,43.76,47.52,52.95,59.58
+1 квартал 2026,,,,,
+\"Прогноз финансовых показателей, тыс. руб.\",,2026П,2027П,2028П,2029П
+Чистая прибыль,,1800000000,1900000000,2000000000,2100000000
+\"Дивиденд на акцию ао, руб.\",,40,42,44,46
+"""
+
+    forecast = parse_forecast_csv("SBER", "12345", content)
+
+    assert forecast.net_profit_billion_rub == {
+        "2026": 1986.44809,
+        "2027": 2157.251823,
+        "2028": 2403.912346,
+        "2029": 2704.642949,
+    }
+    assert forecast.dividends_per_share_rub == {
+        "2026": 43.76,
+        "2027": 47.52,
+        "2028": 52.95,
+        "2029": 59.58,
+    }
