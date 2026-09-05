@@ -77,6 +77,8 @@ test('merges the primary valuation table with volume monitoring by ticker', asyn
   await expect(page.locator('[data-watchlist-table]')).toBeVisible();
   await expect(page.locator('#watchlist-status')).toHaveText('Бумаги: 3 · объёмы: 2');
   await expect(page.locator('#watchlist-status')).toHaveAttribute('data-state', 'partial');
+  await expect(page.locator('#watchlist-search')).toBeEnabled();
+  await expect(page.locator('#watchlist-filter')).toBeEnabled();
 
   const sber = page.locator('[data-watchlist-ticker="SBER"]');
   await expect(sber).toContainText('320,45');
@@ -97,6 +99,42 @@ test('merges the primary valuation table with volume monitoring by ticker', asyn
   await expect(gazp).toContainText('-5,0 %');
   await expect(gazp).toContainText('7,1×');
   await expect(gazp).toContainText('Выше диапазона');
+});
+
+test('filters Watchlist locally by ticker, signal, and upside sign', async ({ page }) => {
+  await mockWatchlistApi(page);
+  await page.goto('/watchlist/');
+  await expect(page.locator('#watchlist-body > tr')).toHaveCount(3);
+
+  const visibleTickers = () => page.locator('#watchlist-body > tr:visible').evaluateAll(
+    (rows) => rows.map((row) => row.dataset.watchlistTicker),
+  );
+
+  await page.locator('#watchlist-search').fill('sbe');
+  await expect.poll(visibleTickers).toEqual(['SBER']);
+  await expect(page.locator('#watchlist-status')).toHaveText('Показано: 1 из 3 · объёмы: 2');
+
+  await page.locator('#watchlist-search').fill('');
+  await page.locator('#watchlist-filter').selectOption('signals');
+  await expect.poll(visibleTickers).toEqual(['SBER', 'GAZP']);
+  await expect(page.locator('#watchlist-status')).toHaveText('Показано: 2 из 3 · объёмы: 2');
+
+  await page.locator('#watchlist-filter').selectOption('positive');
+  await expect.poll(visibleTickers).toEqual(['SBER', 'LKOH']);
+
+  await page.locator('#watchlist-filter').selectOption('negative');
+  await expect.poll(visibleTickers).toEqual(['GAZP']);
+
+  await page.locator('#watchlist-search').fill('SBER');
+  await expect.poll(visibleTickers).toEqual([]);
+  await expect(page.locator('[data-watchlist-filter-empty]')).toBeVisible();
+  await expect(page.locator('#watchlist-status')).toHaveText('Показано: 0 из 3 · объёмы: 2');
+
+  await page.locator('#watchlist-search').fill('');
+  await page.locator('#watchlist-filter').selectOption('all');
+  await expect.poll(visibleTickers).toEqual(['SBER', 'LKOH', 'GAZP']);
+  await expect(page.locator('[data-watchlist-filter-empty]')).toBeHidden();
+  await expect(page.locator('#watchlist-status')).toHaveText('Бумаги: 3 · объёмы: 2');
 });
 
 test('keeps valuation rows usable when the volume API is unavailable', async ({ page }) => {
