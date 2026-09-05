@@ -2,8 +2,17 @@
   const body = document.getElementById('watchlist-body');
   const tableWrap = document.querySelector('[data-watchlist-table]');
   const empty = document.querySelector('[data-watchlist-empty]');
+  const filterEmpty = document.querySelector('[data-watchlist-filter-empty]');
   const status = document.getElementById('watchlist-status');
-  if (!body || !tableWrap || !empty || !status) return;
+  const searchInput = document.getElementById('watchlist-search');
+  const filterSelect = document.getElementById('watchlist-filter');
+  if (!body || !tableWrap || !empty || !filterEmpty || !status || !searchInput || !filterSelect) return;
+
+  const viewState = {
+    total: 0,
+    matchedVolumes: 0,
+    volumeAvailable: true,
+  };
 
   const priceFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
@@ -75,8 +84,15 @@
     return 'watchlist-value-muted';
   }
 
+  function setControlsEnabled(enabled) {
+    searchInput.disabled = !enabled;
+    filterSelect.disabled = !enabled;
+  }
+
   function showEmpty(title, message, state = 'empty') {
+    setControlsEnabled(false);
     tableWrap.hidden = true;
+    filterEmpty.hidden = true;
     body.innerHTML = '';
     empty.hidden = false;
     empty.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(message)}</span>`;
@@ -84,7 +100,46 @@
     status.dataset.state = state;
   }
 
-  function render(rows, volumeRows, primaryTable) {
+  function rowMatches(row) {
+    const query = searchInput.value.trim().toLocaleUpperCase('ru');
+    const ticker = row.dataset.watchlistTicker || '';
+    if (query && !ticker.includes(query)) return false;
+
+    const filter = filterSelect.value;
+    const signal = row.dataset.watchlistSignal || '';
+    const upsideRaw = row.dataset.watchlistUpside;
+    const upside = upsideRaw === '' || upsideRaw == null ? null : Number(upsideRaw);
+
+    if (filter === 'signals') return ['signal', 'above_range'].includes(signal);
+    if (filter === 'positive') return Number.isFinite(upside) && upside > 0;
+    if (filter === 'negative') return Number.isFinite(upside) && upside < 0;
+    return true;
+  }
+
+  function updateStatus(visibleCount) {
+    const filtered = visibleCount !== viewState.total || searchInput.value.trim() || filterSelect.value !== 'all';
+    const prefix = filtered ? `Показано: ${visibleCount} из ${viewState.total}` : `Бумаги: ${viewState.total}`;
+    status.textContent = viewState.volumeAvailable
+      ? `${prefix} · объёмы: ${viewState.matchedVolumes}`
+      : `${prefix} · объёмы недоступны`;
+    status.dataset.state = viewState.volumeAvailable && viewState.matchedVolumes === viewState.total
+      ? 'complete'
+      : 'partial';
+  }
+
+  function applyFilters() {
+    if (!viewState.total) return;
+    let visibleCount = 0;
+    [...body.querySelectorAll(':scope > tr')].forEach((row) => {
+      const matches = rowMatches(row);
+      row.hidden = !matches;
+      if (matches) visibleCount += 1;
+    });
+    filterEmpty.hidden = visibleCount !== 0;
+    updateStatus(visibleCount);
+  }
+
+  function render(rows, volumeRows, primaryTable, { volumeAvailable = true } = {}) {
     if (!rows.length) {
       showEmpty('Основная таблица оценок пуста', 'Добавьте бумаги в таблицу №1 — они появятся здесь автоматически.');
       return;
@@ -103,10 +158,11 @@
       const latest = volume?.latest || null;
       const ratio = latest?.ratio;
       const yieldPercent = dividendYield(row, year);
-      const signalStatus = latest?.signal_status;
+      const signalStatus = latest?.signal_status || '';
+      const upsideData = isFiniteValue(row.upside_percent_year1) ? String(Number(row.upside_percent_year1)) : '';
 
       return `
-        <tr data-watchlist-ticker="${escapeHtml(ticker)}">
+        <tr data-watchlist-ticker="${escapeHtml(ticker)}" data-watchlist-upside="${escapeHtml(upsideData)}" data-watchlist-signal="${escapeHtml(signalStatus)}">
           <td>
             <a class="watchlist-ticker-link" href="/?ticker=${encodeURIComponent(ticker)}">${escapeHtml(ticker || '—')}</a>
           </td>
@@ -124,10 +180,13 @@
       `;
     }).join('');
 
+    viewState.total = rows.length;
+    viewState.matchedVolumes = matchedVolumes;
+    viewState.volumeAvailable = volumeAvailable;
     empty.hidden = true;
     tableWrap.hidden = false;
-    status.textContent = `Бумаги: ${rows.length} · объёмы: ${matchedVolumes}`;
-    status.dataset.state = matchedVolumes === rows.length ? 'complete' : 'partial';
+    setControlsEnabled(true);
+    applyFilters();
   }
 
   async function load() {
@@ -152,16 +211,15 @@
         return;
       }
 
-      const volumeRows = volumesResult.status === 'fulfilled' ? volumesResult.value : [];
-      render(rowsResult.value, volumeRows, primaryTable);
-      if (volumesResult.status !== 'fulfilled') {
-        status.textContent = `Бумаги: ${rowsResult.value.length} · объёмы недоступны`;
-        status.dataset.state = 'partial';
-      }
+      const volumeAvailable = volumesResult.status === 'fulfilled';
+      const volumeRows = volumeAvailable ? volumesResult.value : [];
+      render(rowsResult.value, volumeRows, primaryTable, { volumeAvailable });
     } catch (_error) {
       showEmpty('Не удалось загрузить Watchlist', 'Проверьте доступность API и повторите загрузку страницы.', 'error');
     }
   }
 
+  searchInput.addEventListener('input', applyFilters);
+  filterSelect.addEventListener('change', applyFilters);
   load();
 })();
