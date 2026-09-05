@@ -140,7 +140,13 @@
 
 @media (max-width: 760px) {
   .watchlist-score-breakdown {
+    position: fixed;
+    z-index: 60;
+    top: 50%;
     right: auto;
-    left: 0;
+    left: 50%;
+    box-sizing: border-box;
+    width: min(330px, calc(100vw - 24px));
+    transform: translate(-50%, -50%);
   }
 }
