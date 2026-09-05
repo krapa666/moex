@@ -105,6 +105,48 @@
   color: #b91c1c;
 }
 
+.watchlist-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.watchlist-controls input,
+.watchlist-controls select {
+  min-height: 34px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 11px;
+}
+
+.watchlist-controls input {
+  width: min(240px, 100%);
+  padding: 0 10px;
+}
+
+.watchlist-controls select {
+  min-width: 190px;
+  padding: 0 28px 0 9px;
+}
+
+.watchlist-controls input:focus,
+.watchlist-controls select:focus {
+  border-color: #93b4f7;
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.watchlist-controls input:disabled,
+.watchlist-controls select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .watchlist-empty {
   display: grid;
   min-height: 230px;
@@ -116,6 +158,7 @@
 }
 
 .watchlist-empty[hidden],
+.watchlist-filter-empty[hidden],
 .watchlist-table-wrap[hidden] {
   display: none;
 }
@@ -128,6 +171,17 @@
 .watchlist-empty span {
   max-width: 540px;
   color: #94a3b8;
+}
+
+.watchlist-filter-empty {
+  margin-top: 10px;
+  padding: 14px 12px;
+  border: 1px dashed #dbe3ee;
+  border-radius: 9px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 11px;
+  text-align: center;
 }
 
 .watchlist-table-wrap {
@@ -253,6 +307,19 @@
   border-color: #263449;
 }
 
+[data-theme="dark"] .watchlist-controls input,
+[data-theme="dark"] .watchlist-controls select {
+  border-color: #34445d;
+  background: #162338;
+  color: #e7edf7;
+}
+
+[data-theme="dark"] .watchlist-filter-empty {
+  border-color: #34445d;
+  background: #162338;
+  color: #8fa0b8;
+}
+
 [data-theme="dark"] .watchlist-table tbody tr:hover {
   background: #162338;
 }
@@ -316,5 +383,16 @@
 
   .watchlist-status {
     white-space: normal;
+  }
+
+  .watchlist-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .watchlist-controls input,
+  .watchlist-controls select {
+    width: 100%;
+    min-width: 0;
   }
 }
