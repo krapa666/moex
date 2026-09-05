@@ -16,9 +16,24 @@ async function mockDashboardApi(page) {
     if (url.pathname === '/api/rows' && url.searchParams.get('table_id') === '7') {
       await route.fulfill({
         json: [
-          { ticker: 'SBER', upside_percent_year1: 20 },
-          { ticker: 'LKOH', upside_percent_year1: 40 },
-          { ticker: 'GAZP', upside_percent_year1: null },
+          {
+            ticker: 'SBER',
+            current_price: 320.45,
+            forecast_price_year1: 384.54,
+            upside_percent_year1: 20,
+          },
+          {
+            ticker: 'LKOH',
+            current_price: 6000,
+            forecast_price_year1: 8400,
+            upside_percent_year1: 40,
+          },
+          {
+            ticker: 'GAZP',
+            current_price: 124.8,
+            forecast_price_year1: null,
+            upside_percent_year1: null,
+          },
         ],
       });
       return;
@@ -26,9 +41,26 @@ async function mockDashboardApi(page) {
     if (url.pathname === '/api/volume/overview') {
       await route.fulfill({
         json: [
-          { ticker: 'SBER', latest: { signal_status: 'signal' } },
-          { ticker: 'LKOH', latest: { signal_status: 'normal' } },
-          { ticker: 'GAZP', latest: { signal_status: 'signal' } },
+          {
+            ticker: 'SBER',
+            short_name: 'Сбербанк',
+            latest: { trade_date: '2026-09-04', ratio: 4.4, signal_status: 'signal' },
+          },
+          {
+            ticker: 'LKOH',
+            short_name: 'ЛУКОЙЛ',
+            latest: { trade_date: '2026-09-04', ratio: 7.1, signal_status: 'above_range' },
+          },
+          {
+            ticker: 'GAZP',
+            short_name: 'Газпром',
+            latest: { trade_date: '2026-09-04', ratio: 5.8, signal_status: 'signal' },
+          },
+          {
+            ticker: 'ROSN',
+            short_name: 'Роснефть',
+            latest: { trade_date: '2026-09-04', ratio: 1.2, signal_status: 'normal' },
+          },
         ],
       });
       return;
@@ -67,6 +99,32 @@ test('loads valuation and volume KPI aggregates from existing APIs', async ({ pa
   await expect(page.locator('[data-dashboard-kpi="median-upside"]')).toHaveText('30,0 %');
   await expect(page.locator('[data-dashboard-kpi="volume-signals"]')).toHaveText('2');
   await expect(page.locator('[data-dashboard-kpi="last-volume-run"]')).toContainText('05.09');
+});
+
+test('ranks valuation opportunities and anomalous volumes from the same API data', async ({ page }) => {
+  await mockDashboardApi(page);
+  await page.goto('/dashboard/');
+
+  const opportunities = page.locator('[data-dashboard-list="opportunities"]');
+  await expect(opportunities).toBeVisible();
+  await expect(page.locator('[data-dashboard-empty="opportunities"]')).toBeHidden();
+  await expect(opportunities.locator('.dashboard-list-row')).toHaveCount(2);
+  await expect.poll(() => opportunities.locator('.dashboard-list-row').evaluateAll(
+    (rows) => rows.map((row) => row.dataset.dashboardOpportunity),
+  )).toEqual(['LKOH', 'SBER']);
+  await expect(opportunities.locator('.dashboard-list-row').first()).toContainText('40,0 %');
+  await expect(opportunities.locator('.dashboard-list-row').first()).toContainText('8 400 ₽');
+
+  const volumes = page.locator('[data-dashboard-list="volumes"]');
+  await expect(volumes).toBeVisible();
+  await expect(page.locator('[data-dashboard-empty="volumes"]')).toBeHidden();
+  await expect(volumes.locator('.dashboard-list-row')).toHaveCount(3);
+  await expect.poll(() => volumes.locator('.dashboard-list-row').evaluateAll(
+    (rows) => rows.map((row) => row.dataset.dashboardVolume),
+  )).toEqual(['LKOH', 'GAZP', 'SBER']);
+  await expect(volumes.locator('.dashboard-list-row').first()).toContainText('7,1×');
+  await expect(volumes.locator('.dashboard-list-row').first()).toContainText('Выше диапазона');
+  await expect(volumes).not.toContainText('ROSN');
 });
 
 test('adds the dashboard entry to forecast and volume navigation', async ({ page }) => {
