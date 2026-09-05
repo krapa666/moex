@@ -62,15 +62,34 @@
           <div>
             <span class="watchlist-panel-kicker">Рабочий список</span>
             <h2 id="watchlist-title">Отслеживаемые бумаги</h2>
-            <p>На следующем этапе сюда будут объединены данные основной таблицы оценок и мониторинга объёмов.</p>
+            <p>Основная таблица оценок объединена с последним доступным мониторингом торговых объёмов.</p>
           </div>
+          <span class="watchlist-status" id="watchlist-status" role="status" aria-live="polite">Загрузка…</span>
         </header>
 
         <div class="watchlist-empty" data-watchlist-empty>
-          <strong>Watchlist готов к подключению данных</strong>
-          <span>Следующая итерация добавит строки бумаг, сортировку и основные инвестиционные показатели без нового backend API.</span>
+          <strong>Загрузка Watchlist…</strong>
+          <span>Получаем основную таблицу оценок и последние данные мониторинга объёмов.</span>
+        </div>
+
+        <div class="watchlist-table-wrap" data-watchlist-table hidden>
+          <table class="watchlist-table">
+            <thead>
+              <tr>
+                <th>Тикер</th>
+                <th>Текущая, ₽</th>
+                <th>Fair value, ₽</th>
+                <th>Полная доходность, %</th>
+                <th>Див. доходность, %</th>
+                <th>Объём</th>
+                <th>Сигнал</th>
+              </tr>
+            </thead>
+            <tbody id="watchlist-body"></tbody>
+          </table>
         </div>
       </section>
     </main>
+    <script src="/watchlist/watchlist.js"></script>
   </body>
 </html>
