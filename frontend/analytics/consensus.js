@@ -152,7 +152,10 @@
       .map((target) => `
         <div class="analytics-consensus-target" data-consensus-target="${target.tableId}">
           <span>${escapeHtml(target.analystName)} · таблица ${target.tableNumber}</span>
-          <strong>${escapeHtml(formatPrice(target.value))}</strong>
+          <div class="analytics-consensus-target-values">
+            <strong>${escapeHtml(formatPrice(target.value))}</strong>
+            <small class="analytics-consensus-target-return ${returnClass(target.totalReturn)}" data-consensus-target-return="${target.tableId}">${escapeHtml(formatSignedPercent(target.totalReturn))}</small>
+          </div>
         </div>
       `).join('');
 
