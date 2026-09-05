@@ -43,9 +43,10 @@
       url.searchParams.delete('ticker');
     }
     const nextUrl = `${url.pathname}${url.search}${url.hash}`;
-    const nextState = ticker
-      ? { ...(window.history.state || {}), moexTickerView: 'forecast' }
-      : { ...(window.history.state || {}), moexTickerView: null };
+    const nextState = {
+      ...(window.history.state || {}),
+      moexTickerView: mode === 'push' && ticker ? 'forecast' : null,
+    };
     if (mode === 'push') {
       window.history.pushState(nextState, '', nextUrl);
     } else {
