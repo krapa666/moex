@@ -200,6 +200,15 @@ input[readonly] {
   display: none;
 }
 
+/* Local editors need direct bulk entry for dividend forecasts. The same columns stay
+   hidden for guest/read-only sessions because local-only controls are hidden there. */
+body:has(#refresh-prices-btn:not([hidden])) .forecast-table-compact #header-dividends-year1,
+body:has(#refresh-prices-btn:not([hidden])) .forecast-table-compact #header-dividends-year2,
+body:has(#refresh-prices-btn:not([hidden])) .forecast-table-compact tbody tr > td:nth-child(8),
+body:has(#refresh-prices-btn:not([hidden])) .forecast-table-compact tbody tr > td:nth-child(13) {
+  display: table-cell;
+}
+
 .forecast-table-compact tbody tr:not(.comparison-inline-row) > td:nth-child(17) .source-note {
   display: none;
 }

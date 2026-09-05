@@ -50,13 +50,18 @@ const rows = [
   },
 ];
 
-async function mockApi(page) {
+async function mockApi(page, { isAdmin = true } = {}) {
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
 
     if (request.method() === 'GET' && url.pathname === '/api/auth/me') {
-      await route.fulfill({ json: { username: 'test-admin', is_admin: true } });
+      await route.fulfill({
+        json: {
+          username: isAdmin ? 'test-admin' : 'guest',
+          is_admin: isAdmin,
+        },
+      });
       return;
     }
     if (request.method() === 'GET' && url.pathname === '/api/tables') {
@@ -86,27 +91,54 @@ async function mockApi(page) {
   });
 }
 
-async function openTable(page) {
-  await mockApi(page);
+async function openTable(page, options = {}) {
+  await mockApi(page, options);
   await page.goto('/');
   await expect(page.locator('#rows-table-body > tr')).toHaveCount(2);
 }
 
-test('renders a compact forecast while preserving the full 17-cell data model', async ({ page }) => {
+test('shows direct dividend forecast inputs for local editors', async ({ page }) => {
   await openTable(page);
 
   await expect(page.locator('#header-year1-group')).toHaveText('2026');
   await expect(page.locator('#header-year2-group')).toHaveText('2027');
+  await expect(page.locator('#header-dividends-year1')).toBeVisible();
+  await expect(page.locator('#header-dividends-year2')).toBeVisible();
+
+  const firstRow = page.locator('#rows-table-body > tr').first();
+  await expect(firstRow.locator('td')).toHaveCount(17);
+  await expect(firstRow.locator('td:visible')).toHaveCount(15);
+  await expect(firstRow.locator('input[data-field="dividends_year1"]')).toBeVisible();
+  await expect(firstRow.locator('input[data-field="dividends_year2"]')).toBeVisible();
+  await expect(page.locator('[data-cell="dividend_yield_year1"]').first()).toHaveText('10,9 %');
+  await expect(page.locator('[data-cell="dividend_yield_year2"]').first()).toHaveText('13,1 %');
+  await expect(page.locator('[data-cell="upside_year1"]').first()).toHaveText('72 %');
+  await expect(page.locator('[data-cell="upside_year2"]').first()).toHaveText('112 %');
+});
+
+test('keeps dividend forecast columns hidden for guest sessions', async ({ page }) => {
+  await openTable(page, { isAdmin: false });
+
+  await expect(page.locator('#auth-user-label')).toHaveText('Гость · только чтение');
   await expect(page.locator('#header-dividends-year1')).toBeHidden();
   await expect(page.locator('#header-dividends-year2')).toBeHidden();
 
   const firstRow = page.locator('#rows-table-body > tr').first();
   await expect(firstRow.locator('td')).toHaveCount(17);
   await expect(firstRow.locator('td:visible')).toHaveCount(13);
-  await expect(page.locator('[data-cell="dividend_yield_year1"]').first()).toHaveText('10,9 %');
-  await expect(page.locator('[data-cell="dividend_yield_year2"]').first()).toHaveText('13,1 %');
-  await expect(page.locator('[data-cell="upside_year1"]').first()).toHaveText('72 %');
-  await expect(page.locator('[data-cell="upside_year2"]').first()).toHaveText('112 %');
+  await expect(firstRow.locator('input[data-field="dividends_year1"]')).toBeHidden();
+  await expect(firstRow.locator('input[data-field="dividends_year2"]')).toBeHidden();
+});
+
+test('edits and autosaves dividend forecasts directly from the local table', async ({ page }) => {
+  await openTable(page);
+
+  const firstRow = page.locator('#rows-table-body > tr').first();
+  const dividendInput = firstRow.locator('input[data-field="dividends_year1"]');
+  await dividendInput.fill('40');
+  await expect(firstRow.locator('[data-cell="dividend_yield_year1"]')).toHaveText('12,5 %');
+  await dividendInput.blur();
+  await expect(firstRow.locator('[data-cell="row_save_status"]')).toHaveText('Сохранено');
 });
 
 test('opens stock details and edits secondary fields from the drawer', async ({ page }) => {
