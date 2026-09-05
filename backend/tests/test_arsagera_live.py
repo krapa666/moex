@@ -1,15 +1,19 @@
 import pytest
-from app.arsagera_source import ArsageraClient
+from app.arsagera_source import ARSAGERA_BASE_URL, ArsageraClient
 
 
 @pytest.mark.asyncio
-async def test_live_arsagera_sber_smoke() -> None:
+async def test_live_arsagera_sber_diagnostics() -> None:
     client = ArsageraClient(timeout_seconds=30.0)
-    mapping, errors = await client.fetch_catalog_mapping(["SBER"])
-    assert not errors, errors
-    assert mapping == {"SBER": "1342158761"}
-
-    forecast = await client.fetch_forecast("SBER", mapping["SBER"])
-    assert forecast.net_profit_billion_rub, forecast
-    assert forecast.dividends_per_share_rub, forecast
-    print("ARSAGERA_LIVE", forecast)
+    gid = "1342158761"
+    content = await client._get_text(
+        f"{ARSAGERA_BASE_URL}/pub?gid={gid}&single=true&output=csv"
+    )
+    lines = content.splitlines()
+    for index, line in enumerate(lines):
+        lower = line.lower()
+        if "чист" in lower or "дивид" in lower:
+            start = max(0, index - 3)
+            end = min(len(lines), index + 4)
+            print("ARSAGERA_CSV_DIAG", index, " || ".join(lines[start:end]))
+    assert False, "diagnostic run"
