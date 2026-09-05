@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>История прогнозов — MOEX Analytics</title>
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/shell.css" />
+    <link rel="stylesheet" href="/analytics/analytics.css" />
+    <link rel="stylesheet" href="/theme.css" />
+  </head>
+  <body>
+    <nav class="app-nav" aria-label="Основная навигация">
+      <div class="app-nav-inner">
+        <a class="app-brand" href="/" aria-label="MOEX Analytics — главная">MOEX Analytics</a>
+        <div class="app-nav-links">
+          <a class="app-nav-link" href="/dashboard/">Обзор</a>
+          <a class="app-nav-link" href="/">Оценки</a>
+          <a class="app-nav-link" href="/watchlist/">Watchlist</a>
+          <a class="app-nav-link active" href="/analytics/" aria-current="page">Аналитика</a>
+          <a class="app-nav-link" href="/volumes/">Объёмы</a>
+        </div>
+        <div class="app-nav-status">
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Переключить тему">☾</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="page analytics-page">
+      <header class="page-header">
+        <div class="page-heading">
+          <span class="eyebrow">История решений</span>
+          <h1>История прогнозов</h1>
+          <p class="subtitle">Как менялись прогнозы прибыли, fair value и ожидаемая полная доходность по каждой бумаге.</p>
+        </div>
+      </header>
+
+      <section class="analytics-controls" aria-label="Параметры истории прогнозов">
+        <form id="analytics-history-form">
+          <label>
+            <span>Тикер</span>
+            <input id="analytics-ticker" type="search" maxlength="32" placeholder="SBER" autocomplete="off" required />
+          </label>
+          <label>
+            <span>Аналитик</span>
+            <select id="analytics-table">
+              <option value="">Все аналитики</option>
+            </select>
+          </label>
+          <button class="btn btn-primary" type="submit">Показать историю</button>
+        </form>
+        <span class="analytics-status" id="analytics-status" role="status" aria-live="polite">Введите тикер</span>
+      </section>
+
+      <section class="analytics-summary" data-analytics-summary hidden aria-label="Сводка истории">
+        <article>
+          <span>Ревизий</span>
+          <strong data-analytics-kpi="revisions">—</strong>
+        </article>
+        <article>
+          <span>Аналитиков</span>
+          <strong data-analytics-kpi="analysts">—</strong>
+        </article>
+        <article>
+          <span>Последнее изменение</span>
+          <strong class="analytics-kpi-date" data-analytics-kpi="last-change">—</strong>
+        </article>
+        <article>
+          <span>Последняя fair value</span>
+          <strong data-analytics-kpi="latest-fair">—</strong>
+        </article>
+      </section>
+
+      <section class="analytics-panel" aria-labelledby="analytics-history-title">
+        <header class="analytics-panel-heading">
+          <div>
+            <span class="analytics-panel-kicker">Forecast revisions</span>
+            <h2 id="analytics-history-title">Хронология</h2>
+            <p>Новейшие изменения сверху. Рыночные обновления цены без изменения прогноза сюда не попадают.</p>
+          </div>
+        </header>
+
+        <div class="analytics-empty" data-analytics-empty>
+          <strong>История ещё не выбрана</strong>
+          <span>Введите тикер, чтобы увидеть сохранённые ревизии прогноза.</span>
+        </div>
+        <div class="analytics-timeline" data-analytics-timeline hidden></div>
+      </section>
+    </main>
+    <script src="/analytics/analytics.js"></script>
+  </body>
+</html>
