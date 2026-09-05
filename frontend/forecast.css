@@ -1,0 +1,181 @@
+body {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.card {
+  border-color: #dbe3ee;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.055);
+}
+
+.table-wrap {
+  border-radius: 12px;
+}
+
+table {
+  background: #eef2f7;
+}
+
+th,
+td {
+  padding: 5px 4px;
+  border-top-color: #e7edf4;
+  border-bottom-color: #e7edf4;
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+tbody td {
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+}
+
+tbody tr td {
+  box-shadow: none;
+  transition: background-color 100ms ease, border-color 100ms ease;
+}
+
+tbody tr:hover td {
+  background: #f5f9ff;
+  border-top-color: #dbeafe;
+  border-bottom-color: #dbeafe;
+}
+
+thead th {
+  color: #475569;
+  background: #f8fafc;
+  box-shadow: 0 1px 0 #dbe3ee;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.year-group-row th {
+  height: 32px;
+}
+
+.year-columns-row th {
+  color: #64748b;
+  background: #fbfcfe;
+  font-weight: 650;
+}
+
+.forecast-year-group {
+  border-left: 1px solid #c7d2fe;
+  border-right: 1px solid #c7d2fe;
+  background: #f1f5ff;
+  color: #3346a8;
+  font-size: 12px;
+  letter-spacing: 0.025em;
+}
+
+.sticky-col-2 {
+  border-right: 1px solid #dbe3ee;
+}
+
+.th-sort {
+  font-weight: 700;
+}
+
+input {
+  min-height: 27px;
+  border-color: #dbe3ee;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 11.5px;
+}
+
+input:hover:not([readonly]) {
+  border-color: #cbd5e1;
+}
+
+input:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.16);
+  outline-offset: 0;
+  border-color: #60a5fa;
+}
+
+input[readonly] {
+  border-color: transparent;
+  background: transparent;
+}
+
+.ticker-input {
+  font-weight: 750;
+  letter-spacing: 0.015em;
+}
+
+.readonly-cell {
+  background: #fbfcfe;
+  color: #334155;
+  font-weight: 600;
+}
+
+.upside-up,
+.upside-up-strong,
+.upside-down,
+.upside-flat {
+  box-shadow: none;
+}
+
+.upside-up {
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+  font-weight: 750;
+}
+
+.upside-up-strong {
+  background: rgba(16, 185, 129, 0.13);
+  color: #065f46;
+  font-weight: 800;
+}
+
+.upside-down {
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
+  font-weight: 750;
+}
+
+.upside-flat {
+  background: transparent;
+  color: #64748b;
+  font-weight: 650;
+}
+
+.btn-note {
+  border-color: #dbe3ee;
+  background: #ffffff;
+  color: #475569;
+}
+
+.btn-note:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.source-note {
+  color: #64748b;
+  line-height: 1.25;
+}
+
+.row-save-status {
+  color: #94a3b8;
+}
+
+.comparison-inline-row td {
+  background: #ffffff;
+}
+
+.ticker-compare-highlight td {
+  background: #fff9e8;
+  border-top-color: #f6d88a;
+  border-bottom-color: #f6d88a;
+  box-shadow: none;
+}
+
+.consensus-row td {
+  background: #f0f9ff;
+  border-top-color: #bae6fd;
+  border-bottom-color: #bae6fd;
+}
