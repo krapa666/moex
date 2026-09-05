@@ -67,6 +67,20 @@ async function mockApi(page) {
       await route.fulfill({ json: rows });
       return;
     }
+    if (request.method() === 'PUT' && /^\/api\/rows\/\d+$/.test(url.pathname)) {
+      const id = Number(url.pathname.split('/').at(-1));
+      const original = rows.find((row) => row.id === id);
+      const body = request.postDataJSON();
+      await route.fulfill({
+        json: {
+          ...original,
+          ...body,
+          net_profit_year_map: body.net_profit_year_map || original.net_profit_year_map,
+          dividend_year_map: body.dividend_year_map || original.dividend_year_map,
+        },
+      });
+      return;
+    }
 
     await route.fulfill({ status: 404, json: { detail: 'Unexpected test request' } });
   });
@@ -78,24 +92,24 @@ async function openTable(page) {
   await expect(page.locator('#rows-table-body > tr')).toHaveCount(2);
 }
 
-test('renders the two-year forecast as a 17-column row with dividend yields', async ({ page }) => {
+test('renders a compact forecast while preserving the full 17-cell data model', async ({ page }) => {
   await openTable(page);
 
   await expect(page.locator('#header-year1-group')).toHaveText('2026');
   await expect(page.locator('#header-year2-group')).toHaveText('2027');
-  await expect(page.locator('#header-dividends-year1')).toHaveText('Дивиденды, ₽/акц.');
-  await expect(page.locator('#header-dividends-year2')).toHaveText('Дивиденды, ₽/акц.');
-  await expect(page.locator('#rows-table-body > tr').first().locator('td')).toHaveCount(17);
+  await expect(page.locator('#header-dividends-year1')).toBeHidden();
+  await expect(page.locator('#header-dividends-year2')).toBeHidden();
+
+  const firstRow = page.locator('#rows-table-body > tr').first();
+  await expect(firstRow.locator('td')).toHaveCount(17);
+  await expect(firstRow.locator('td:visible')).toHaveCount(13);
   await expect(page.locator('[data-cell="dividend_yield_year1"]').first()).toHaveText('10,9 %');
   await expect(page.locator('[data-cell="dividend_yield_year2"]').first()).toHaveText('13,1 %');
   await expect(page.locator('[data-cell="upside_year1"]').first()).toHaveText('72 %');
   await expect(page.locator('[data-cell="upside_year2"]').first()).toHaveText('112 %');
-
-  await page.locator('input[data-field="dividends_year1"]').first().fill('64.09');
-  await expect(page.locator('[data-cell="dividend_yield_year1"]').first()).toHaveText('20,0 %');
 });
 
-test('opens a focused stock detail drawer from a forecast row', async ({ page }) => {
+test('opens stock details and edits secondary fields from the drawer', async ({ page }) => {
   await openTable(page);
 
   const firstRow = page.locator('#rows-table-body > tr').first();
@@ -107,9 +121,16 @@ test('opens a focused stock detail drawer from a forecast row', async ({ page })
   await expect(drawer).toBeVisible();
   await expect(drawer.locator('[data-detail="ticker"]')).toHaveText('SBER');
   await expect(drawer.locator('[data-detail="current_price"]')).toHaveText('320,45 ₽');
+  await expect(drawer.locator('[data-detail="shares"]')).toHaveValue('21.586');
   await expect(drawer.locator('[data-detail="year1"]')).toHaveText('2026');
   await expect(drawer.locator('[data-detail="price1"]')).toHaveText('516,99 ₽');
+  await expect(drawer.locator('[data-detail="dividends1"]')).toHaveValue('35');
   await expect(drawer.locator('[data-detail="source"]')).toContainText('Тестовая строка');
+
+  await drawer.locator('[data-detail="dividends1"]').fill('64.09');
+  await expect(drawer.locator('[data-detail="dividends1"]')).toHaveValue('64.09');
+  await expect(drawer.locator('[data-detail="dividend_yield1"]')).toHaveText('20,0 %');
+  await expect(firstRow.locator('[data-cell="dividend_yield_year1"]')).toHaveText('20,0 %');
 
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
@@ -164,14 +185,15 @@ for (const viewport of [
   });
 }
 
-test('centers column labels while keeping numeric inputs right-aligned', async ({ page }) => {
+test('centers visible column labels while keeping numeric inputs right-aligned', async ({ page }) => {
   await openTable(page);
 
-  const headerAlignments = await page.locator('thead th').evaluateAll((headers) =>
+  const headerAlignments = await page.locator('thead th:visible').evaluateAll((headers) =>
     [...new Set(headers.map((header) => getComputedStyle(header).textAlign))],
   );
   expect(headerAlignments).toEqual(['center']);
 
-  await expect(page.locator('input[data-field="shares_billion"]').first()).toHaveCSS('text-align', 'right');
   await expect(page.locator('input[data-field="forecast_profit_year1_billion_rub"]').first()).toHaveCSS('text-align', 'right');
+  await page.locator('#rows-table-body > tr').first().getByRole('button', { name: 'Подробнее' }).click();
+  await expect(page.locator('[data-detail="shares"]')).toHaveCSS('text-align', 'right');
 });
