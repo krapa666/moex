@@ -17,14 +17,14 @@ async function mockWatchlistApi(page) {
             ticker: 'SBER',
             current_price: 320.45,
             forecast_price_year1: 384.54,
-            upside_percent_year1: 20,
+            upside_percent_year1: 30.9,
             dividend_year_map: { 2026: 35 },
           },
           {
             ticker: 'LKOH',
             current_price: 6000,
             forecast_price_year1: 8400,
-            upside_percent_year1: 40,
+            upside_percent_year1: 55,
             dividend_year_map: { 2026: 900 },
           },
           {
@@ -73,7 +73,7 @@ test('calculates a transparent 0-100 priority score from existing Watchlist fact
   await expect(sberScore).toHaveAttribute('open', '');
   await expect(sberScore.locator('.watchlist-score-breakdown')).toContainText('Цена · 20,0 %');
   await expect(sberScore.locator('.watchlist-score-breakdown')).toContainText('+20,0 / 60');
-  await expect(sberScore.locator('.watchlist-score-breakdown')).toContainText('Дивиденды · 10,9 %');
+  await expect(sberScore.locator('.watchlist-score-breakdown')).toContainText('Ост. дивиденды · 10,9 %');
   await expect(sberScore.locator('.watchlist-score-breakdown')).toContainText('+18,2 / 25');
   await expect(sberScore.locator('.watchlist-score-breakdown')).toContainText('Объём · Сигнал');
   await expect(sberScore.locator('.watchlist-score-breakdown')).toContainText('+15,0 / 15');
