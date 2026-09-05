@@ -84,7 +84,7 @@ spec:
             - name: VOLUME_SMTP_FROM
               value: ""
             - name: VOLUME_PUBLIC_BASE_URL
-              value: ""
+              value: https://moex.junnylab.ru
             - name: VOLUME_SMTP_USERNAME
               valueFrom:
                 secretKeyRef:

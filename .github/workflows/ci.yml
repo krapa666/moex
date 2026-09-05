@@ -41,7 +41,10 @@ jobs:
       - name: Check shell scripts
         run: bash -n scripts/*.sh
       - name: Validate Compose file
-        run: docker compose config --quiet
+        run: |
+          docker compose config --quiet
+          services="$(docker compose config --services | sort | paste -sd ' ' -)"
+          test "$services" = "backend db frontend pgbackup volume-worker"
         env:
           POSTGRES_PASSWORD: ci-compose-validation-only
 

@@ -14,8 +14,8 @@ require_cmd docker
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 RESTORE_SYNC_SNAPSHOT="${MOEX_RESTORE_SYNC_SNAPSHOT:-auto}"
-PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.ddns.net}}"
-SERVER_NAMES="${MOEX_NGINX_SERVER_NAMES:-${PUBLIC_DOMAIN} junibox _}"
+PUBLIC_DOMAIN="${MOEX_PUBLIC_DOMAIN:-${MOEX_SERVER_NAME:-moex.junnylab.ru}}"
+SERVER_NAMES="${MOEX_NGINX_SERVER_NAMES:-${PUBLIC_DOMAIN}}"
 SSL_CERT_PATH="${MOEX_SSL_CERT_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem}"
 SSL_CERT_KEY_PATH="${MOEX_SSL_CERT_KEY_PATH:-/etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem}"
 FORCE_HTTPS="${MOEX_FORCE_HTTPS:-}"
@@ -25,10 +25,6 @@ BACKEND_BIND="${MOEX_BACKEND_BIND:-127.0.0.1}"
 BACKEND_PORT="${MOEX_BACKEND_PORT:-18000}"
 FRONTEND_BIND="${MOEX_FRONTEND_BIND:-127.0.0.1}"
 FRONTEND_PORT="${MOEX_FRONTEND_PORT:-8080}"
-OBSERVABILITY_BIND="${MOEX_OBSERVABILITY_BIND:-127.0.0.1}"
-PROMETHEUS_PORT="${MOEX_PROMETHEUS_PORT:-9090}"
-GRAFANA_PORT="${MOEX_GRAFANA_PORT:-3000}"
-LOKI_PORT="${MOEX_LOKI_PORT:-3100}"
 
 STEP=0
 log_step() {
@@ -121,15 +117,13 @@ done
 log_step "restoring shared DB snapshot only when safe"
 import_snapshot_into_compose_db
 log_step "starting docker compose application stack"
-docker compose up -d --build "$@"
+docker compose up -d --build --remove-orphans "$@"
 
 log_step "compose mode is up"
 echo "[compose-up] compose project: ${COMPOSE_PROJECT}"
 echo "[compose-up] frontend loopback endpoint: http://${FRONTEND_BIND}:${FRONTEND_PORT}/"
 echo "[compose-up] backend loopback endpoint: http://${BACKEND_BIND}:${BACKEND_PORT}/"
-echo "[compose-up] prometheus (local-only by default): http://${OBSERVABILITY_BIND}:${PROMETHEUS_PORT}/prometheus/"
-echo "[compose-up] grafana (local-only by default): http://${OBSERVABILITY_BIND}:${GRAFANA_PORT}/grafana/"
-echo "[compose-up] loki (local-only by default): http://${OBSERVABILITY_BIND}:${LOKI_PORT}/loki/"
+echo "[compose-up] public URL: https://${PUBLIC_DOMAIN}/"
 
 if [[ -x "./scripts/configure-nginx-compose-proxy.sh" ]]; then
   log_step "switching nginx reverse-proxy to compose mode"
