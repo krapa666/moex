@@ -6,6 +6,8 @@
   const detail = (name) => overlay.querySelector(`[data-detail="${name}"]`);
   const closeTargets = overlay.querySelectorAll('[data-detail-close]');
   const detailInputs = overlay.querySelectorAll('[data-detail-input]');
+  const requestedTicker = new URLSearchParams(window.location.search).get('ticker')?.trim() || '';
+  let deepLinkHandled = !requestedTicker;
   let lastTrigger = null;
   let activeRow = null;
 
@@ -27,6 +29,16 @@
 
   const text = (row, selector) => row.querySelector(selector)?.textContent?.trim() || '—';
   const value = (row, selector) => row.querySelector(selector)?.value?.trim() || '—';
+
+  function setTickerQuery(ticker) {
+    const url = new URL(window.location.href);
+    if (ticker && ticker !== '—') {
+      url.searchParams.set('ticker', ticker);
+    } else {
+      url.searchParams.delete('ticker');
+    }
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }
 
   function setDetail(name, nextValue) {
     const element = detail(name);
@@ -56,6 +68,7 @@
     const year1 = document.getElementById('header-year1-group')?.textContent?.trim() || 'Год 1';
     const year2 = document.getElementById('header-year2-group')?.textContent?.trim() || 'Год 2';
 
+    setTickerQuery(ticker);
     setDetail('ticker', ticker);
     setDetail('subtitle', `${text(row, '[data-cell="current_price"]')} · обновлено ${text(row, '[data-cell="price_updated_at"]')}`);
     setDetail('current_price', text(row, '[data-cell="current_price"]'));
@@ -99,9 +112,22 @@
     overlay.hidden = true;
     overlay.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('security-detail-open');
+    setTickerQuery('');
     activeRow = null;
     lastTrigger?.focus();
     lastTrigger = null;
+  }
+
+  function openRequestedTicker() {
+    if (deepLinkHandled) return;
+    const normalizedTicker = requestedTicker.toLocaleUpperCase('ru');
+    const targetRow = [...tbody.querySelectorAll(':scope > tr:not(.comparison-inline-row)')]
+      .find((row) => value(row, 'input[data-field="ticker"]').toLocaleUpperCase('ru') === normalizedTicker);
+    const button = targetRow?.querySelector('[data-action="details"]');
+    if (!targetRow || !button) return;
+
+    deepLinkHandled = true;
+    openDetails(targetRow, button);
   }
 
   function attachButtons() {
@@ -121,6 +147,7 @@
       });
       actionCell.prepend(button);
     });
+    openRequestedTicker();
   }
 
   detailInputs.forEach((drawerInput) => {
