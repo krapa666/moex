@@ -1,0 +1,158 @@
+.analytics-today-panel {
+  width: 100%;
+  max-width: var(--shell-max-width);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--shell-border);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.045);
+}
+
+.analytics-today-panel .analytics-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.analytics-today-status {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.analytics-today-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 18px 16px;
+}
+
+.analytics-today-list[hidden],
+.analytics-today-empty[hidden] {
+  display: none;
+}
+
+.analytics-today-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #e5ebf3;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.analytics-today-item:hover {
+  border-color: #bfdbfe;
+  background: #f5f9ff;
+}
+
+.analytics-today-item-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.analytics-today-item-heading strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.analytics-today-item-heading span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.analytics-today-item-meta {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analytics-today-item-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-today-item p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.analytics-today-empty {
+  padding: 22px 18px;
+  color: #94a3b8;
+  font-size: 11px;
+  text-align: center;
+}
+
+[data-theme="dark"] .analytics-today-panel {
+  border-color: #263449;
+  background: #111c2e;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+}
+
+[data-theme="dark"] .analytics-today-status,
+[data-theme="dark"] .analytics-today-item-meta,
+[data-theme="dark"] .analytics-today-item p,
+[data-theme="dark"] .analytics-today-empty {
+  color: #8fa0b8;
+}
+
+[data-theme="dark"] .analytics-today-item {
+  border-color: #263449;
+  background: #162338;
+}
+
+[data-theme="dark"] .analytics-today-item:hover {
+  border-color: #3b82f6;
+  background: #192a43;
+}
+
+[data-theme="dark"] .analytics-today-item-heading strong,
+[data-theme="dark"] .analytics-today-item-metrics {
+  color: #dbe5f2;
+}
+
+[data-theme="dark"] .analytics-today-item-heading span {
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+}
+
+@media (max-width: 720px) {
+  .analytics-today-panel .analytics-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .analytics-today-list {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+}

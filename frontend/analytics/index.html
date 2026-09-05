@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/shell.css" />
     <link rel="stylesheet" href="/analytics/analytics.css" />
     <link rel="stylesheet" href="/analytics/chart.css" />
+    <link rel="stylesheet" href="/analytics/today.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -36,6 +37,19 @@
           <p class="subtitle">Как менялись прогнозы прибыли, fair value и ожидаемая полная доходность по каждой бумаге.</p>
         </div>
       </header>
+
+      <section class="analytics-today-panel" data-analytics-today aria-labelledby="analytics-today-title">
+        <header class="analytics-panel-heading">
+          <div>
+            <span class="analytics-panel-kicker">Daily revisions</span>
+            <h2 id="analytics-today-title">Что изменилось сегодня</h2>
+            <p>Все сохранённые изменения прогнозов с начала текущего дня по локальному времени браузера.</p>
+          </div>
+          <span class="analytics-today-status" data-analytics-today-status role="status" aria-live="polite">Загрузка…</span>
+        </header>
+        <div class="analytics-today-empty" data-analytics-today-empty hidden>Сегодня сохранённых ревизий прогноза пока нет.</div>
+        <div class="analytics-today-list" data-analytics-today-list hidden></div>
+      </section>
 
       <section class="analytics-controls" aria-label="Параметры истории прогнозов">
         <form id="analytics-history-form">
@@ -103,6 +117,7 @@
         <div class="analytics-timeline" data-analytics-timeline hidden></div>
       </section>
     </main>
+    <script src="/analytics/today.js"></script>
     <script src="/analytics/chart.js"></script>
     <script src="/analytics/analytics.js"></script>
   </body>
