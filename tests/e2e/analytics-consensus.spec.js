@@ -45,6 +45,20 @@ const comparison = [
   },
 ];
 
+const singleTargetComparison = [
+  {
+    table_id: 1,
+    table_number: 1,
+    analyst_name: 'Основной',
+    forecast_start_year: 2026,
+    ticker: 'LKOH',
+    current_price: 6100,
+    years: [
+      { year: 2026, forecast_price: 7000, forecast_profit_billion_rub: 900, dividends_per_share: 550, upside_percent: 23.8 },
+    ],
+  },
+];
+
 async function mockAnalyticsApi(page) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -52,7 +66,10 @@ async function mockAnalyticsApi(page) {
       return route.fulfill({ json: tables });
     }
     if (url.pathname === '/api/ticker-comparison') {
-      return route.fulfill({ json: url.searchParams.get('ticker') === 'SBER' ? comparison : [] });
+      const ticker = url.searchParams.get('ticker');
+      if (ticker === 'SBER') return route.fulfill({ json: comparison });
+      if (ticker === 'LKOH') return route.fulfill({ json: singleTargetComparison });
+      return route.fulfill({ json: [] });
     }
     if (url.pathname === '/api/analytics/forecast-revisions') {
       return route.fulfill({ json: [] });
@@ -61,7 +78,7 @@ async function mockAnalyticsApi(page) {
   });
 }
 
-test('shows same-year analyst targets with min median max and a visual range', async ({ page }) => {
+test('shows same-year analyst targets with range and agreement metrics', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=SBER');
 
@@ -72,6 +89,10 @@ test('shows same-year analyst targets with min median max and a visual range', a
   await expect(panel.locator('[data-consensus-kpi="median"]')).toHaveText('300 ₽');
   await expect(panel.locator('[data-consensus-kpi="max"]')).toHaveText('350 ₽');
   await expect(panel.locator('[data-consensus-kpi="market"]')).toHaveText('300 ₽');
+  await expect(panel.locator('[data-consensus-kpi="spread"]')).toHaveText('33,3 %');
+  await expect(panel.locator('[data-consensus-kpi="agreement"]')).toHaveText('Низкая');
+  await expect(panel.locator('[data-consensus-kpi="agreement"]')).toHaveClass(/low/);
+  await expect(panel.locator('.analytics-consensus-formula')).toContainText('(максимум − минимум) / медиана');
 
   await expect(panel.locator('[data-consensus-target]')).toHaveCount(2);
   await expect(panel.locator('[data-consensus-target="1"]')).toContainText('Основной');
@@ -85,6 +106,19 @@ test('shows same-year analyst targets with min median max and a visual range', a
   );
 });
 
+test('does not infer analyst agreement from a single comparable target', async ({ page }) => {
+  await mockAnalyticsApi(page);
+  await page.goto('/analytics/?ticker=LKOH');
+
+  const panel = page.locator('[data-analytics-consensus]');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('[data-analytics-consensus-status]')).toHaveText('2026 · целей: 1/1');
+  await expect(panel.locator('[data-consensus-kpi="spread"]')).toHaveText('—');
+  await expect(panel.locator('[data-consensus-kpi="agreement"]')).toHaveText('Недостаточно данных');
+  await expect(panel.locator('[data-consensus-kpi="agreement"]')).toHaveClass(/insufficient/);
+  await expect(panel.locator('.analytics-consensus-formula')).toContainText('минимум две сопоставимые цели');
+});
+
 test('consensus panel stays inside the mobile page viewport', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await mockAnalyticsApi(page);
@@ -92,6 +126,7 @@ test('consensus panel stays inside the mobile page viewport', async ({ page }) =
 
   await expect(page.locator('[data-analytics-consensus]')).toBeVisible();
   await expect(page.locator('[data-consensus-target]')).toHaveCount(2);
+  await expect(page.locator('[data-consensus-kpi="spread"]')).toHaveText('33,3 %');
 
   const layout = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
