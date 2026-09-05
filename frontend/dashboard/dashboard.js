@@ -1,13 +1,28 @@
 (() => {
   const kpi = (name) => document.querySelector(`[data-dashboard-kpi="${name}"]`);
+  const list = (name) => document.querySelector(`[data-dashboard-list="${name}"]`);
+  const empty = (name) => document.querySelector(`[data-dashboard-empty="${name}"]`);
 
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  });
+  const priceFormatter = new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 2,
+  });
+  const ratioFormatter = new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: 1,
     minimumFractionDigits: 1,
   });
   const dateTimeFormatter = new Intl.DateTimeFormat('ru-RU', {
     dateStyle: 'short',
     timeStyle: 'short',
+  });
+  const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
   });
 
   async function api(path) {
@@ -16,11 +31,23 @@
     return response.json();
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function isFiniteValue(value) {
+    return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  }
+
   function finiteNumbers(values) {
     return values
-      .filter((value) => value !== null && value !== undefined && value !== '')
+      .filter(isFiniteValue)
       .map(Number)
-      .filter(Number.isFinite)
       .sort((a, b) => a - b);
   }
 
@@ -38,13 +65,118 @@
     if (element) element.textContent = value ?? fallback;
   }
 
-  async function loadValuationKpis() {
+  function setEmptyState(name, message) {
+    const listElement = list(name);
+    const emptyElement = empty(name);
+    if (listElement) {
+      listElement.hidden = true;
+      listElement.innerHTML = '';
+    }
+    if (emptyElement) {
+      emptyElement.hidden = false;
+      emptyElement.textContent = message;
+    }
+  }
+
+  function showList(name, html) {
+    const listElement = list(name);
+    const emptyElement = empty(name);
+    if (!listElement) return;
+    listElement.innerHTML = html;
+    listElement.hidden = false;
+    if (emptyElement) emptyElement.hidden = true;
+  }
+
+  function formatPrice(value) {
+    return isFiniteValue(value) ? `${priceFormatter.format(Number(value))} ₽` : '—';
+  }
+
+  function formatTradeDate(value) {
+    if (!value) return '—';
+    const date = new Date(`${value}T00:00:00Z`);
+    return Number.isNaN(date.valueOf()) ? escapeHtml(value) : dateFormatter.format(date);
+  }
+
+  function renderOpportunities(rows) {
+    const leaders = rows
+      .filter((row) => isFiniteValue(row.upside_percent_year1))
+      .sort((a, b) => Number(b.upside_percent_year1) - Number(a.upside_percent_year1))
+      .slice(0, 5);
+
+    if (!leaders.length) {
+      setEmptyState('opportunities', 'Нет бумаг с рассчитанным потенциалом на ближайший прогнозный год.');
+      return;
+    }
+
+    showList(
+      'opportunities',
+      leaders.map((row, index) => {
+        const upside = Number(row.upside_percent_year1);
+        const upsideClass = upside >= 0 ? 'dashboard-upside-positive' : 'dashboard-upside-negative';
+        return `
+          <div class="dashboard-list-row" data-dashboard-opportunity="${escapeHtml(row.ticker)}">
+            <div class="dashboard-list-rank">${index + 1}</div>
+            <div class="dashboard-list-main">
+              <strong class="dashboard-list-ticker">${escapeHtml(row.ticker || '—')}</strong>
+              <span class="dashboard-list-name">Текущая ${formatPrice(row.current_price)} · цель ${formatPrice(row.forecast_price_year1)}</span>
+            </div>
+            <div class="dashboard-list-metrics">
+              <span class="dashboard-metric-label">Потенциал</span>
+              <strong class="${upsideClass}">${percentFormatter.format(upside)} %</strong>
+            </div>
+          </div>
+        `;
+      }).join(''),
+    );
+  }
+
+  function volumeStatus(status) {
+    if (status === 'signal') return { label: 'Сигнал', className: 'dashboard-volume-signal' };
+    if (status === 'above_range') return { label: 'Выше диапазона', className: 'dashboard-volume-above' };
+    return { label: status || '—', className: '' };
+  }
+
+  function renderVolumeHighlights(rows) {
+    const anomalies = rows
+      .filter((row) => ['signal', 'above_range'].includes(row.latest?.signal_status))
+      .filter((row) => isFiniteValue(row.latest?.ratio))
+      .sort((a, b) => Number(b.latest.ratio) - Number(a.latest.ratio))
+      .slice(0, 5);
+
+    if (!anomalies.length) {
+      setEmptyState('volumes', 'Аномалий торгового объёма в последней доступной сессии нет.');
+      return;
+    }
+
+    showList(
+      'volumes',
+      anomalies.map((row, index) => {
+        const status = volumeStatus(row.latest.signal_status);
+        return `
+          <div class="dashboard-list-row" data-dashboard-volume="${escapeHtml(row.ticker)}">
+            <div class="dashboard-list-rank">${index + 1}</div>
+            <div class="dashboard-list-main">
+              <strong class="dashboard-list-ticker">${escapeHtml(row.ticker || '—')}</strong>
+              <span class="dashboard-list-name">${escapeHtml(row.short_name || '')}${row.latest?.trade_date ? ` · ${formatTradeDate(row.latest.trade_date)}` : ''}</span>
+            </div>
+            <div class="dashboard-list-metrics dashboard-volume-metrics">
+              <strong>${ratioFormatter.format(Number(row.latest.ratio))}×</strong>
+              <span class="dashboard-volume-status ${status.className}">${status.label}</span>
+            </div>
+          </div>
+        `;
+      }).join(''),
+    );
+  }
+
+  async function loadValuationData() {
     try {
       const tables = await api('/api/tables');
       const primaryTable = tables.find((table) => Number(table.table_number) === 1) || tables[0];
       if (!primaryTable) {
         setKpi('securities', '0');
         setKpi('median-upside', '—');
+        setEmptyState('opportunities', 'Основная таблица оценок пока пуста.');
         return;
       }
 
@@ -56,25 +188,30 @@
         'median-upside',
         medianUpside == null ? '—' : `${percentFormatter.format(medianUpside)} %`,
       );
+      renderOpportunities(rows);
     } catch (_error) {
       setKpi('securities', '—');
       setKpi('median-upside', '—');
+      setEmptyState('opportunities', 'Не удалось загрузить данные оценок.');
     }
   }
 
-  async function loadVolumeKpis() {
+  async function loadVolumeData() {
     const [overviewResult, runResult] = await Promise.allSettled([
       api('/api/volume/overview'),
       api('/api/volume/runs/latest'),
     ]);
 
     if (overviewResult.status === 'fulfilled') {
-      const signals = overviewResult.value.filter(
+      const rows = overviewResult.value;
+      const signals = rows.filter(
         (row) => row.latest?.signal_status === 'signal',
       ).length;
       setKpi('volume-signals', String(signals));
+      renderVolumeHighlights(rows);
     } else {
       setKpi('volume-signals', '—');
+      setEmptyState('volumes', 'Не удалось загрузить мониторинг торговых объёмов.');
     }
 
     if (runResult.status === 'fulfilled' && runResult.value) {
@@ -89,5 +226,5 @@
     }
   }
 
-  Promise.allSettled([loadValuationKpis(), loadVolumeKpis()]);
+  Promise.allSettled([loadValuationData(), loadVolumeData()]);
 })();
