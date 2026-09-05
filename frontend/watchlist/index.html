@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/watchlist/watchlist-sort.css" />
     <link rel="stylesheet" href="/watchlist/watchlist-pin.css" />
     <link rel="stylesheet" href="/watchlist/watchlist-saved-views.css" />
+    <link rel="stylesheet" href="/watchlist/score.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -58,6 +59,11 @@
           <span>Активность</span>
           <strong>Объёмы</strong>
           <p>Последний коэффициент объёма и статус сигнала.</p>
+        </article>
+        <article class="watchlist-summary-card watchlist-score-guide">
+          <span>Приоритет</span>
+          <strong>Прозрачный score</strong>
+          <p>Цена: до 60 баллов · оставшиеся дивиденды: до 25 · объёмный сигнал: до 15. Никакого ML.</p>
         </article>
       </section>
 
@@ -113,6 +119,7 @@
                 <th><button class="watchlist-sort" data-watchlist-sort="dividend">Див. доходность, % <span data-sort-indicator>⇅</span></button></th>
                 <th><button class="watchlist-sort" data-watchlist-sort="ratio">Объём <span data-sort-indicator>⇅</span></button></th>
                 <th>Сигнал</th>
+                <th><button class="watchlist-sort" data-watchlist-sort="score">Приоритет <span data-sort-indicator>⇅</span></button></th>
               </tr>
             </thead>
             <tbody id="watchlist-body"></tbody>
@@ -120,6 +127,7 @@
         </div>
       </section>
     </main>
+    <script src="/watchlist/score.js"></script>
     <script src="/watchlist/watchlist.js"></script>
   </body>
 </html>

@@ -6,7 +6,8 @@ test('shows the Watchlist workspace shell with unified navigation', async ({ pag
 
   await expect(page.getByRole('heading', { name: 'Watchlist', exact: true })).toBeVisible();
   await expect(page.locator('.app-nav-link.active')).toHaveText('Watchlist');
-  await expect(page.locator('.watchlist-summary-card')).toHaveCount(3);
+  await expect(page.locator('.watchlist-summary-card')).toHaveCount(4);
+  await expect(page.locator('.watchlist-score-guide')).toContainText('Приоритет');
   await expect(page.locator('[data-watchlist-empty]')).toContainText('Нет таблиц оценок');
   await expect(page.getByRole('link', { name: 'Открыть оценки' })).toHaveAttribute('href', '/');
   await expect(page.getByRole('link', { name: 'Открыть объёмы' })).toHaveAttribute('href', '/volumes/');
