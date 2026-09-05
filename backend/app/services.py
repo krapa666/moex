@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import StockRow
-from .moex import fetch_current_price
+from .moex import fetch_current_price, fetch_paid_dividends_by_year
 
 PRICE_REFRESH_INTERVAL = timedelta(minutes=10)
 STALE_PRICE_MAX_AGE = timedelta(hours=24)
@@ -51,6 +51,13 @@ async def refresh_row_price(row: StockRow, force: bool = False) -> None:
     row.price_updated_at = None
 
 
+async def refresh_row_paid_dividends(row: StockRow) -> None:
+    if not row.ticker:
+        row.paid_dividend_year_map = {}
+        return
+    row.paid_dividend_year_map = await fetch_paid_dividends_by_year(row.ticker)
+
+
 async def refresh_all_prices(db: Session, force: bool = False, table_id: int | None = None) -> list[StockRow]:
     query = select(StockRow)
     if table_id is not None:
@@ -64,6 +71,7 @@ async def refresh_all_prices(db: Session, force: bool = False, table_id: int | N
         if not ticker:
             for row in ticker_rows:
                 await refresh_row_price(row, force=force)
+                await refresh_row_paid_dividends(row)
             continue
 
         representative = max(
@@ -71,10 +79,12 @@ async def refresh_all_prices(db: Session, force: bool = False, table_id: int | N
             key=lambda item: item.price_updated_at.timestamp() if item.price_updated_at else float("-inf"),
         )
         await refresh_row_price(representative, force=force)
+        await refresh_row_paid_dividends(representative)
         for row in ticker_rows:
             if row is representative:
                 continue
             row.current_price = representative.current_price
             row.status_message = representative.status_message
             row.price_updated_at = representative.price_updated_at
+            row.paid_dividend_year_map = dict(representative.paid_dividend_year_map or {})
     return rows

@@ -44,6 +44,7 @@ class StockRow(Base):
     dividends_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividends_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividend_year_map: Mapped[dict[str, float | None] | None] = mapped_column(JSON, nullable=True)
+    paid_dividend_year_map: Mapped[dict[str, float] | None] = mapped_column(JSON, nullable=True)
 
     forecast_price_year1: Mapped[float | None] = mapped_column(Float, nullable=True)
     forecast_price_year2: Mapped[float | None] = mapped_column(Float, nullable=True)
