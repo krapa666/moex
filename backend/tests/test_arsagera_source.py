@@ -3,18 +3,33 @@ from app.arsagera_source import parse_catalog_gids, parse_forecast_csv
 
 def test_catalog_maps_existing_tickers_to_sheet_gid() -> None:
     html = """
+    <script>
+    var items = [];
+    items.push({name: "Каталог", pageUrl: "...gid=790995554", gid: "790995554",initialSheet: true});
+    items.push({name: "SBER", pageUrl: "...gid=12345", gid: "12345"});
+    items.push({name: "SBERP", pageUrl: "...gid=12346", gid: "12346"});
+    items.push({name: "LKOH", pageUrl: "...gid=67890", gid: "67890"});
+    </script>
+    """
+
+    mapping, errors = parse_catalog_gids(html, ["SBER", "SBERP", "LKOH", "GAZP"])
+
+    assert mapping == {"LKOH": "67890", "SBER": "12345", "SBERP": "12346"}
+    assert errors == {"GAZP": "тикер не найден среди листов Арсагеры"}
+
+
+def test_catalog_keeps_legacy_explicit_link_fallback() -> None:
+    html = """
     <table>
-      <tr><td>Сбербанк</td><td>SBER, SBERP</td>
-          <td><a href="/spreadsheets/d/e/example/pubhtml?gid=12345&single=true">Расчёт</a></td></tr>
       <tr><td>Лукойл</td><td>LKOH</td>
           <td><a href="/spreadsheets/d/e/example/pubhtml?gid=67890&single=true">Расчёт</a></td></tr>
     </table>
     """
 
-    mapping, errors = parse_catalog_gids(html, ["SBER", "SBERP", "LKOH", "GAZP"])
+    mapping, errors = parse_catalog_gids(html, ["LKOH"])
 
-    assert mapping == {"LKOH": "67890", "SBER": "12345", "SBERP": "12345"}
-    assert errors == {"GAZP": "тикер не найден в каталоге Арсагеры"}
+    assert mapping == {"LKOH": "67890"}
+    assert errors == {}
 
 
 def test_forecast_parser_extracts_profit_in_billions_and_full_year_dividends() -> None:
