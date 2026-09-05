@@ -177,6 +177,15 @@ test('opens per-ticker history directly from a ticker query parameter', async ({
   await expect(page).toHaveURL('/volumes/');
 });
 
+test('cleans a missing volume ticker deep link and keeps the overview usable', async ({ page }) => {
+  await page.goto('/volumes/?ticker=UNKNOWN');
+
+  await expect(page.locator('#overview-section')).toBeVisible();
+  await expect(page.locator('#detail-section')).toBeHidden();
+  await expect(page).toHaveURL('/volumes/');
+  await expect(page.locator('#volume-global-status')).toContainText('Не удалось открыть UNKNOWN');
+});
+
 test('uses browser back and forward for volume details without refetching cached history', async ({ page }) => {
   let observationRequests = 0;
   page.on('request', (request) => {
