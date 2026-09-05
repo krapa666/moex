@@ -7,7 +7,7 @@ TEMPLATE_PATH_HTTPS="deploy/nginx/home-server-k8s-https.conf"
 OUTPUT_PATH="/etc/nginx/conf.d/moex.conf"
 RELOAD=false
 HTTPS=false
-SERVER_NAME="junibox"
+SERVER_NAME="moex.junnylab.ru"
 SSL_CERT_PATH=""
 SSL_CERT_KEY_PATH=""
 
@@ -81,24 +81,15 @@ pick_endpoint() {
 }
 
 FRONTEND_ENDPOINT="$(pick_endpoint frontend '127.0.0.1:30080' '/')"
-PROMETHEUS_ENDPOINT="$(pick_endpoint prometheus '127.0.0.1:39090' '/prometheus/-/ready')"
-GRAFANA_ENDPOINT="$(pick_endpoint grafana '127.0.0.1:33000' '/api/health')"
-LOKI_ENDPOINT="$(pick_endpoint loki '127.0.0.1:33100' '/ready')"
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 awk \
   -v frontend="$FRONTEND_ENDPOINT" \
-  -v prometheus="$PROMETHEUS_ENDPOINT" \
-  -v grafana="$GRAFANA_ENDPOINT" \
-  -v loki="$LOKI_ENDPOINT" \
   -v server_name="$SERVER_NAME" \
   -v ssl_cert_path="$SSL_CERT_PATH" \
   -v ssl_cert_key_path="$SSL_CERT_KEY_PATH" \
   '{
      gsub(/MINIKUBE_FRONTEND_ENDPOINT/, frontend);
-     gsub(/MINIKUBE_PROMETHEUS_ENDPOINT/, prometheus);
-     gsub(/MINIKUBE_GRAFANA_ENDPOINT/, grafana);
-     gsub(/MINIKUBE_LOKI_ENDPOINT/, loki);
      gsub(/SERVER_NAMES_PLACEHOLDER/, server_name);
      gsub(/SSL_CERT_PATH_PLACEHOLDER/, ssl_cert_path);
      gsub(/SSL_CERT_KEY_PATH_PLACEHOLDER/, ssl_cert_key_path);

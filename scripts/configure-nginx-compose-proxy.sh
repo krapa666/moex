@@ -6,7 +6,7 @@ TEMPLATE_PATH_HTTPS="deploy/nginx/home-server-https.conf"
 OUTPUT_PATH="/etc/nginx/conf.d/moex.conf"
 RELOAD=false
 HTTPS=false
-SERVER_NAME="junibox"
+SERVER_NAME="moex.junnylab.ru"
 SSL_CERT_PATH=""
 SSL_CERT_KEY_PATH=""
 
@@ -57,20 +57,16 @@ if [[ ! -f "$TEMPLATE_PATH" ]]; then
 fi
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
-if [[ "$HTTPS" == "true" ]]; then
-  awk \
-    -v server_name="$SERVER_NAME" \
-    -v ssl_cert_path="$SSL_CERT_PATH" \
-    -v ssl_cert_key_path="$SSL_CERT_KEY_PATH" \
-    '{
-       gsub(/SERVER_NAMES_PLACEHOLDER/, server_name);
-       gsub(/SSL_CERT_PATH_PLACEHOLDER/, ssl_cert_path);
-       gsub(/SSL_CERT_KEY_PATH_PLACEHOLDER/, ssl_cert_key_path);
-       print
-     }' "$TEMPLATE_PATH" > "$OUTPUT_PATH"
-else
-  cp "$TEMPLATE_PATH" "$OUTPUT_PATH"
-fi
+awk \
+  -v server_name="$SERVER_NAME" \
+  -v ssl_cert_path="$SSL_CERT_PATH" \
+  -v ssl_cert_key_path="$SSL_CERT_KEY_PATH" \
+  '{
+     gsub(/SERVER_NAMES_PLACEHOLDER/, server_name);
+     gsub(/SSL_CERT_PATH_PLACEHOLDER/, ssl_cert_path);
+     gsub(/SSL_CERT_KEY_PATH_PLACEHOLDER/, ssl_cert_key_path);
+     print
+   }' "$TEMPLATE_PATH" > "$OUTPUT_PATH"
 echo "[nginx-compose-proxy] generated: $OUTPUT_PATH"
 
 if [[ "$OUTPUT_PATH" == "/etc/nginx/conf.d/moex.conf" && -f "/etc/nginx/conf.d/moex-k8s.conf" ]]; then

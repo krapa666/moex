@@ -42,12 +42,12 @@ services:
       VOLUME_SMTP_FROM: ${VOLUME_SMTP_FROM:-}
       VOLUME_SMTP_STARTTLS: ${VOLUME_SMTP_STARTTLS:-true}
       VOLUME_SMTP_SSL: ${VOLUME_SMTP_SSL:-false}
-      VOLUME_PUBLIC_BASE_URL: ${VOLUME_PUBLIC_BASE_URL:-}
+      VOLUME_PUBLIC_BASE_URL: ${VOLUME_PUBLIC_BASE_URL:-https://moex.junnylab.ru}
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "${MOEX_BACKEND_BIND:-0.0.0.0}:${MOEX_BACKEND_PORT:-18000}:8000"
+      - "${MOEX_BACKEND_BIND:-127.0.0.1}:${MOEX_BACKEND_PORT:-18000}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 15s
@@ -84,7 +84,7 @@ services:
       VOLUME_SMTP_FROM: ${VOLUME_SMTP_FROM:-}
       VOLUME_SMTP_STARTTLS: ${VOLUME_SMTP_STARTTLS:-true}
       VOLUME_SMTP_SSL: ${VOLUME_SMTP_SSL:-false}
-      VOLUME_PUBLIC_BASE_URL: ${VOLUME_PUBLIC_BASE_URL:-}
+      VOLUME_PUBLIC_BASE_URL: ${VOLUME_PUBLIC_BASE_URL:-https://moex.junnylab.ru}
     depends_on:
       backend:
         condition: service_healthy
@@ -115,69 +115,8 @@ services:
     depends_on:
       - backend
     ports:
-      - "${MOEX_FRONTEND_BIND:-0.0.0.0}:${MOEX_FRONTEND_PORT:-8080}:80"
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:v2.53.4
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--web.external-url=http://junibox/prometheus/"
-      - "--web.route-prefix=/prometheus"
-    ports:
-      - "${MOEX_OBSERVABILITY_BIND:-127.0.0.1}:${MOEX_PROMETHEUS_PORT:-9090}:9090"
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:11.1.5
-    environment:
-      GF_SERVER_ROOT_URL: http://junibox/grafana/
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards-json/moex-home-and-app-overview.json
-    volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-    ports:
-      - "${MOEX_OBSERVABILITY_BIND:-127.0.0.1}:${MOEX_GRAFANA_PORT:-3000}:3000"
-    depends_on:
-      - prometheus
-      - loki
-    restart: unless-stopped
-
-  loki:
-    image: grafana/loki:3.1.1
-    command: ["-config.file=/etc/loki/local-config.yml"]
-    volumes:
-      - ./monitoring/loki-config.yml:/etc/loki/local-config.yml:ro
-    ports:
-      - "${MOEX_OBSERVABILITY_BIND:-127.0.0.1}:${MOEX_LOKI_PORT:-3100}:3100"
-    restart: unless-stopped
-
-  promtail:
-    image: grafana/promtail:3.1.1
-    command: ["-config.file=/etc/promtail/config.yml"]
-    volumes:
-      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      - loki
-    restart: unless-stopped
-
-  node-exporter:
-    image: prom/node-exporter:v1.8.2
-    command:
-      - "--path.rootfs=/host"
-    pid: host
-    volumes:
-      - /:/host:ro,rslave
+      - "${MOEX_FRONTEND_BIND:-127.0.0.1}:${MOEX_FRONTEND_PORT:-8080}:80"
     restart: unless-stopped
 
 volumes:
   postgres_data:
-
-# Мониторинг включён по умолчанию и запускается вместе с приложением.

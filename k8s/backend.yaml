@@ -54,7 +54,7 @@ spec:
             - name: VOLUME_BROAD_MARKET_SIGNAL_THRESHOLD
               value: "10"
             - name: VOLUME_PUBLIC_BASE_URL
-              value: ""
+              value: https://moex.junnylab.ru
             - name: VOLUME_SMTP_USERNAME
               valueFrom:
                 secretKeyRef:

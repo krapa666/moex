@@ -19,7 +19,6 @@ from .models import (
 from .volume_collector import collect_once
 from .volume_config import get_volume_settings
 from .volume_mailer import send_test_email
-from .volume_metrics import TEST_EMAIL_ATTEMPTS
 
 router = APIRouter(prefix="/api/volume", tags=["volume-monitor"])
 manual_collection_task: asyncio.Task | None = None
@@ -233,13 +232,11 @@ async def send_test_notification(
     try:
         await asyncio.to_thread(send_test_email, settings, recipient, notification_scope)
     except Exception as exc:
-        TEST_EMAIL_ATTEMPTS.labels(result="failed").inc()
         logger.exception("Test volume notification email failed")
         raise HTTPException(
             status_code=502,
             detail="Письмо не отправлено. Проверьте SMTP-реквизиты и логи backend.",
         ) from exc
-    TEST_EMAIL_ATTEMPTS.labels(result="success").inc()
     return {"status": "sent", "detail": "Тестовое письмо отправлено"}
 
 

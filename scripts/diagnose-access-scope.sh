@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${1:-https://moex.ddns.net}"
+BASE_URL="${1:-https://moex.junnylab.ru}"
 LOCAL_HOST_URL="${2:-http://127.0.0.1}"
 
 print_step() {

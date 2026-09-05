@@ -4,9 +4,6 @@ set -euo pipefail
 NAMESPACE="moex"
 KEEP_MINIKUBE=false
 PORT_FORWARD_PID_FILE="/tmp/moex-k8s-port-forward.pid"
-PROMETHEUS_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-prometheus-port-forward.pid"
-GRAFANA_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-grafana-port-forward.pid"
-LOKI_PORT_FORWARD_PID_FILE="/tmp/moex-k8s-loki-port-forward.pid"
 SYNC_BACKUP_DIR="./backups/mode-sync"
 SYNC_BACKUP_FILE="${SYNC_BACKUP_DIR}/latest.sql.gz"
 STEP=0
@@ -71,9 +68,6 @@ stop_port_forward() {
 }
 
 stop_port_forward frontend "${PORT_FORWARD_PID_FILE}"
-stop_port_forward prometheus "${PROMETHEUS_PORT_FORWARD_PID_FILE}"
-stop_port_forward grafana "${GRAFANA_PORT_FORWARD_PID_FILE}"
-stop_port_forward loki "${LOKI_PORT_FORWARD_PID_FILE}"
 
 log_step "exporting shared DB snapshot before shutdown"
 export_k8s_db_snapshot
