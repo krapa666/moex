@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from app.application import app
+from app.version import APP_VERSION, PACKAGED_VERSION
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -11,3 +14,6 @@ def test_repository_version_is_semver_and_has_matching_release_notes() -> None:
     assert all(part.isdigit() for part in parts)
     assert all(part == "0" or not part.startswith("0") for part in parts)
     assert (ROOT / ".release" / f"v{version}.md").is_file()
+    assert PACKAGED_VERSION == version
+    assert APP_VERSION == version
+    assert app.version == version
