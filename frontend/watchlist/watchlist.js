@@ -7,11 +7,17 @@
   const searchInput = document.getElementById('watchlist-search');
   const filterSelect = document.getElementById('watchlist-filter');
   const resetViewBtn = document.getElementById('watchlist-reset-view');
+  const savedViewSelect = document.getElementById('watchlist-saved-view');
+  const viewNameInput = document.getElementById('watchlist-view-name');
+  const saveViewBtn = document.getElementById('watchlist-save-view');
+  const deleteViewBtn = document.getElementById('watchlist-delete-view');
   const sortButtons = [...document.querySelectorAll('[data-watchlist-sort]')];
-  if (!body || !tableWrap || !empty || !filterEmpty || !status || !searchInput || !filterSelect || !resetViewBtn) return;
+  if (!body || !tableWrap || !empty || !filterEmpty || !status || !searchInput || !filterSelect || !resetViewBtn || !savedViewSelect || !viewNameInput || !saveViewBtn || !deleteViewBtn) return;
 
   const VIEW_STORAGE_KEY = 'moex.watchlist.view.v1';
   const PIN_STORAGE_KEY = 'moex.watchlist.pins.v1';
+  const SAVED_VIEWS_STORAGE_KEY = 'moex.watchlist.saved_views.v1';
+  const MAX_SAVED_VIEWS = 10;
   const validFilters = new Set(['all', 'pinned', 'signals', 'positive', 'negative']);
   const validSortFields = new Set(['ticker', 'current', 'fair', 'upside', 'dividend', 'ratio']);
 
@@ -25,6 +31,7 @@
     direction: 'asc',
   };
   const pinnedTickers = loadPinnedTickers();
+  let savedViews = loadSavedViews();
 
   const priceFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const percentFormatter = new Intl.NumberFormat('ru-RU', {
@@ -124,6 +131,46 @@
     }
   }
 
+  function sanitizeSavedView(item) {
+    if (!item || typeof item !== 'object') return null;
+    const name = typeof item.name === 'string' ? item.name.trim().slice(0, 32) : '';
+    if (!name) return null;
+    const sortField = validSortFields.has(item.sortField) ? item.sortField : null;
+    const sortDirection = item.sortDirection === 'desc' ? 'desc' : 'asc';
+    return {
+      name,
+      search: typeof item.search === 'string' ? item.search.slice(0, 64) : '',
+      filter: validFilters.has(item.filter) ? item.filter : 'all',
+      sortField,
+      sortDirection,
+    };
+  }
+
+  function loadSavedViews() {
+    try {
+      const raw = localStorage.getItem(SAVED_VIEWS_STORAGE_KEY);
+      if (!raw) return [];
+      const saved = JSON.parse(raw);
+      if (!Array.isArray(saved)) return [];
+      const byName = new Map();
+      saved.forEach((item) => {
+        const sanitized = sanitizeSavedView(item);
+        if (sanitized) byName.set(sanitized.name, sanitized);
+      });
+      return [...byName.values()].slice(-MAX_SAVED_VIEWS);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function persistSavedViews() {
+    try {
+      localStorage.setItem(SAVED_VIEWS_STORAGE_KEY, JSON.stringify(savedViews));
+    } catch (_error) {
+      // Named views remain usable for the current page when storage is unavailable.
+    }
+  }
+
   function persistView() {
     try {
       localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify({
@@ -167,13 +214,97 @@
     }
   }
 
+  function renderSavedViews(selectedName = '') {
+    savedViewSelect.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Сохранённые виды';
+    savedViewSelect.appendChild(placeholder);
+
+    [...savedViews]
+      .sort((left, right) => left.name.localeCompare(right.name, 'ru'))
+      .forEach((view) => {
+        const option = document.createElement('option');
+        option.value = view.name;
+        option.textContent = view.name;
+        savedViewSelect.appendChild(option);
+      });
+
+    savedViewSelect.value = savedViews.some((view) => view.name === selectedName) ? selectedName : '';
+    updateSavedViewActions();
+  }
+
+  function updateSavedViewActions() {
+    const enabled = !viewNameInput.disabled;
+    saveViewBtn.disabled = !enabled || !viewNameInput.value.trim();
+    deleteViewBtn.disabled = !enabled || !savedViewSelect.value;
+  }
+
+  function detachSavedViewSelection({ keepName = true } = {}) {
+    if (savedViewSelect.value) savedViewSelect.value = '';
+    if (!keepName) viewNameInput.value = '';
+    updateSavedViewActions();
+  }
+
+  function captureCurrentView(name) {
+    return {
+      name,
+      search: searchInput.value,
+      filter: validFilters.has(filterSelect.value) ? filterSelect.value : 'all',
+      sortField: validSortFields.has(sortState.field) ? sortState.field : null,
+      sortDirection: sortState.direction === 'desc' ? 'desc' : 'asc',
+    };
+  }
+
+  function saveNamedView() {
+    const name = viewNameInput.value.trim().slice(0, 32);
+    if (!name) return;
+    const next = captureCurrentView(name);
+    const existingIndex = savedViews.findIndex((view) => view.name === name);
+    if (existingIndex >= 0) {
+      savedViews[existingIndex] = next;
+    } else {
+      if (savedViews.length >= MAX_SAVED_VIEWS) savedViews.shift();
+      savedViews.push(next);
+    }
+    persistSavedViews();
+    viewNameInput.value = name;
+    renderSavedViews(name);
+  }
+
+  function applyNamedView(name) {
+    const view = savedViews.find((item) => item.name === name);
+    if (!view) return;
+    viewNameInput.value = view.name;
+    searchInput.value = view.search;
+    filterSelect.value = validFilters.has(view.filter) ? view.filter : 'all';
+    sortState.field = validSortFields.has(view.sortField) ? view.sortField : null;
+    sortState.direction = view.sortDirection === 'desc' ? 'desc' : 'asc';
+    persistView();
+    sortRows();
+    applyFilters();
+    updateSavedViewActions();
+  }
+
+  function deleteNamedView() {
+    const name = savedViewSelect.value;
+    if (!name) return;
+    savedViews = savedViews.filter((view) => view.name !== name);
+    persistSavedViews();
+    viewNameInput.value = '';
+    renderSavedViews();
+  }
+
   function setControlsEnabled(enabled) {
     searchInput.disabled = !enabled;
     filterSelect.disabled = !enabled;
     resetViewBtn.disabled = !enabled;
+    savedViewSelect.disabled = !enabled;
+    viewNameInput.disabled = !enabled;
     sortButtons.forEach((button) => {
       button.disabled = !enabled;
     });
+    updateSavedViewActions();
   }
 
   function showEmpty(title, message, state = 'empty') {
@@ -285,6 +416,7 @@
   }
 
   function changeSort(field) {
+    detachSavedViewSelection();
     if (sortState.field === field) {
       sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
     } else {
@@ -302,6 +434,7 @@
     sortState.field = null;
     sortState.direction = 'asc';
     clearPersistedView();
+    detachSavedViewSelection({ keepName: false });
     sortRows();
     applyFilters();
   }
@@ -427,14 +560,20 @@
   }
 
   searchInput.addEventListener('input', () => {
+    detachSavedViewSelection();
     persistView();
     applyFilters();
   });
   filterSelect.addEventListener('change', () => {
+    detachSavedViewSelection();
     persistView();
     applyFilters();
   });
   resetViewBtn.addEventListener('click', resetView);
+  viewNameInput.addEventListener('input', updateSavedViewActions);
+  savedViewSelect.addEventListener('change', () => applyNamedView(savedViewSelect.value));
+  saveViewBtn.addEventListener('click', saveNamedView);
+  deleteViewBtn.addEventListener('click', deleteNamedView);
   body.addEventListener('click', (event) => {
     const button = event.target.closest('[data-watchlist-pin]');
     if (button) togglePin(button);
@@ -444,5 +583,6 @@
   });
 
   restoreView();
+  renderSavedViews();
   load();
 })();
