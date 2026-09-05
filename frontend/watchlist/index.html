@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/shell.css" />
     <link rel="stylesheet" href="/watchlist/watchlist.css" />
     <link rel="stylesheet" href="/watchlist/watchlist-sort.css" />
+    <link rel="stylesheet" href="/watchlist/watchlist-pin.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -72,6 +73,7 @@
           <input id="watchlist-search" type="search" placeholder="Поиск тикера" aria-label="Поиск тикера" disabled />
           <select id="watchlist-filter" aria-label="Фильтр Watchlist" disabled>
             <option value="all">Все бумаги</option>
+            <option value="pinned">Только закреплённые</option>
             <option value="signals">Объёмный сигнал</option>
             <option value="positive">Положительный потенциал</option>
             <option value="negative">Отрицательный потенциал</option>
@@ -92,6 +94,7 @@
           <table class="watchlist-table">
             <thead>
               <tr>
+                <th class="watchlist-pin-header"><span class="sr-only">Закрепить</span></th>
                 <th><button class="watchlist-sort" data-watchlist-sort="ticker">Тикер <span data-sort-indicator>⇅</span></button></th>
                 <th><button class="watchlist-sort" data-watchlist-sort="current">Текущая, ₽ <span data-sort-indicator>⇅</span></button></th>
                 <th><button class="watchlist-sort" data-watchlist-sort="fair">Fair value, ₽ <span data-sort-indicator>⇅</span></button></th>
