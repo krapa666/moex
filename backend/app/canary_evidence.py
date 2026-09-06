@@ -98,6 +98,7 @@ class CanaryEvidenceOverviewResult:
     current_weighted_tickers: int
     current_fallback_tickers: int
     current_median_tickers: int
+    current_unknown_tickers: int
     median_history_span_hours: float
     items: list[CanaryTickerEvidenceResult]
 
@@ -310,11 +311,7 @@ def _build_ticker_evidence_from_rows(
             recoveries += 1
         previous = row
 
-    uptime = (
-        100.0 * weighted_hours / configured_hours
-        if configured_hours > 0
-        else None
-    )
+    uptime = 100.0 * weighted_hours / configured_hours if configured_hours > 0 else None
     target_years = sorted({int(row.target_year) for row in ordered if row.target_year is not None})
     return CanaryTickerEvidenceResult(
         ticker=ticker,
@@ -360,6 +357,16 @@ def build_canary_ticker_evidence(
     return _build_ticker_evidence_from_rows(ticker=normalized, days=days, rows=rows)
 
 
+def _overview_mode_priority(item: CanaryTickerEvidenceResult) -> int:
+    if item.current_configured_mode == "weighted_canary" and item.current_effective_mode == "median":
+        return 0
+    if item.current_effective_mode == "weighted":
+        return 1
+    if item.current_configured_mode == "median":
+        return 2
+    return 3
+
+
 def build_canary_evidence_overview(
     db: Session,
     *,
@@ -389,8 +396,8 @@ def build_canary_evidence_overview(
     ]
     items.sort(
         key=lambda item: (
-            0 if item.current_effective_mode == "median" and item.current_configured_mode == "weighted_canary" else 1,
-            -(item.fallback_incidents),
+            _overview_mode_priority(item),
+            -item.fallback_incidents,
             item.ticker,
         )
     )
@@ -418,9 +425,8 @@ def build_canary_evidence_overview(
             and item.current_effective_mode == "median"
             for item in items
         ),
-        current_median_tickers=sum(
-            item.current_configured_mode != "weighted_canary" for item in items
-        ),
+        current_median_tickers=sum(item.current_configured_mode == "median" for item in items),
+        current_unknown_tickers=sum(item.current_configured_mode is None for item in items),
         median_history_span_hours=float(median(spans)) if spans else 0.0,
         items=items,
     )
