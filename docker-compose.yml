@@ -149,7 +149,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${MOEX_FRONTEND_BIND:-127.0.0.1}:${MOEX_FRONTEND_PORT:-8080}:8000"
+      - "${MOEX_FRONTEND_BIND:-127.0.0.1}:${MOEX_FRONTEND_PORT:-8080}:80"
     restart: unless-stopped
 
 volumes:
