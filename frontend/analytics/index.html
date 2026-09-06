@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/analytics/consensus.css" />
     <link rel="stylesheet" href="/analytics/consensus-history.css" />
     <link rel="stylesheet" href="/analytics/today.css" />
+    <link rel="stylesheet" href="/analytics/accuracy.css" />
     <link rel="stylesheet" href="/theme.css" />
   </head>
   <body>
@@ -51,6 +52,91 @@
         </header>
         <div class="analytics-today-empty" data-analytics-today-empty hidden>Сегодня сохранённых ревизий прогноза пока нет.</div>
         <div class="analytics-today-list" data-analytics-today-list hidden></div>
+      </section>
+
+      <section class="analytics-panel source-accuracy-panel" data-source-accuracy aria-labelledby="source-accuracy-title">
+        <header class="analytics-panel-heading">
+          <div>
+            <span class="analytics-panel-kicker">Forecast accuracy</span>
+            <h2 id="source-accuracy-title">Точность источников</h2>
+            <p>Исторический прогноз сравнивается с фактической годовой чистой прибылью на фиксированной дате. Рейтинг строится по медианной sMAPE и не влияет на текущий консенсус.</p>
+          </div>
+          <div class="source-accuracy-controls">
+            <label>
+              <span>Срез прогноза</span>
+              <select data-accuracy-snapshot>
+                <option value="pre_year">На начало года</option>
+                <option value="mid_year">На 1 июля</option>
+                <option value="year_end">На конец года</option>
+              </select>
+            </label>
+            <span class="analytics-status" data-accuracy-status role="status" aria-live="polite">Расчёт…</span>
+          </div>
+        </header>
+
+        <div class="source-accuracy-empty" data-accuracy-empty hidden></div>
+        <div class="source-accuracy-table-wrap" data-accuracy-table-wrap hidden>
+          <table class="source-accuracy-table">
+            <thead>
+              <tr>
+                <th>Ранг</th>
+                <th>Источник</th>
+                <th>Набл.</th>
+                <th>Бумаг</th>
+                <th>Md sMAPE</th>
+                <th>Mean sMAPE</th>
+                <th>Знак верен</th>
+                <th>MAE, млрд ₽</th>
+                <th>Bias, млрд ₽</th>
+                <th>Статус</th>
+              </tr>
+            </thead>
+            <tbody data-accuracy-table-body></tbody>
+          </table>
+        </div>
+
+        <div class="actual-result-admin" data-actual-admin hidden>
+          <h3>Фактическая годовая чистая прибыль</h3>
+          <p>Локальная форма канонического факта. Повторное сохранение того же тикера и года обновляет запись и позволяет учитывать рестейтмент.</p>
+          <form class="actual-result-form" data-actual-form>
+            <label>
+              <span>Тикер</span>
+              <input name="ticker" maxlength="32" placeholder="SBER" required />
+            </label>
+            <label>
+              <span>Год</span>
+              <input name="fiscal_year" type="number" min="2000" max="2100" required />
+            </label>
+            <label>
+              <span>ЧП, млрд ₽</span>
+              <input name="net_profit_billion_rub" inputmode="decimal" placeholder="1580.3" required />
+            </label>
+            <label>
+              <span>Источник факта</span>
+              <input name="source_name" maxlength="255" placeholder="МСФО, отчёт эмитента" required />
+            </label>
+            <label>
+              <span>URL источника</span>
+              <input name="source_url" type="url" maxlength="1024" placeholder="https://…" />
+            </label>
+            <button class="btn btn-primary" type="submit">Сохранить факт</button>
+          </form>
+          <span class="actual-result-form-status" data-actual-form-status role="status" aria-live="polite"></span>
+        </div>
+
+        <div class="actual-facts">
+          <h3>Последние факты</h3>
+          <p>Канонические результаты, которые используются как база сравнения прогнозов.</p>
+          <div class="actual-facts-empty" data-actual-facts-empty hidden>Фактические результаты ещё не добавлены.</div>
+          <div class="actual-facts-table-wrap">
+            <table class="actual-facts-table">
+              <thead>
+                <tr><th>Тикер</th><th>Год</th><th>ЧП, млрд ₽</th><th>Источник</th></tr>
+              </thead>
+              <tbody data-actual-facts-body></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section class="analytics-controls" aria-label="Параметры истории прогнозов">
@@ -169,6 +255,7 @@
     </main>
     <script src="/analytics/access.js"></script>
     <script src="/analytics/today.js"></script>
+    <script src="/analytics/accuracy.js"></script>
     <script src="/analytics/chart.js"></script>
     <script src="/analytics/consensus.js"></script>
     <script src="/analytics/consensus-history.js"></script>
