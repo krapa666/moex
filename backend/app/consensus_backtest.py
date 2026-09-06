@@ -21,6 +21,9 @@ DEFAULT_SHRINKAGE_SAMPLES = 5
 DEFAULT_ERROR_FLOOR_PERCENT = 5.0
 DEFAULT_RELATIVE_SCORE_CAP = 2.0
 DEFAULT_PRIOR_ERROR_PERCENT = 50.0
+ROBUSTNESS_SHRINKAGE_GRID = (2, 5, 10)
+ROBUSTNESS_ERROR_FLOOR_GRID = (2.5, 5.0, 10.0)
+ROBUSTNESS_RELATIVE_SCORE_CAP_GRID = (1.5, 2.0, 3.0)
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,72 @@ class ConsensusBacktestResult:
     tickers: int
     years: int
     methods: list[ConsensusBacktestMethod]
+
+
+@dataclass(frozen=True)
+class ConsensusBacktestSlice:
+    dimension: str
+    key: str
+    observations: int
+    tickers: int
+    years: int
+    baseline_median_smape_percent: float
+    weighted_median_smape_percent: float
+    weighted_median_delta_pp: float
+    baseline_mean_smape_percent: float
+    weighted_mean_smape_percent: float
+    weighted_mean_delta_pp: float
+
+
+@dataclass(frozen=True)
+class ConsensusBacktestJackknife:
+    dimension: str
+    excluded_key: str
+    observations: int
+    weighted_median_delta_pp: float
+    weighted_mean_delta_pp: float
+    preserves_median_improvement: bool
+    preserves_mean_improvement: bool
+
+
+@dataclass(frozen=True)
+class ConsensusBacktestParameterCase:
+    shrinkage_samples: int
+    error_floor_percent: float
+    relative_score_cap: float
+    observations: int
+    weighted_median_smape_percent: float
+    weighted_mean_smape_percent: float
+    weighted_median_delta_pp: float
+    weighted_mean_delta_pp: float
+
+
+@dataclass(frozen=True)
+class ConsensusBacktestRobustnessResult:
+    snapshot: AccuracySnapshot
+    min_sources: int
+    observations: int
+    tickers: int
+    years: int
+    weighted_median_delta_pp: float | None
+    weighted_mean_delta_pp: float | None
+    positive_ticker_slices: int
+    ticker_slices: int
+    positive_year_slices: int
+    year_slices: int
+    ticker_jackknife_preserved: int
+    ticker_jackknife_cases: int
+    year_jackknife_preserved: int
+    year_jackknife_cases: int
+    positive_parameter_cases: int
+    parameter_cases: int
+    parameter_min_median_delta_pp: float | None
+    parameter_max_median_delta_pp: float | None
+    by_year: list[ConsensusBacktestSlice]
+    by_ticker: list[ConsensusBacktestSlice]
+    jackknife_year: list[ConsensusBacktestJackknife]
+    jackknife_ticker: list[ConsensusBacktestJackknife]
+    parameter_sweep: list[ConsensusBacktestParameterCase]
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -154,27 +223,29 @@ def _source_weights(
     return ({name: score / score_sum for name, score in scores.items()}, counts)
 
 
-def build_consensus_backtest_observations(
+def _load_backtest_context(
     db: Session,
     *,
-    snapshot: AccuracySnapshot = "pre_year",
-    min_sources: int = DEFAULT_MIN_SOURCES,
-    shrinkage_samples: int = DEFAULT_SHRINKAGE_SAMPLES,
-    error_floor_percent: float = DEFAULT_ERROR_FLOOR_PERCENT,
-    relative_score_cap: float = DEFAULT_RELATIVE_SCORE_CAP,
-) -> list[ConsensusBacktestObservation]:
-    if min_sources < 2:
-        raise ValueError("min_sources must be at least 2")
-
+    snapshot: AccuracySnapshot,
+) -> tuple[list[AccuracySample], dict[tuple[str, int], datetime | None]]:
     samples = build_accuracy_samples(db, snapshot=snapshot)
-    if not samples:
-        return []
-
     actual_rows = list(db.scalars(select(ActualNetProfit)).all())
     reported_at_by_key = {
         (row.ticker.strip().upper(), row.fiscal_year): row.reported_at for row in actual_rows
     }
+    return samples, reported_at_by_key
 
+
+def _build_consensus_backtest_observations_from_context(
+    samples: list[AccuracySample],
+    reported_at_by_key: dict[tuple[str, int], datetime | None],
+    *,
+    snapshot: AccuracySnapshot,
+    min_sources: int,
+    shrinkage_samples: int,
+    error_floor_percent: float,
+    relative_score_cap: float,
+) -> list[ConsensusBacktestObservation]:
     grouped: dict[tuple[str, int], list[AccuracySample]] = {}
     for sample in samples:
         grouped.setdefault((sample.ticker, sample.fiscal_year), []).append(sample)
@@ -232,6 +303,32 @@ def build_consensus_backtest_observations(
             )
         )
     return observations
+
+
+def build_consensus_backtest_observations(
+    db: Session,
+    *,
+    snapshot: AccuracySnapshot = "pre_year",
+    min_sources: int = DEFAULT_MIN_SOURCES,
+    shrinkage_samples: int = DEFAULT_SHRINKAGE_SAMPLES,
+    error_floor_percent: float = DEFAULT_ERROR_FLOOR_PERCENT,
+    relative_score_cap: float = DEFAULT_RELATIVE_SCORE_CAP,
+) -> list[ConsensusBacktestObservation]:
+    if min_sources < 2:
+        raise ValueError("min_sources must be at least 2")
+
+    samples, reported_at_by_key = _load_backtest_context(db, snapshot=snapshot)
+    if not samples:
+        return []
+    return _build_consensus_backtest_observations_from_context(
+        samples,
+        reported_at_by_key,
+        snapshot=snapshot,
+        min_sources=min_sources,
+        shrinkage_samples=shrinkage_samples,
+        error_floor_percent=error_floor_percent,
+        relative_score_cap=relative_score_cap,
+    )
 
 
 def _method_summary(
@@ -315,6 +412,229 @@ def aggregate_consensus_backtest(
         )
         for method in methods
     ]
+
+
+def _median_and_weighted(
+    observations: list[ConsensusBacktestObservation],
+) -> tuple[ConsensusBacktestMethod, ConsensusBacktestMethod] | None:
+    methods = aggregate_consensus_backtest(observations)
+    if not methods:
+        return None
+    by_method = {method.method: method for method in methods}
+    return by_method["median"], by_method["weighted"]
+
+
+def _slice_backtest(
+    observations: list[ConsensusBacktestObservation],
+    *,
+    dimension: str,
+) -> list[ConsensusBacktestSlice]:
+    if dimension == "year":
+        key_of = lambda item: str(item.fiscal_year)
+    elif dimension == "ticker":
+        key_of = lambda item: item.ticker
+    else:
+        raise ValueError("unsupported robustness dimension")
+
+    grouped: dict[str, list[ConsensusBacktestObservation]] = {}
+    for observation in observations:
+        grouped.setdefault(key_of(observation), []).append(observation)
+
+    rows: list[ConsensusBacktestSlice] = []
+    for key, group in grouped.items():
+        pair = _median_and_weighted(group)
+        if pair is None:
+            continue
+        baseline, weighted = pair
+        rows.append(
+            ConsensusBacktestSlice(
+                dimension=dimension,
+                key=key,
+                observations=len(group),
+                tickers=len({item.ticker for item in group}),
+                years=len({item.fiscal_year for item in group}),
+                baseline_median_smape_percent=baseline.median_smape_percent,
+                weighted_median_smape_percent=weighted.median_smape_percent,
+                weighted_median_delta_pp=weighted.median_smape_delta_vs_median_pp,
+                baseline_mean_smape_percent=baseline.mean_smape_percent,
+                weighted_mean_smape_percent=weighted.mean_smape_percent,
+                weighted_mean_delta_pp=weighted.mean_smape_delta_vs_median_pp,
+            )
+        )
+    if dimension == "year":
+        return sorted(rows, key=lambda row: int(row.key))
+    return sorted(rows, key=lambda row: row.key)
+
+
+def _jackknife_backtest(
+    observations: list[ConsensusBacktestObservation],
+    *,
+    dimension: str,
+) -> list[ConsensusBacktestJackknife]:
+    if dimension == "year":
+        key_of = lambda item: str(item.fiscal_year)
+        keys = sorted({key_of(item) for item in observations}, key=int)
+    elif dimension == "ticker":
+        key_of = lambda item: item.ticker
+        keys = sorted({key_of(item) for item in observations})
+    else:
+        raise ValueError("unsupported robustness dimension")
+
+    rows: list[ConsensusBacktestJackknife] = []
+    for key in keys:
+        remaining = [item for item in observations if key_of(item) != key]
+        pair = _median_and_weighted(remaining)
+        if pair is None:
+            continue
+        _, weighted = pair
+        rows.append(
+            ConsensusBacktestJackknife(
+                dimension=dimension,
+                excluded_key=key,
+                observations=len(remaining),
+                weighted_median_delta_pp=weighted.median_smape_delta_vs_median_pp,
+                weighted_mean_delta_pp=weighted.mean_smape_delta_vs_median_pp,
+                preserves_median_improvement=weighted.median_smape_delta_vs_median_pp > 0,
+                preserves_mean_improvement=weighted.mean_smape_delta_vs_median_pp > 0,
+            )
+        )
+    return rows
+
+
+def _parameter_sweep(
+    samples: list[AccuracySample],
+    reported_at_by_key: dict[tuple[str, int], datetime | None],
+    *,
+    snapshot: AccuracySnapshot,
+    min_sources: int,
+) -> list[ConsensusBacktestParameterCase]:
+    rows: list[ConsensusBacktestParameterCase] = []
+    for shrinkage_samples in ROBUSTNESS_SHRINKAGE_GRID:
+        for error_floor_percent in ROBUSTNESS_ERROR_FLOOR_GRID:
+            for relative_score_cap in ROBUSTNESS_RELATIVE_SCORE_CAP_GRID:
+                observations = _build_consensus_backtest_observations_from_context(
+                    samples,
+                    reported_at_by_key,
+                    snapshot=snapshot,
+                    min_sources=min_sources,
+                    shrinkage_samples=shrinkage_samples,
+                    error_floor_percent=error_floor_percent,
+                    relative_score_cap=relative_score_cap,
+                )
+                pair = _median_and_weighted(observations)
+                if pair is None:
+                    continue
+                _, weighted = pair
+                rows.append(
+                    ConsensusBacktestParameterCase(
+                        shrinkage_samples=shrinkage_samples,
+                        error_floor_percent=error_floor_percent,
+                        relative_score_cap=relative_score_cap,
+                        observations=len(observations),
+                        weighted_median_smape_percent=weighted.median_smape_percent,
+                        weighted_mean_smape_percent=weighted.mean_smape_percent,
+                        weighted_median_delta_pp=weighted.median_smape_delta_vs_median_pp,
+                        weighted_mean_delta_pp=weighted.mean_smape_delta_vs_median_pp,
+                    )
+                )
+    return rows
+
+
+def build_consensus_backtest_robustness(
+    db: Session,
+    *,
+    snapshot: AccuracySnapshot = "pre_year",
+    min_sources: int = DEFAULT_MIN_SOURCES,
+) -> ConsensusBacktestRobustnessResult:
+    if min_sources < 2:
+        raise ValueError("min_sources must be at least 2")
+
+    samples, reported_at_by_key = _load_backtest_context(db, snapshot=snapshot)
+    if not samples:
+        return ConsensusBacktestRobustnessResult(
+            snapshot=snapshot,
+            min_sources=min_sources,
+            observations=0,
+            tickers=0,
+            years=0,
+            weighted_median_delta_pp=None,
+            weighted_mean_delta_pp=None,
+            positive_ticker_slices=0,
+            ticker_slices=0,
+            positive_year_slices=0,
+            year_slices=0,
+            ticker_jackknife_preserved=0,
+            ticker_jackknife_cases=0,
+            year_jackknife_preserved=0,
+            year_jackknife_cases=0,
+            positive_parameter_cases=0,
+            parameter_cases=0,
+            parameter_min_median_delta_pp=None,
+            parameter_max_median_delta_pp=None,
+            by_year=[],
+            by_ticker=[],
+            jackknife_year=[],
+            jackknife_ticker=[],
+            parameter_sweep=[],
+        )
+
+    observations = _build_consensus_backtest_observations_from_context(
+        samples,
+        reported_at_by_key,
+        snapshot=snapshot,
+        min_sources=min_sources,
+        shrinkage_samples=DEFAULT_SHRINKAGE_SAMPLES,
+        error_floor_percent=DEFAULT_ERROR_FLOOR_PERCENT,
+        relative_score_cap=DEFAULT_RELATIVE_SCORE_CAP,
+    )
+    pair = _median_and_weighted(observations)
+    weighted = pair[1] if pair is not None else None
+    by_year = _slice_backtest(observations, dimension="year")
+    by_ticker = _slice_backtest(observations, dimension="ticker")
+    jackknife_year = _jackknife_backtest(observations, dimension="year")
+    jackknife_ticker = _jackknife_backtest(observations, dimension="ticker")
+    parameter_sweep = _parameter_sweep(
+        samples,
+        reported_at_by_key,
+        snapshot=snapshot,
+        min_sources=min_sources,
+    )
+    parameter_deltas = [row.weighted_median_delta_pp for row in parameter_sweep]
+
+    return ConsensusBacktestRobustnessResult(
+        snapshot=snapshot,
+        min_sources=min_sources,
+        observations=len(observations),
+        tickers=len({observation.ticker for observation in observations}),
+        years=len({observation.fiscal_year for observation in observations}),
+        weighted_median_delta_pp=(
+            weighted.median_smape_delta_vs_median_pp if weighted is not None else None
+        ),
+        weighted_mean_delta_pp=(
+            weighted.mean_smape_delta_vs_median_pp if weighted is not None else None
+        ),
+        positive_ticker_slices=sum(1 for row in by_ticker if row.weighted_median_delta_pp > 0),
+        ticker_slices=len(by_ticker),
+        positive_year_slices=sum(1 for row in by_year if row.weighted_median_delta_pp > 0),
+        year_slices=len(by_year),
+        ticker_jackknife_preserved=sum(
+            1 for row in jackknife_ticker if row.preserves_median_improvement
+        ),
+        ticker_jackknife_cases=len(jackknife_ticker),
+        year_jackknife_preserved=sum(
+            1 for row in jackknife_year if row.preserves_median_improvement
+        ),
+        year_jackknife_cases=len(jackknife_year),
+        positive_parameter_cases=sum(1 for row in parameter_sweep if row.weighted_median_delta_pp > 0),
+        parameter_cases=len(parameter_sweep),
+        parameter_min_median_delta_pp=min(parameter_deltas) if parameter_deltas else None,
+        parameter_max_median_delta_pp=max(parameter_deltas) if parameter_deltas else None,
+        by_year=by_year,
+        by_ticker=by_ticker,
+        jackknife_year=jackknife_year,
+        jackknife_ticker=jackknife_ticker,
+        parameter_sweep=parameter_sweep,
+    )
 
 
 def build_consensus_backtest(
