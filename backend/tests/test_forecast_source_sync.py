@@ -1,4 +1,5 @@
-import pytest
+import asyncio
+
 from app.forecast_source_sync import (
     _get_or_create_target_tables,
     merge_future_values,
@@ -59,8 +60,7 @@ def test_merge_future_values_is_source_agnostic() -> None:
     assert merged == {"2099": 2.0, "2100": 3.0}
 
 
-@pytest.mark.asyncio
-async def test_dividend_only_source_keeps_profit_source_comment(monkeypatch) -> None:
+def test_dividend_only_source_keeps_profit_source_comment() -> None:
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
 
@@ -85,12 +85,6 @@ async def test_dividend_only_source_keeps_profit_source_comment(monkeypatch) -> 
         )
         db.commit()
 
-    monkeypatch.setitem(
-        sync_forecast_source_once.__globals__,
-        "SessionLocal",
-        lambda: Session(engine),
-    )
-
     class DividendOnlyClient:
         async def fetch_catalog_mapping(self, tickers):
             return {"SBER": "sber"}, {}
@@ -102,12 +96,20 @@ async def test_dividend_only_source_keeps_profit_source_comment(monkeypatch) -> 
 
             return Forecast()
 
-    result = await sync_forecast_source_once(
-        analyst_name="ДОХОДЪ",
-        source_comment="ДОХОДЪ — автоматический прогноз дивидендов",
-        changed_by="dohod-sync",
-        client=DividendOnlyClient(),
-    )
+    globals_dict = sync_forecast_source_once.__globals__
+    old_session_local = globals_dict["SessionLocal"]
+    globals_dict["SessionLocal"] = lambda: Session(engine)
+    try:
+        result = asyncio.run(
+            sync_forecast_source_once(
+                analyst_name="ДОХОДЪ",
+                source_comment="ДОХОДЪ — автоматический прогноз дивидендов",
+                changed_by="dohod-sync",
+                client=DividendOnlyClient(),
+            )
+        )
+    finally:
+        globals_dict["SessionLocal"] = old_session_local
 
     assert result.tickers_updated == 1
     with Session(engine) as db:
