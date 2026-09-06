@@ -2,69 +2,59 @@
 
 ## Назначение
 
-Начиная с v0.17.0 приложение рассчитывает accuracy-weighted consensus **параллельно** с текущей production-медианой.
+Начиная с v0.17.0 приложение рассчитывает accuracy-weighted consensus **параллельно** с production median.
 
-Это shadow-модель:
+Shadow-модель:
 
-- она видна в Analytics;
-- её можно сравнивать с текущей медианой на реальных текущих прогнозах;
-- она не изменяет production fair value;
-- она не изменяет Watchlist;
-- она не изменяет расчёт ожидаемой доходности;
-- она не меняет ranking или persisted forecast values.
+- видна в Analytics;
+- сравнивается с текущей медианой на реальных текущих прогнозах;
+- не изменяет production fair value;
+- не изменяет Watchlist;
+- не изменяет expected return/ranking;
+- не изменяет persisted forecast values.
 
-Даже если readiness gate показывает `READY`, переключение production consensus остаётся отдельным релизным решением.
+С v0.18.0 shadow сохраняется как forward-only monitoring history, с v0.19.0 агрегируется по всему primary universe, а с v0.20.0 значимые drift transitions могут создавать stateful email-уведомления.
 
-С v0.18.0 shadow-расчёт дополнительно сохраняется во времени как **forward-only monitoring history**. Эта история нужна для наблюдения за реальным поведением weighted-модели после её внедрения в shadow-режиме.
+Даже `READY` и наличие стабильного forward-monitoring не переключают production consensus автоматически.
 
-С v0.19.0 тот же forward-monitoring агрегируется по всему universe основной таблицы в единый operational overview. Overview не вводит отдельные thresholds и не переопределяет статус: `ALERT/WATCH/STABLE/insufficient` для строки overview вычисляется тем же policy, что и детальный drift endpoint конкретного тикера.
+## Текущий target year
 
-## Текущий целевой год
+Shadow использует тот же базовый год, что production consensus: `forecast_start_year` основной таблицы.
 
-Shadow consensus использует тот же базовый год, что и текущий production consensus: `forecast_start_year` основной таблицы (`sort_order=1`).
+В расчёт попадают источники, у которых для этого года доступны одновременно:
 
-В расчёт попадают только источники, у которых для этого календарного года одновременно доступны:
-
-- прогноз годовой чистой прибыли;
+- forecast annual net profit;
 - P/E;
-- число акций.
+- shares.
 
-Для каждого источника текущая target price рассчитывается той же базовой формулой:
+Для каждого источника:
 
 ```text
 TargetPrice = NetProfit × P/E / Shares
 ```
 
-Источник идентифицируется текущим точным `analyst_name`, как и в существующей accuracy/backtest-модели. Если несколько таблиц имеют одинаковый `analyst_name`, shadow engine считает их одним источником и берёт первую по текущему порядку таблиц.
+Источник идентифицируется exact `analyst_name`, как и в accuracy/backtest. Минимум для shadow aggregation — два сопоставимых источника.
 
-Минимум для shadow-агрегации — два сопоставимых источника.
+## Historical snapshot для весов
 
-## Как выбирается historical snapshot для весов
-
-Для даты расчёта `as_of`:
-
-| Целевой год | Historical snapshot |
+| Target year | Snapshot |
 | --- | --- |
-| `target_year > as_of.year` | `pre_year` |
-| `target_year == as_of.year` и дата до 1 июля | `pre_year` |
-| `target_year == as_of.year` и дата с 1 июля | `mid_year` |
-| `target_year < as_of.year` | `year_end` |
+| будущий год | `pre_year` |
+| текущий год до 1 июля | `pre_year` |
+| текущий год с 1 июля | `mid_year` |
+| прошедший год | `year_end` |
 
-Идея — сравнивать текущую фазу прогноза с максимально близким фиксированным историческим горизонтом, не используя более позднюю информацию.
+Training sample допускается только если:
 
-## Какие исторические факты допускаются в веса
+1. его fiscal year строго раньше текущего target year;
+2. у канонического факта известен `reported_at`;
+3. `reported_at < as_of`.
 
-После выбора snapshot используются те же no-lookahead правила, что и в backtest:
+Факт без даты публикации не обучает текущий weight.
 
-1. historical sample должен относиться к финансовому году строго раньше текущего `target_year`;
-2. у канонического факта должен быть известен `reported_at`;
-3. `reported_at` должен быть строго раньше текущего `as_of`.
+## Weighting
 
-Факт с неизвестной датой публикации не обучает текущий shadow-вес.
-
-## Формирование весов
-
-Используется та же консервативная схема, что и в backtest:
+Default policy:
 
 ```text
 shrinkage_samples = 5
@@ -72,21 +62,19 @@ error_floor_percent = 5
 relative_score_cap = 2
 ```
 
-Если у текущих источников нет доступной historical training history, все веса становятся одинаковыми:
+Если historical training history недоступна, веса становятся равными:
 
 ```text
-shadow weighted = арифметическое среднее
+shadow weighted = arithmetic mean
 ```
 
-Это намеренный neutral fallback.
+Это neutral fallback.
 
-## Batch shadow engine
+## Batch engine
 
-С v0.18.0 текущий shadow engine умеет считать все тикеры основной таблицы за один проход.
+С v0.18.0 historical training context строится один раз на capture-run и переиспользуется для всех тикеров primary table.
 
-Historical accuracy samples и допустимый training set строятся **один раз на capture-run**, а затем переиспользуются для всех тикеров. Это критично для периодического мониторинга: без batch-context полный accuracy history пришлось бы заново строить для каждой бумаги.
-
-Публичный одиночный endpoint сохраняет прежний контракт:
+Single-ticker API сохраняется:
 
 ```http
 GET /api/analytics/shadow-consensus?ticker=SBER
@@ -100,33 +88,20 @@ GET /api/analytics/shadow-consensus?ticker=SBER
 shadow_consensus_snapshots
 ```
 
-Для каждой доступной бумаги сохраняются только безопасные агрегаты:
+Хранятся только безопасные aggregate values:
 
-- ticker;
-- target year;
-- training snapshot;
-- время capture;
-- число текущих sources;
-- число sources с training history;
-- число training samples;
-- min/max weight без связи с конкретным source;
+- ticker / target year / training snapshot / captured_at;
+- source/training coverage counts;
+- min/max source weight без source identity;
 - median/weighted net profit;
 - median/weighted target price;
-- delta weighted к median;
-- текущая цена;
-- market gap median/weighted.
+- weighted-vs-median delta;
+- current price;
+- median/weighted market gap.
 
-**Не сохраняются:**
+Не сохраняются реальные `analyst_name`, source-level forecasts или source-level weights.
 
-- реальные `analyst_name`;
-- source-level forecasts;
-- source-level weights.
-
-Поэтому history и overview API безопасны для internet/read-only режима.
-
-### Расписание
-
-По умолчанию history capture включён:
+### Capture schedule
 
 ```dotenv
 SHADOW_HISTORY_ENABLED=true
@@ -135,245 +110,238 @@ SHADOW_HISTORY_RUN_ON_STARTUP=true
 SHADOW_HISTORY_RETENTION_DAYS=730
 ```
 
-`arsagera-worker`:
+Startup capture выполняется после startup source sync. Регулярный capture имеет 15-minute phase offset относительно source-sync phase, чтобы уменьшить риск mixed state.
 
-1. выполняет обычные initial forecast/actual sync;
-2. после них снимает initial shadow snapshot;
-3. затем повторяет capture каждые 6 часов;
-4. регулярный capture сдвинут на 15 минут относительно стартовой фазы forecast-sync jobs;
-5. при capture удаляет записи старше retention.
+История начинается только после развёртывания v0.18.0. Backfill из старых `forecast_revisions` намеренно отсутствует, потому что реконструкция старого source set/training knowledge могла бы внести hindsight bias.
 
-Параметры опциональны: существующий `.env` менять необязательно.
-
-### Почему нет backfill
-
-История начинается только после установки v0.18.0.
-
-Старые `forecast_revisions` не преобразуются задним числом в shadow history, потому что достоверный historical shadow потребовал бы реконструировать тогдашние:
-
-- доступный набор источников;
-- source identity;
-- training history;
-- known-at-the-time actual facts;
-- weighting regime.
-
-Использование текущего состояния для такого backfill создало бы риск hindsight bias.
-
-## History API
+History API:
 
 ```http
 GET /api/analytics/shadow-consensus/history?ticker=SBER&days=90
 ```
 
-Параметры:
-
-- `ticker` — MOEX ticker;
-- `days` — окно 1..730 дней, default 90;
-- `limit` — максимум 1000 точек, default 500.
-
-Ответ отсортирован по времени от старых точек к новым.
-
-Ручной capture доступен только local scope:
+Local-only manual capture:
 
 ```http
 POST /api/analytics/shadow-consensus/capture
 ```
 
-Он предназначен для диагностики/проверки deployment. Плановый production capture выполняет worker.
-
 ## Drift monitoring
-
-Публичный endpoint:
 
 ```http
 GET /api/analytics/shadow-consensus/drift?ticker=SBER&days=30
 ```
 
-Drift здесь означает **операционное расхождение shadow weighted с median baseline**, а не статистически доказанный data/model drift.
+Drift означает operational divergence shadow weighted от median baseline, а не статистически доказанный model/data drift.
 
-При расчёте сравниваются только snapshots того же `target_year`, что и последняя точка. Старый прогнозный год не смешивается с новым.
-
-До классификации требуется:
+Классификация начинается только при:
 
 ```text
-минимум 3 snapshots
-и минимум 24 часа forward history
+>= 3 snapshots
+>= 24 hours history одного target_year
 ```
 
-До выполнения обоих условий статус:
+До этого status = `insufficient`.
 
-```text
-insufficient
-```
+### Signals
 
-### Наблюдаемые признаки
+1. current weighted-vs-median target divergence;
+2. divergence step к предыдущему snapshot;
+3. max-weight concentration относительно equal weight;
+4. relative movement gap weighted vs median;
+5. training snapshot change.
 
-1. **Baseline divergence** — текущее абсолютное расхождение weighted target с median.
-2. **Divergence step** — изменение этого расхождения относительно предыдущего snapshot.
-3. **Weight concentration ratio**:
+### Thresholds
 
-```text
-max source weight / equal source weight
-```
-
-Например при трёх sources равный вес — `33.3%`; max weight `50%` означает concentration `1.5×`.
-
-4. **Relative movement gap** — разница процентного движения weighted и median от первой точки текущего monitoring-window до последней.
-5. **Training snapshot change** — смена `pre_year / mid_year / year_end`; это ожидаемый regime change, но он отмечается для интерпретации скачка.
-
-### Operational thresholds
-
-| Признак | WATCH | ALERT |
+| Signal | WATCH | ALERT |
 | --- | ---: | ---: |
 | `abs(weighted vs median)` | `>= 10%` | `>= 20%` |
-| `abs(delta step)` | `>= 5 п.п.` | `>= 10 п.п.` |
-| weight concentration | `>= 1.5×` | `>= 1.75×` |
-| `abs(relative movement gap)` | `>= 5 п.п.` | `>= 10 п.п.` |
+| `abs(delta step)` | `>= 5 pp` | `>= 10 pp` |
+| weight concentration | `>= 1.5x` | `>= 1.75x` |
+| `abs(relative movement gap)` | `>= 5 pp` | `>= 10 pp` |
 
-Смена training snapshot добавляет `WATCH`, если более сильного `ALERT` уже нет.
+Training snapshot change добавляет WATCH reason, если более сильного ALERT нет.
 
-Эти thresholds — прозрачная engineering policy. Они **не являются статистическим тестом значимости и не являются торговым сигналом**.
+Statuses:
 
-Статусы:
-
-- `insufficient` — истории пока недостаточно;
-- `stable` — ни один threshold не достигнут;
-- `watch` — достигнут хотя бы WATCH threshold;
-- `alert` — достигнут хотя бы ALERT threshold.
+- `insufficient`;
+- `stable`;
+- `watch`;
+- `alert`.
 
 ## Global drift overview
 
-С v0.19.0 доступен публичный агрегированный endpoint:
+С v0.19.0:
 
 ```http
 GET /api/analytics/shadow-consensus/overview?days=30
 ```
 
-Параметр `days` использует тот же диапазон, что и детальный drift monitor: 2..180 дней, default 30.
+Overview использует **тот же classifier и thresholds**, что per-ticker drift. Второго drift algorithm нет.
 
-Universe определяется **текущей основной таблицей** — первой по `sort_order`, затем `id`. Это совпадает с выбором основной таблицы для production/shadow target year.
-
-Overview специально включает и бумаги без накопленной forward history. Они получают:
+Universe = текущая primary table. Тикер без history остаётся видимым:
 
 ```text
 status = insufficient
 reason = no_history
 ```
 
-Это позволяет отличить реальное отсутствие аномалий от слабого monitoring coverage.
+Сводка содержит universe size, history/classified coverage, status counts и `actionable = alert + watch`.
 
-Сводка возвращает:
+Backend batch-loads latest/window snapshots и избегает N+1 query pattern.
 
-- `universe_tickers`;
-- `tickers_with_history`;
-- `classified_tickers`;
-- числа `alert/watch/stable/insufficient`;
-- `actionable_tickers = alert + watch`;
-- history coverage;
-- classified coverage;
-- список тех же `ShadowDriftResult` по каждому тикеру.
-
-Backend загружает последние snapshots и monitoring-window пакетно, а не вызывает детальный endpoint отдельно для каждого тикера. Это избегает N+1-query pattern.
-
-Порядок по умолчанию:
+Default order:
 
 ```text
 ALERT → WATCH → STABLE → insufficient
 ```
 
-Внутри одного статуса выше показывается бумага с большим абсолютным текущим расхождением weighted к median.
+Внутри статуса — по убыванию absolute current divergence.
 
-Overview не хранит новых данных и не создаёт новой схемы БД — это read-only проекция существующей `shadow_consensus_snapshots`.
+## Stateful drift notifications
+
+С v0.20.0 после каждого shadow capture worker запускает transition processor.
+
+Persisted state:
+
+```text
+shadow_drift_states
+```
+
+Append-only transition/delivery ledger:
+
+```text
+shadow_drift_notification_events
+```
+
+Notification engine **не определяет drift заново**: он получает уже классифицированные `stable/watch/alert/insufficient` states из существующего global overview.
+
+### State machine
+
+```text
+bootstrap               → без письма
+STABLE → WATCH          → письмо, subject to cooldown
+STABLE → ALERT          → immediate alert
+WATCH  → ALERT          → immediate escalation
+WATCH  → STABLE         → recovery, только если incident реально был notified
+ALERT  → STABLE         → recovery, только если incident реально был notified
+ALERT  → WATCH          → event only; это ещё не full recovery
+same status             → no new event / no mail
+* ↔ insufficient        → event only
+смена target_year       → reset event / no mail
+```
+
+Bootstrap без письма предотвращает flood после deployment. Target-year reset также не считается model incident.
+
+### Cooldown
+
+Default:
+
+```dotenv
+SHADOW_NOTIFICATION_COOLDOWN_HOURS=24
+```
+
+Cooldown применяется к repeated re-entry `STABLE → WATCH`, но не блокирует escalation в ALERT или валидный recovery.
+
+### Delivery retry
+
+SMTP failure сохраняется как `failed`. Retry выполняется на следующем monitoring-cycle до:
+
+```dotenv
+SHADOW_NOTIFICATION_MAX_ATTEMPTS=5
+```
+
+Перед retry проверяется, что event всё ещё соответствует current target year/status. Устаревший event становится `superseded` и не отправляется.
+
+### Enable/configuration
+
+Default:
+
+```dotenv
+SHADOW_NOTIFICATIONS_ENABLED=false
+```
+
+Даже при disabled delivery state ledger продолжает обновляться. Would-be notifications сохраняются как suppressed и не отправляются ретроспективно после включения.
+
+SMTP переиспользует `VOLUME_SMTP_*`. Recipient задаётся через `SHADOW_NOTIFICATION_EMAIL` или fallback `VOLUME_NOTIFICATION_EMAIL`.
+
+Полная конфигурация/state-machine/runbook: [`shadow-notifications.md`](shadow-notifications.md).
+
+### Notification API
+
+Public safe:
+
+```http
+GET /api/analytics/shadow-consensus/notifications/status
+GET /api/analytics/shadow-consensus/notifications/events?limit=50
+```
+
+Local-only test:
+
+```http
+POST /api/analytics/shadow-consensus/notifications/test
+```
+
+Public API не раскрывает recipient, SMTP credentials/error text, source names, source forecasts или source weights.
 
 ## Analytics UI
 
-### Global shadow drift
+Global panel отображается без выбора тикера и показывает coverage/status table.
 
-Глобальный блок отображается без выбора тикера и показывает:
+После выбора тикера показываются current shadow и forward history/drift.
 
-- размер universe;
-- долю бумаг, у которых уже есть history;
-- число классифицированных бумаг;
-- количество `ALERT`, `WATCH`, `STABLE`, `insufficient`;
-- количество бумаг, требующих внимания (`ALERT + WATCH`);
-- таблицу с текущей delta, шагом delta, концентрацией веса, movement gap, длительностью history и причинами статуса;
-- фильтр `Все / ALERT+WATCH / ALERT / WATCH / STABLE / Накопление`;
-- переключатель monitoring-window 7 / 30 / 90 / 180 дней.
-
-Тикер является ссылкой на детальную Analytics-карточку этой бумаги.
-
-### Shadow weighted consensus
-
-После выбора тикера показывается текущий state:
-
-- production median target;
-- shadow weighted target;
-- delta;
-- market gap;
-- median/weighted net profit;
-- диапазон текущих весов;
-- выбранный historical snapshot;
-- training samples.
-
-### Shadow history и drift
-
-Forward monitoring конкретного тикера показывает:
-
-- drift status;
-- число snapshots;
-- фактическую длительность history;
-- latest delta и median absolute delta;
-- weight concentration ratio;
-- relative movement gap;
-- график `median vs weighted`;
-- последние snapshot rows;
-- причины `WATCH/ALERT`.
-
-График не соединяет разные `target_year`.
+С v0.20.0 global panel также показывает notification mode, cooldown, pending/failed count, last sent timestamp и recent transition events. Local admin при configured SMTP получает кнопку test email.
 
 ## Readiness gate
 
-Readiness — отдельная historical evidence-policy для будущего promotion weighted consensus. Это не статистический тест значимости и не автоматический feature flag.
+Readiness — historical evidence-policy, а не feature flag.
 
-Для выбранного historical snapshot должны пройти **все** критерии:
-
-| Gate | Требование |
+| Gate | Requirement |
 | --- | ---: |
 | Historical observations | `>= 30` |
 | Tickers | `>= 10` |
 | Fiscal years | `>= 3` |
-| Overall median-sMAPE improvement | `>= +1.0 pp` |
-| Overall mean-sMAPE improvement | `> 0 pp` |
+| Median-sMAPE improvement | `>= +1.0 pp` |
+| Mean-sMAPE improvement | `> 0 pp` |
 | Positive ticker slices | `>= 60%` |
 | Positive year slices | `>= 66.7%` |
-| Leave-one-ticker-out preserves improvement | `>= 80%` |
-| Leave-one-year-out preserves improvement | `>= 80%` |
+| Leave-one-ticker-out preserves | `>= 80%` |
+| Leave-one-year-out preserves | `>= 80%` |
 | Positive parameter cases | `>= 80%` |
 | Worst parameter-grid median delta | `> 0 pp` |
 
-Основной robustness endpoint возвращает readiness вместе с тем же расчётом:
+API:
 
 ```http
 GET /api/analytics/consensus-backtest/robustness?snapshot=pre_year
-```
-
-Отдельный API:
-
-```http
 GET /api/analytics/consensus-readiness?snapshot=pre_year
 ```
 
-`READY` означает только, что текущая historical evidence-policy выполнена. Для изменения production consensus всё равно нужен отдельный review и отдельный release.
+`READY` означает только выполнение current evidence-policy.
+
+## Database
+
+Current schema head начиная с v0.20.0:
+
+```text
+0022_shadow_drift_notifications
+```
+
+`0021_shadow_consensus_snapshots` хранит forward history; `0022` добавляет notification state/event ledger.
+
+Backend startup выполняет Alembic upgrade автоматически.
 
 ## Production boundary
 
-v0.19.0 **не меняет**:
+v0.20.0 **не меняет**:
 
 - production median consensus;
 - fair-value formulas;
 - expected-return calculations;
 - Watchlist ranking;
 - volume monitor;
-- source weighting defaults.
+- weighting defaults;
+- readiness gates;
+- drift thresholds.
 
-Global overview, readiness и forward monitoring остаются evidence/observability layers перед любым возможным promotion weighted consensus.
+Forward history, overview и notifications остаются evidence/observability layer перед любым отдельным решением о production promotion.
