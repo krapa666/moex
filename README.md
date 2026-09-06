@@ -57,7 +57,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - readiness gate для будущего решения о production weighting;
 - forward-only shadow history и drift monitoring;
 - глобальный shadow drift overview по universe основной таблицы;
-- stateful email-уведомления о значимых drift-переходах и историю их доставки.
+- stateful email-уведомления о значимых drift-переходах и историю их доставки;
+- Production Impact Simulator и Promotion Decision Dashboard для оценки последствий будущего median→weighted promotion.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
@@ -73,7 +74,9 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 С v0.20.0 поверх этого monitoring layer работает **stateful notification engine**. Он хранит per-ticker state и transition ledger и не отправляет письмо при каждом шестичасовом snapshot. Письма создаются для значимых переходов (`STABLE→WATCH`, escalation в `ALERT`, полноценный recovery), одинаковое состояние дедуплицируется, повторный вход в WATCH защищён cooldown, а неудачная SMTP-доставка может быть повторена только пока событие ещё актуально. Рассылка выключена по умолчанию.
 
-**Production consensus target price остаётся медианным; shadow/readiness/monitoring/notification layer не меняет fair value, Watchlist, expected return или ranking.**
+С v0.21.0 **Production Impact Simulator** сравнивает median и shadow weighted на всём comparable universe: target price, полную ожидаемую доходность, expected-return ranking, Top-N turnover и гипотетическую sensitivity Watchlist score. Promotion dossier объединяет historical readiness, forward drift coverage и impact metrics в статусы `NOT_READY / OBSERVE / READY_FOR_MANUAL_PROMOTION`. Даже последний статус ничего автоматически не переключает.
+
+**Production consensus target price остаётся медианным; shadow/readiness/monitoring/notification/impact layer не меняет fair value, текущий Watchlist, persisted expected return или ranking.**
 
 Подробнее:
 
@@ -82,6 +85,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - [`docs/consensus-backtest.md`](docs/consensus-backtest.md)
 - [`docs/shadow-consensus.md`](docs/shadow-consensus.md)
 - [`docs/shadow-notifications.md`](docs/shadow-notifications.md)
+- [`docs/production-impact.md`](docs/production-impact.md)
 
 ### Фактические годовые результаты
 
@@ -98,7 +102,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 ### Watchlist
 
-Страница `/watchlist/` собирает рассчитанные оценки в отдельный обзор для быстрого поиска наиболее интересных бумаг. Она использует текущие данные приложения и не создаёт независимую модель прогнозов.
+Страница `/watchlist/` собирает рассчитанные оценки основной таблицы №1 в отдельный обзор для быстрого поиска наиболее интересных бумаг. Она использует `forecast_price_year1` / `upside_percent_year1` primary row и не является median-consensus portfolio. Начиная с v0.21.0 Analytics отдельно показывает гипотетическую median-vs-weighted sensitivity по той же формуле Watchlist score, не изменяя сам Watchlist.
 
 ### Монитор объёмов
 
@@ -141,7 +145,7 @@ Frontend и backend публикуются Compose только на loopback:
 
 Не публикуйте эти порты напрямую в интернет. Внешний доступ должен идти через хостовый Nginx на `80/443`.
 
-Shadow notification status/event endpoints публично возвращают только operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Test-email endpoint является local-only.
+Shadow notification status/event и production-impact endpoints публично возвращают только безопасные aggregate/operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Test-email endpoint является local-only.
 
 ## Архитектура
 
@@ -322,6 +326,8 @@ VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
 - `POST /api/analytics/shadow-consensus/notifications/test` — local
 - `POST /api/analytics/shadow-consensus/capture` — local
 - `GET /api/analytics/consensus-readiness`
+- `GET /api/analytics/production-impact`
+- `GET /api/analytics/promotion-dossier`
 - `GET /api/analytics/actual-net-profits`
 - `PUT/DELETE /api/analytics/actual-net-profits/{ticker}/{fiscal_year}` — local
 - `GET /api/analytics/actual-net-profits/sync-status`
@@ -337,7 +343,7 @@ VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют local scope. Observation-level backtest local-only, потому что содержит реальные имена/веса источников. Shadow/readiness/history/drift/overview/notification status/event endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
+Все изменяющие endpoints требуют local scope. Observation-level backtest local-only, потому что содержит реальные имена/веса источников. Shadow/readiness/history/drift/overview/notification status/event и production-impact endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
 
 ## Миграции
 
@@ -353,6 +359,8 @@ v0.20.0 добавляет:
 
 - `shadow_drift_states` — текущее per-ticker operational state;
 - `shadow_drift_notification_events` — transition/delivery ledger.
+
+v0.21.0 не меняет schema.
 
 Последние ключевые изменения схемы также включают `actual_net_profits`, `source_key`, `forecast_source_runs`, `forecast_revisions` и `shadow_consensus_snapshots`.
 
@@ -390,6 +398,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest и robustness;
 - [`docs/shadow-consensus.md`](docs/shadow-consensus.md) — shadow weighted consensus, readiness, forward drift monitoring и global overview;
 - [`docs/shadow-notifications.md`](docs/shadow-notifications.md) — state machine, cooldown, retry, SMTP и runbook уведомлений;
+- [`docs/production-impact.md`](docs/production-impact.md) — impact simulator, portfolio stability и promotion policy;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
