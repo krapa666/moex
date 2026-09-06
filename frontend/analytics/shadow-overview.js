@@ -7,6 +7,12 @@
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
+  const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
   const statusRank = { alert: 0, watch: 1, stable: 2, insufficient: 3 };
   const reasonLabels = {
     large_baseline_divergence: 'большое расхождение с медианой',
@@ -23,6 +29,14 @@
     watch: 'WATCH',
     stable: 'STABLE',
     insufficient: 'НАКОПЛЕНИЕ',
+  };
+  const deliveryLabels = {
+    sent: 'отправлено',
+    pending: 'ожидает отправки',
+    failed: 'ошибка отправки',
+    suppressed: 'подавлено',
+    superseded: 'устарело',
+    not_applicable: 'без письма',
   };
 
   let current = null;
@@ -81,6 +95,21 @@
         <tbody data-shadow-overview-body></tbody>
       </table>
     </div>
+    <div class="shadow-notification-monitor" data-shadow-notifications>
+      <div class="shadow-notification-heading">
+        <div>
+          <h3>Уведомления о переходах drift</h3>
+          <p>Письма создаются только при значимых сменах состояния; одинаковый WATCH/ALERT на каждом snapshot повторно не рассылается.</p>
+        </div>
+        <div class="shadow-notification-actions">
+          <span data-shadow-notification-status>Загрузка…</span>
+          <button class="btn" type="button" data-shadow-notification-test hidden>Тест письма</button>
+        </div>
+      </div>
+      <div class="shadow-notification-summary" data-shadow-notification-summary></div>
+      <div class="shadow-notification-events" data-shadow-notification-events></div>
+      <span class="shadow-notification-test-status" data-shadow-notification-test-status role="status" aria-live="polite"></span>
+    </div>
   `;
   anchor.insertAdjacentElement('afterend', panel);
 
@@ -91,6 +120,11 @@
   const empty = panel.querySelector('[data-shadow-overview-empty]');
   const tableWrap = panel.querySelector('[data-shadow-overview-table-wrap]');
   const body = panel.querySelector('[data-shadow-overview-body]');
+  const notificationStatus = panel.querySelector('[data-shadow-notification-status]');
+  const notificationSummary = panel.querySelector('[data-shadow-notification-summary]');
+  const notificationEvents = panel.querySelector('[data-shadow-notification-events]');
+  const notificationTest = panel.querySelector('[data-shadow-notification-test]');
+  const notificationTestStatus = panel.querySelector('[data-shadow-notification-test-status]');
 
   function finite(value) {
     return value !== null && value !== undefined && Number.isFinite(Number(value));
@@ -192,6 +226,61 @@
       : `Universe: ${result.universe_tickers}`;
   }
 
+  function transitionLabel(event) {
+    const from = event.from_status ? (statusLabels[event.from_status] || event.from_status.toUpperCase()) : '—';
+    const to = statusLabels[event.to_status] || String(event.to_status || '').toUpperCase();
+    return `${from} → ${to}`;
+  }
+
+  function formatDate(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '—' : dateFormatter.format(date);
+  }
+
+  function renderNotificationState(state, events, isAdmin) {
+    const mode = state.enabled ? (state.configured ? 'Включены' : 'Нужна настройка') : 'Выключены';
+    notificationStatus.textContent = mode;
+    notificationStatus.dataset.notificationMode = state.enabled && state.configured ? 'ready' : 'off';
+    notificationTest.hidden = !isAdmin || !state.configured;
+    notificationSummary.innerHTML = `
+      <span>Cooldown: <strong>${numberFormatter.format(state.cooldown_hours)} ч</strong></span>
+      <span>Drift-window: <strong>${state.history_days} дн.</strong></span>
+      <span>Pending: <strong>${state.pending_events}</strong></span>
+      <span>Failed: <strong>${state.failed_events}</strong></span>
+      <span>Последнее письмо: <strong>${escapeHtml(formatDate(state.last_sent_at))}</strong></span>
+    `;
+    if (!events.length) {
+      notificationEvents.innerHTML = '<span>Переходов состояния пока не зафиксировано.</span>';
+      return;
+    }
+    notificationEvents.innerHTML = events.slice(0, 8).map((event) => `
+      <div class="shadow-notification-event" data-shadow-notification-event="${event.id}">
+        <a href="/analytics/?ticker=${encodeURIComponent(event.ticker)}">${escapeHtml(event.ticker)}</a>
+        <strong>${escapeHtml(transitionLabel(event))}</strong>
+        <span>${escapeHtml(deliveryLabels[event.delivery_status] || event.delivery_status)}</span>
+        <time>${escapeHtml(formatDate(event.observed_at))}</time>
+      </div>
+    `).join('');
+  }
+
+  async function loadNotifications() {
+    try {
+      const [stateResponse, eventsResponse, access] = await Promise.all([
+        fetch('/api/analytics/shadow-consensus/notifications/status'),
+        fetch('/api/analytics/shadow-consensus/notifications/events?limit=20'),
+        window.MoexAnalyticsAccess?.load?.() ?? Promise.resolve({ isAdmin: false }),
+      ]);
+      if (!stateResponse.ok || !eventsResponse.ok) throw new Error('notification API unavailable');
+      renderNotificationState(await stateResponse.json(), await eventsResponse.json(), Boolean(access?.isAdmin));
+    } catch (_error) {
+      notificationStatus.textContent = 'Недоступно';
+      notificationSummary.innerHTML = '';
+      notificationEvents.innerHTML = '<span>Не удалось загрузить состояние уведомлений.</span>';
+      notificationTest.hidden = true;
+    }
+  }
+
   async function load() {
     const seq = requestSeq + 1;
     requestSeq = seq;
@@ -218,6 +307,21 @@
   filterSelect.addEventListener('change', () => {
     if (current) renderRows(current);
   });
+  notificationTest.addEventListener('click', async () => {
+    notificationTest.disabled = true;
+    notificationTestStatus.textContent = 'Отправка…';
+    try {
+      const response = await fetch('/api/analytics/shadow-consensus/notifications/test', { method: 'POST' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      notificationTestStatus.textContent = 'Тестовое письмо отправлено.';
+      await loadNotifications();
+    } catch (_error) {
+      notificationTestStatus.textContent = 'Не удалось отправить тестовое письмо.';
+    } finally {
+      notificationTest.disabled = false;
+    }
+  });
 
   load();
+  loadNotifications();
 })();
