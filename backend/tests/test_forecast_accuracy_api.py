@@ -54,6 +54,8 @@ def test_actual_result_upsert_normalizes_ticker_and_updates_restated_value() -> 
             fiscal_year=2025,
             db=db,
         )
+        first.source_key = "moex-cci"
+        db.commit()
         second = upsert_actual_net_profit(
             request=_request("local"),
             payload=ActualNetProfitWrite(
@@ -70,6 +72,7 @@ def test_actual_result_upsert_normalizes_ticker_and_updates_restated_value() -> 
     assert first.id == second.id
     assert len(rows) == 1
     assert rows[0].ticker == "SBER"
+    assert rows[0].source_key == "manual"
     assert rows[0].net_profit_billion_rub == 105.0
     assert rows[0].source_name == "Issuer IFRS restatement"
 
