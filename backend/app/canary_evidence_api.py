@@ -16,7 +16,6 @@ from .canary_evidence import (
 )
 from .canary_evidence_health import (
     CanaryEvidenceHealthOverviewResult,
-    CanaryTickerEvidenceHealthResult,
     build_canary_evidence_health,
 )
 from .consensus_canary_api import require_local_actor
