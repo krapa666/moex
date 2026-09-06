@@ -1,6 +1,6 @@
 # Analytics
 
-Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate, forward shadow monitoring, глобальный drift overview, stateful notification history и Production Impact Simulator.
+Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate, forward shadow monitoring, глобальный drift overview, stateful notification history, Production Impact Simulator и Controlled Canary control plane.
 
 ## Режим доступа
 
@@ -10,7 +10,7 @@ Analytics использует общий сетевой access scope прило
 - internet-клиент работает read-only и видит нейтральные подписи `Аналитик 1`, `Аналитик 2` и т. д.;
 - если scope определить не удалось, интерфейс безопасно трактует пользователя как guest.
 
-Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift/overview/notification/production-impact сводки не содержат source-level имён изначально.
+Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift/overview/notification/production-impact/canary-status/active-consensus сводки не содержат source-level имён изначально.
 
 ## Текущий consensus
 
@@ -55,6 +55,28 @@ SpreadPercent = (MaxTarget - MinTarget) / MedianTarget × 100%
 - `> 25%` — низкая.
 
 При одной сопоставимой цели разброс не определяется.
+
+## Active consensus
+
+С v0.22.0 после выбора тикера Analytics дополнительно показывает отдельную карточку **Active consensus**:
+
+```http
+GET /api/analytics/active-consensus?ticker=SBER
+```
+
+Она не заменяет исходный analyst consensus block: source range/median остаются видимыми как baseline.
+
+Возможные effective modes:
+
+```text
+MEDIAN
+WEIGHTED CANARY
+MEDIAN FALLBACK
+```
+
+`WEIGHTED CANARY` появляется только для тикера из активного canary allowlist и только при прохождении runtime safety guards. Если configured canary не проходит guard, UI показывает `MEDIAN FALLBACK` и конкретную причину.
+
+Weighted expected return меняет только price-target layer; dividend contribution фиксируется на median baseline, как в Production Impact Simulator.
 
 ## Динамика consensus
 
@@ -266,7 +288,7 @@ POST /api/analytics/shadow-consensus/notifications/test
 
 UI показывает enabled/configured state, cooldown, pending/failed count, last sent time и recent transition delivery history. Кнопка теста доступна только local admin при настроенном SMTP.
 
-Failed delivery повторяется на следующем monitoring-cycle только пока event соответствует текущему target year/status. Иначе он становится `superseded` и не отправляется.
+Failed delivery повторяется на следующем monitoring-cycle только пока event соответствует current target year/status. Иначе он становится `superseded` и не отправляется.
 
 Подробная state-machine/SMTP/runbook документация: [`shadow-notifications.md`](shadow-notifications.md).
 
@@ -311,9 +333,36 @@ OBSERVE
 READY_FOR_MANUAL_PROMOTION
 ```
 
-Он объединяет historical 11/11 readiness, comparable impact coverage, rank/Top-N stability и forward drift coverage/span. `READY_FOR_MANUAL_PROMOTION` остаётся только decision-support статусом и не переключает production автоматически.
+Он объединяет historical 11/11 readiness, comparable impact coverage, rank/Top-N stability и forward drift coverage/span.
 
-Подробно: [`production-impact.md`](production-impact.md).
+## Controlled canary
+
+С v0.22.0 в Production Impact Dashboard появляется control block:
+
+```http
+GET  /api/analytics/consensus-canary
+PUT  /api/analytics/consensus-canary                  # local
+POST /api/analytics/consensus-canary/rollback         # local
+GET  /api/analytics/consensus-canary/events           # local
+```
+
+Canary выключен по умолчанию. Максимум — 5 тикеров.
+
+Enable требует:
+
+- `READY_FOR_MANUAL_PROMOTION`;
+- ticker в primary universe;
+- `shadow_available`;
+- historical weights минимум по двум sources;
+- live divergence `< 10%`;
+- live concentration `< 1.5x` equal weight;
+- forward drift `STABLE`.
+
+Runtime повторяет эти guards. Любое нарушение приводит к `MEDIAN FALLBACK`, а не к продолжению weighted.
+
+Rollback всегда доступен и просто выключает persisted canary state; source rows и forecast history не меняются.
+
+Подробно: [`consensus-canary.md`](consensus-canary.md).
 
 ## Фактические результаты и MOEX CCI
 
@@ -343,5 +392,6 @@ POST /api/analytics/actual-net-profits/sync
 - suppressed/failed/superseded notification events не меняют drift state;
 - production-impact Watchlist score является simulation, потому что текущий Watchlist основан на primary table;
 - promotion dossier является engineering policy, а не автоматическим feature flag;
-- `READY`/`READY_FOR_MANUAL_PROMOTION` не меняют production mode автоматически;
-- accuracy-weighted production consensus намеренно отключён.
+- canary управляет только Active consensus и не переписывает primary/source rows;
+- canary runtime fail-safe всегда направлен в median;
+- текущий `/watchlist/` не переключается canary-механизмом.

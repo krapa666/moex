@@ -2,15 +2,14 @@
 
 ## Назначение
 
-Начиная с v0.21.0 Analytics умеет оценивать, **что изменилось бы**, если вместо текущего median consensus использовать существующий shadow accuracy-weighted consensus.
+Начиная с v0.21.0 Analytics оценивает, **что изменилось бы**, если вместо median consensus использовать shadow accuracy-weighted consensus.
 
-Это read-only evidence layer перед любым отдельным решением о production promotion.
+Этот слой остаётся evidence/decision-support. С v0.22.0 его `READY_FOR_MANUAL_PROMOTION` используется только как один из обязательных enable-gates для отдельного Controlled Canary control plane.
 
-Он не меняет:
+Сам impact simulator не меняет:
 
 - данные основной таблицы;
-- production median consensus;
-- fair-value расчёты на страницах оценок;
+- source fair-value расчёты;
 - текущий Watchlist;
 - persisted forecasts;
 - weighting policy;
@@ -50,7 +49,7 @@ comparable_coverage_percent
 
 ## Изоляция эффекта weighting
 
-Главный методологический принцип v0.21.0: меняется **только price-target layer**.
+Главный методологический принцип: меняется **только price-target layer**.
 
 Для median baseline используется текущая медианная target price и медианная полная ожидаемая доходность сопоставимых источников.
 
@@ -70,6 +69,8 @@ weighted_full_return = weighted_price_potential + dividend_layer
 ```
 
 Таким образом impact simulator не смешивает одновременно две гипотезы — новую агрегацию прогнозов и новую дивидендную модель.
+
+Controlled Canary в v0.22.0 использует тот же принцип для Active consensus.
 
 ## Portfolio-level metrics
 
@@ -107,7 +108,7 @@ weighted_watchlist_score
 watchlist_score_delta
 ```
 
-в v0.21.0 означают **гипотетическую consensus-driven sensitivity**, а не фактическую замену текущего Watchlist.
+означают **гипотетическую consensus-driven sensitivity**, а не фактическую замену текущего Watchlist.
 
 Score рассчитывается тем же правилом, что `frontend/watchlist/score.js`:
 
@@ -119,7 +120,7 @@ volume activity:       0..15 points
 
 Latest volume signal загружается batch-query; `signal` даёт 15 activity points, `above_range` — 7.
 
-Ни одна из этих simulated values не записывается обратно в `stock_rows`.
+Ни одна simulated value не записывается обратно в `stock_rows`. Controlled Canary также не переключает текущий Watchlist.
 
 ## Ранжирование
 
@@ -137,7 +138,7 @@ Top-N membership строится по этому же expected-return ranking.
 
 ## Promotion dossier
 
-Dossier объединяет три уже существующих вида evidence:
+Dossier объединяет три вида evidence:
 
 1. historical readiness;
 2. forward shadow/drift coverage;
@@ -174,7 +175,28 @@ READY_FOR_MANUAL_PROMOTION
 - если historical readiness выполнен, но хотя бы один impact/forward gate не выполнен → `OBSERVE`;
 - только все 10 gates → `READY_FOR_MANUAL_PROMOTION`.
 
-`READY_FOR_MANUAL_PROMOTION` не является feature flag и ничего не переключает автоматически.
+`READY_FOR_MANUAL_PROMOTION` не переключает Active consensus автоматически. Он только разрешает оператору попытаться включить Controlled Canary. После этого дополнительно проверяются per-ticker guards.
+
+## Связь с Controlled Canary
+
+Canary enable требует общего:
+
+```text
+promotion.status = READY_FOR_MANUAL_PROMOTION
+```
+
+Но этого недостаточно. Для каждого выбранного ticker дополнительно нужны:
+
+```text
+real historical weighting >= 2 sources
+live divergence < WATCH
+live weight concentration < WATCH
+forward drift = STABLE
+```
+
+Runtime повторяет эти проверки и при ухудшении использует median fallback.
+
+Подробно: [`consensus-canary.md`](consensus-canary.md).
 
 ## Privacy
 
@@ -203,23 +225,24 @@ Promotion dossier выполняет существующие robustness/readine
 
 ## Database и configuration
 
-v0.21.0 не добавляет таблиц и колонок.
-
-Schema head остаётся:
+Сам v0.21.0 не менял schema. Controlled Canary v0.22.0 добавляет отдельный persisted control/audit layer:
 
 ```text
-0022_shadow_drift_notifications
+0023_consensus_canary
 ```
 
 Новых обязательных `.env` параметров нет.
 
 ## Production boundary
 
-v0.21.0 является последним decision-support слоем перед возможным controlled/canary promotion.
+С v0.22.0 median остаётся default/fail-safe, а weighted может влиять только на `Active consensus` явно выбранных canary ticker.
 
-Сам production promotion должен быть отдельным релизом с:
+Не меняются:
 
-- явным feature flag;
-- ограниченным scope;
-- rollback на median;
-- отдельными audit/monitoring guarantees.
+- source rows;
+- primary-table calculations;
+- текущий Watchlist;
+- persisted expected returns;
+- volume monitor.
+
+Rollback выключает canary state и немедленно возвращает Active consensus к median без восстановления данных.

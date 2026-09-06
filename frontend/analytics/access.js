@@ -63,12 +63,17 @@
     },
   };
 
-  const impactStyle = document.createElement('link');
-  impactStyle.rel = 'stylesheet';
-  impactStyle.href = '/analytics/production-impact.css';
-  document.head.append(impactStyle);
+  for (const href of ['/analytics/production-impact.css', '/analytics/canary.css']) {
+    const style = document.createElement('link');
+    style.rel = 'stylesheet';
+    style.href = href;
+    document.head.append(style);
+  }
 
-  const impactScript = document.createElement('script');
-  impactScript.src = '/analytics/production-impact.js';
-  document.body.append(impactScript);
+  for (const src of ['/analytics/production-impact.js', '/analytics/canary.js']) {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    document.body.append(script);
+  }
 })();

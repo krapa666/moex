@@ -2,38 +2,41 @@
 
 ## Назначение
 
-Начиная с v0.17.0 приложение рассчитывает accuracy-weighted consensus **параллельно** с production median.
+Начиная с v0.17.0 приложение рассчитывает accuracy-weighted consensus параллельно с median baseline.
 
 Shadow-модель:
 
 - видна в Analytics;
-- сравнивается с текущей медианой на реальных текущих прогнозах;
-- не изменяет production fair value;
-- не изменяет Watchlist;
-- не изменяет expected return/ranking;
-- не изменяет persisted forecast values.
+- сравнивается с медианой на реальных текущих прогнозах;
+- не меняет source rows;
+- не меняет текущий primary-table Watchlist;
+- не переписывает persisted forecast values.
 
-С v0.18.0 shadow сохраняется как forward-only monitoring history, с v0.19.0 агрегируется по всему primary universe, с v0.20.0 значимые drift transitions могут создавать stateful email-уведомления, а с v0.21.0 historical/forward evidence дополняется Production Impact Simulator и promotion dossier.
+Эволюция evidence layer:
 
-Даже `READY` или `READY_FOR_MANUAL_PROMOTION` не переключают production consensus автоматически.
+- v0.18.0 — forward-only shadow history;
+- v0.19.0 — global drift overview;
+- v0.20.0 — stateful drift notifications;
+- v0.21.0 — Production Impact Simulator + promotion dossier;
+- v0.22.0 — Controlled Canary, который может вручную применить weighted только к Active consensus небольшого allowlist.
+
+`READY` и `READY_FOR_MANUAL_PROMOTION` сами по себе ничего не включают.
 
 ## Текущий target year
 
-Shadow использует тот же базовый год, что production consensus: `forecast_start_year` основной таблицы.
+Shadow использует базовый год основной таблицы: `forecast_start_year`.
 
-В расчёт попадают источники, у которых для этого года доступны одновременно:
+Для каждого source должны быть доступны:
 
-- forecast annual net profit;
+- annual net profit forecast;
 - P/E;
 - shares.
-
-Для каждого источника:
 
 ```text
 TargetPrice = NetProfit × P/E / Shares
 ```
 
-Источник идентифицируется exact `analyst_name`, как и в accuracy/backtest. Минимум для shadow aggregation — два сопоставимых источника.
+Источник идентифицируется exact `analyst_name`. Минимум для shadow aggregation — два сопоставимых источника.
 
 ## Historical snapshot для весов
 
@@ -46,7 +49,7 @@ TargetPrice = NetProfit × P/E / Shares
 
 Training sample допускается только если:
 
-1. его fiscal year строго раньше текущего target year;
+1. fiscal year строго раньше target year;
 2. у канонического факта известен `reported_at`;
 3. `reported_at < as_of`.
 
@@ -62,19 +65,19 @@ error_floor_percent = 5
 relative_score_cap = 2
 ```
 
-Если historical training history недоступна, веса становятся равными:
+Если historical training history недоступна:
 
 ```text
 shadow weighted = arithmetic mean
 ```
 
-Это neutral fallback.
+Это neutral fallback для shadow/evidence. **Controlled Canary не считает такой equal-weight fallback полноценным production weighted**: enable/runtime требует исторические веса минимум по двум sources.
 
 ## Batch engine
 
-С v0.18.0 historical training context строится один раз на capture-run и переиспользуется для всех тикеров primary table.
+Historical training context строится один раз на batch capture и переиспользуется для primary universe.
 
-Single-ticker API сохраняется:
+Single-ticker API:
 
 ```http
 GET /api/analytics/shadow-consensus?ticker=SBER
@@ -88,7 +91,7 @@ GET /api/analytics/shadow-consensus?ticker=SBER
 shadow_consensus_snapshots
 ```
 
-Хранятся только безопасные aggregate values:
+Хранятся только aggregate values:
 
 - ticker / target year / training snapshot / captured_at;
 - source/training coverage counts;
@@ -110,20 +113,13 @@ SHADOW_HISTORY_RUN_ON_STARTUP=true
 SHADOW_HISTORY_RETENTION_DAYS=730
 ```
 
-Startup capture выполняется после startup source sync. Регулярный capture имеет 15-minute phase offset относительно source-sync phase, чтобы уменьшить риск mixed state.
+Startup capture выполняется после startup source sync. Регулярный capture имеет phase offset, чтобы уменьшить риск mixed state.
 
-История начинается только после развёртывания v0.18.0. Backfill из старых `forecast_revisions` намеренно отсутствует, потому что реконструкция старого source set/training knowledge могла бы внести hindsight bias.
-
-History API:
+History forward-only и не backfill-ится из старых revisions.
 
 ```http
 GET /api/analytics/shadow-consensus/history?ticker=SBER&days=90
-```
-
-Local-only manual capture:
-
-```http
-POST /api/analytics/shadow-consensus/capture
+POST /api/analytics/shadow-consensus/capture   # local
 ```
 
 ## Drift monitoring
@@ -132,8 +128,6 @@ POST /api/analytics/shadow-consensus/capture
 GET /api/analytics/shadow-consensus/drift?ticker=SBER&days=30
 ```
 
-Drift означает operational divergence shadow weighted от median baseline, а не статистически доказанный model/data drift.
-
 Классификация начинается только при:
 
 ```text
@@ -141,17 +135,24 @@ Drift означает operational divergence shadow weighted от median baseli
 >= 24 hours history одного target_year
 ```
 
-До этого status = `insufficient`.
+Statuses:
 
-### Signals
+```text
+insufficient
+stable
+watch
+alert
+```
 
-1. current weighted-vs-median target divergence;
-2. divergence step к предыдущему snapshot;
+Signals:
+
+1. weighted-vs-median target divergence;
+2. divergence step;
 3. max-weight concentration относительно equal weight;
 4. relative movement gap weighted vs median;
 5. training snapshot change.
 
-### Thresholds
+Thresholds:
 
 | Signal | WATCH | ALERT |
 | --- | ---: | ---: |
@@ -160,35 +161,15 @@ Drift означает operational divergence shadow weighted от median baseli
 | weight concentration | `>= 1.5x` | `>= 1.75x` |
 | `abs(relative movement gap)` | `>= 5 pp` | `>= 10 pp` |
 
-Training snapshot change добавляет WATCH reason, если более сильного ALERT нет.
-
-Statuses:
-
-- `insufficient`;
-- `stable`;
-- `watch`;
-- `alert`.
+Drift — operational policy, а не статистический тест или торговый сигнал.
 
 ## Global drift overview
-
-С v0.19.0:
 
 ```http
 GET /api/analytics/shadow-consensus/overview?days=30
 ```
 
-Overview использует **тот же classifier и thresholds**, что per-ticker drift. Второго drift algorithm нет.
-
-Universe = текущая primary table. Тикер без history остаётся видимым:
-
-```text
-status = insufficient
-reason = no_history
-```
-
-Сводка содержит universe size, history/classified coverage, status counts и `actionable = alert + watch`.
-
-Backend batch-loads latest/window snapshots и избегает N+1 query pattern.
+Universe = текущая primary table. Тикер без history остаётся видимым как `insufficient/no_history`.
 
 Default order:
 
@@ -196,78 +177,36 @@ Default order:
 ALERT → WATCH → STABLE → insufficient
 ```
 
-Внутри статуса — по убыванию absolute current divergence.
-
 ## Stateful drift notifications
 
-С v0.20.0 после каждого shadow capture worker запускает transition processor.
+После каждого shadow capture worker запускает transition processor.
 
 Persisted state:
 
 ```text
 shadow_drift_states
-```
-
-Append-only transition/delivery ledger:
-
-```text
 shadow_drift_notification_events
 ```
 
-Notification engine **не определяет drift заново**: он получает уже классифицированные `stable/watch/alert/insufficient` states из существующего global overview.
-
-### State machine
+Основная state machine:
 
 ```text
 bootstrap               → без письма
-STABLE → WATCH          → письмо, subject to cooldown
+STABLE → WATCH          → письмо с cooldown
 STABLE → ALERT          → immediate alert
 WATCH  → ALERT          → immediate escalation
-WATCH  → STABLE         → recovery, только если incident реально был notified
-ALERT  → STABLE         → recovery, только если incident реально был notified
-ALERT  → WATCH          → event only; это ещё не full recovery
-same status             → no new event / no mail
+WATCH/ALERT → STABLE    → recovery, если incident реально был notified
+ALERT → WATCH           → event only
+same status             → no event/mail
 * ↔ insufficient        → event only
-смена target_year       → reset event / no mail
+смена target_year       → reset event
 ```
 
-Bootstrap без письма предотвращает flood после deployment. Target-year reset также не считается model incident.
-
-### Cooldown
-
-Default:
-
-```dotenv
-SHADOW_NOTIFICATION_COOLDOWN_HOURS=24
-```
-
-Cooldown применяется к repeated re-entry `STABLE → WATCH`, но не блокирует escalation в ALERT или валидный recovery.
-
-### Delivery retry
-
-SMTP failure сохраняется как `failed`. Retry выполняется на следующем monitoring-cycle до:
-
-```dotenv
-SHADOW_NOTIFICATION_MAX_ATTEMPTS=5
-```
-
-Перед retry проверяется, что event всё ещё соответствует current target year/status. Устаревший event становится `superseded` и не отправляется.
-
-### Enable/configuration
-
-Default:
+Delivery по умолчанию выключен:
 
 ```dotenv
 SHADOW_NOTIFICATIONS_ENABLED=false
 ```
-
-Даже при disabled delivery state ledger продолжает обновляться. Would-be notifications сохраняются как suppressed и не отправляются ретроспективно после включения.
-
-SMTP переиспользует `VOLUME_SMTP_*`. Recipient задаётся через `SHADOW_NOTIFICATION_EMAIL` или fallback `VOLUME_NOTIFICATION_EMAIL`.
-
-Полная конфигурация/state-machine/runbook: [`shadow-notifications.md`](shadow-notifications.md).
-
-### Notification API
 
 Public safe:
 
@@ -282,21 +221,11 @@ Local-only test:
 POST /api/analytics/shadow-consensus/notifications/test
 ```
 
-Public API не раскрывает recipient, SMTP credentials/error text, source names, source forecasts или source weights.
+Подробнее: [`shadow-notifications.md`](shadow-notifications.md).
 
-## Analytics UI
+## Historical readiness
 
-Global panel отображается без выбора тикера и показывает coverage/status table.
-
-После выбора тикера показываются current shadow и forward history/drift.
-
-С v0.20.0 global panel также показывает notification mode, cooldown, pending/failed count, last sent timestamp и recent transition events. Local admin при configured SMTP получает кнопку test email.
-
-С v0.21.0 отдельный global panel показывает production-impact profile и promotion dossier без выбора тикера.
-
-## Readiness gate
-
-Readiness — historical evidence-policy, а не feature flag.
+Readiness — historical evidence-policy из 11 gates.
 
 | Gate | Requirement |
 | --- | ---: |
@@ -312,14 +241,12 @@ Readiness — historical evidence-policy, а не feature flag.
 | Positive parameter cases | `>= 80%` |
 | Worst parameter-grid median delta | `> 0 pp` |
 
-API:
-
 ```http
 GET /api/analytics/consensus-backtest/robustness?snapshot=pre_year
 GET /api/analytics/consensus-readiness?snapshot=pre_year
 ```
 
-`READY` означает только выполнение current historical evidence-policy.
+`READY` означает только выполнение historical evidence-policy.
 
 ## Production impact и promotion dossier
 
@@ -330,9 +257,9 @@ GET /api/analytics/production-impact?top_n=10&history_days=30
 GET /api/analytics/promotion-dossier?top_n=10&history_days=30
 ```
 
-Impact simulator использует текущий batch shadow result и сравнивает median vs weighted scenario на одном comparable universe. Он измеряет target/return/rank/Top-N divergence и гипотетическую Watchlist-score sensitivity.
+Impact simulator измеряет target/return/rank/Top-N divergence и гипотетическую Watchlist-score sensitivity на одном comparable universe.
 
-Promotion dossier добавляет к historical readiness forward coverage/stability и portfolio impact gates. Возможные состояния:
+Promotion dossier добавляет forward coverage/stability и portfolio impact gates.
 
 ```text
 NOT_READY
@@ -340,29 +267,88 @@ OBSERVE
 READY_FOR_MANUAL_PROMOTION
 ```
 
-Текущий `/watchlist/` основан на primary table №1, поэтому median/weighted Watchlist score из dossier — simulation будущего consensus-driven режима, а не текущая production ranking.
+Текущий `/watchlist/` основан на primary table №1, поэтому median/weighted Watchlist score из dossier — simulation, а не текущая production ranking.
 
-Полная методология и точные gates: [`production-impact.md`](production-impact.md).
+Подробнее: [`production-impact.md`](production-impact.md).
+
+## Controlled Canary
+
+С v0.22.0 weighted может быть вручную применён только к **Active consensus** выбранных тикеров.
+
+```http
+GET  /api/analytics/consensus-canary
+PUT  /api/analytics/consensus-canary                  # local
+POST /api/analytics/consensus-canary/rollback         # local
+GET  /api/analytics/consensus-canary/events           # local
+GET  /api/analytics/active-consensus?ticker=SBER
+```
+
+Canary defaults:
+
+```text
+enabled = false
+max allowlist = 5
+```
+
+Enable требует:
+
+```text
+promotion dossier = READY_FOR_MANUAL_PROMOTION
+shadow available
+historical weighting >= 2 sources
+live divergence < 10%
+live concentration < 1.5x
+forward drift = STABLE
+```
+
+Runtime повторяет guards. Если configured ticker перестаёт проходить safety:
+
+```text
+configured_mode = weighted_canary
+effective_mode  = median
+fallback_reason = ...
+```
+
+Это fail-safe демоция. Автоматического promotion или расширения allowlist нет.
+
+Подробнее: [`consensus-canary.md`](consensus-canary.md).
+
+## Analytics UI
+
+Без выбора тикера доступны global shadow overview, notifications и Production Impact Dashboard.
+
+Local admin в v0.22.0 также видит Controlled Canary controls и audit trail.
+
+После выбора ticker показываются:
+
+- analyst consensus baseline;
+- Active consensus effective mode;
+- current shadow weighted;
+- forward history/drift.
 
 ## Database
 
-Current schema head начиная с v0.20.0 и без изменений в v0.21.0:
+Текущий schema head:
 
 ```text
-0022_shadow_drift_notifications
+0023_consensus_canary
 ```
 
-`0021_shadow_consensus_snapshots` хранит forward history; `0022` добавляет notification state/event ledger.
+- `0021_shadow_consensus_snapshots` — forward history;
+- `0022_shadow_drift_notifications` — notification state/event ledger;
+- `0023_consensus_canary` — persisted canary state и audit events.
 
 Backend startup выполняет Alembic upgrade автоматически.
 
 ## Production boundary
 
-v0.21.0 **не меняет**:
+Median остаётся fail-safe default.
 
-- production median consensus;
-- fair-value formulas;
-- persisted expected-return calculations;
+v0.22.0 может изменить только Active consensus выбранного canary ticker. Не изменяются:
+
+- source analyst tables;
+- primary-table fair-value fields;
+- persisted expected-return fields;
 - текущий primary-table Watchlist;
 - volume monitor;
 - weighting defaults;
@@ -370,4 +356,4 @@ v0.21.0 **не меняет**:
 - drift thresholds;
 - notification state machine.
 
-Forward history, overview, notifications и production-impact dossier остаются evidence/observability/decision-support layer перед отдельным controlled promotion release.
+Rollback выключает canary state и немедленно возвращает Active consensus к median.
