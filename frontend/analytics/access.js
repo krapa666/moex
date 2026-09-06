@@ -63,14 +63,22 @@
     },
   };
 
-  for (const href of ['/analytics/production-impact.css', '/analytics/canary.css']) {
+  for (const href of [
+    '/analytics/production-impact.css',
+    '/analytics/canary.css',
+    '/analytics/canary-evidence.css',
+  ]) {
     const style = document.createElement('link');
     style.rel = 'stylesheet';
     style.href = href;
     document.head.append(style);
   }
 
-  for (const src of ['/analytics/production-impact.js', '/analytics/canary.js']) {
+  for (const src of [
+    '/analytics/production-impact.js',
+    '/analytics/canary.js',
+    '/analytics/canary-evidence.js',
+  ]) {
     const script = document.createElement('script');
     script.src = src;
     script.async = false;
