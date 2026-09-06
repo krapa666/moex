@@ -1,0 +1,135 @@
+.source-accuracy-controls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.source-accuracy-controls label,
+.actual-result-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.source-accuracy-controls select,
+.actual-result-form input {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 10px;
+}
+
+.source-accuracy-table-wrap,
+.actual-facts-table-wrap {
+  overflow-x: auto;
+}
+
+.source-accuracy-table,
+.actual-facts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.source-accuracy-table th,
+.source-accuracy-table td,
+.actual-facts-table th,
+.actual-facts-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.source-accuracy-table th:first-child,
+.source-accuracy-table td:first-child,
+.source-accuracy-table th:nth-child(2),
+.source-accuracy-table td:nth-child(2),
+.actual-facts-table th:first-child,
+.actual-facts-table td:first-child,
+.actual-facts-table th:last-child,
+.actual-facts-table td:last-child {
+  text-align: left;
+}
+
+.accuracy-source {
+  font-weight: 650;
+}
+
+.accuracy-rank {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.accuracy-row-unranked {
+  opacity: 0.62;
+}
+
+.accuracy-state {
+  font-size: 0.78rem;
+}
+
+.source-accuracy-empty,
+.actual-facts-empty {
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+}
+
+.actual-result-admin {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.actual-result-admin h3,
+.actual-facts h3 {
+  margin: 0 0 10px;
+}
+
+.actual-result-admin p,
+.actual-facts p {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+}
+
+.actual-result-form {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.actual-result-form .btn {
+  min-height: 38px;
+}
+
+.actual-result-form-status {
+  display: block;
+  min-height: 1.3em;
+  margin-top: 10px;
+  color: var(--text-muted);
+}
+
+.actual-facts {
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .actual-result-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .actual-result-form {
+    grid-template-columns: 1fr;
+  }
+}
