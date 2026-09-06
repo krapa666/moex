@@ -1,6 +1,6 @@
 from pathlib import Path
 
-PACKAGED_VERSION = "0.13.0"
+PACKAGED_VERSION = "0.14.0"
 
 
 def resolve_app_version() -> str:
