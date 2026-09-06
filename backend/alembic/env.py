@@ -3,7 +3,7 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 from alembic import context
-from app import models  # noqa: F401
+from app import forecast_accuracy, models  # noqa: F401
 from app.database import DATABASE_URL, Base
 from sqlalchemy import engine_from_config, pool
 
