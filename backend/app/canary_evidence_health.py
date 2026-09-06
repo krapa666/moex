@@ -157,12 +157,12 @@ def _build_ticker_health_from_rows(
         continuity = 100.0 * observed_intervals / denominator
 
     reasons: list[str] = []
-    if len(ordered) < 2:
-        status: CanaryEvidenceHealthStatus = "warming_up"
-        reasons.append("too_few_snapshots")
-    elif latest_age > expected_interval_hours * STALE_MULTIPLIER:
-        status = "stale"
+    if latest_age > expected_interval_hours * STALE_MULTIPLIER:
+        status: CanaryEvidenceHealthStatus = "stale"
         reasons.append("latest_snapshot_stale")
+    elif observed_intervals < 1:
+        status = "warming_up"
+        reasons.append("too_few_snapshots")
     elif (
         latest_age > expected_interval_hours * FRESHNESS_MULTIPLIER
         or missed_cycles > 0
