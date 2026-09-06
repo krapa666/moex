@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .arsagera_sync import sync_arsagera_once
+from .forecast_sources import load_published_sheets_sources, sync_published_sheets_sources_once
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -22,6 +23,13 @@ def _env_bool(name: str, default: bool) -> bool:
 async def main() -> None:
     interval_hours = max(float(os.getenv("ARSAGERA_SYNC_INTERVAL_HOURS", "6")), 1.0)
     run_on_startup = _env_bool("ARSAGERA_RUN_ON_STARTUP", True)
+    published_sources = load_published_sheets_sources()
+    published_interval_hours = max(
+        float(os.getenv("FORECAST_SHEETS_SYNC_INTERVAL_HOURS", "6")),
+        1.0,
+    )
+    published_run_on_startup = _env_bool("FORECAST_SHEETS_RUN_ON_STARTUP", True)
+
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
         sync_arsagera_once,
@@ -31,14 +39,36 @@ async def main() -> None:
         max_instances=1,
         misfire_grace_time=3600,
     )
-    scheduler.start()
     logger.info("Arsagera worker scheduled every %.1f hours", interval_hours)
+
+    if published_sources:
+        scheduler.add_job(
+            sync_published_sheets_sources_once,
+            IntervalTrigger(hours=published_interval_hours),
+            kwargs={"sources": published_sources},
+            id="published-sheets-forecast-sync",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=3600,
+        )
+        logger.info(
+            "Published Sheets forecast sync scheduled every %.1f hours for %d source(s)",
+            published_interval_hours,
+            len(published_sources),
+        )
+    scheduler.start()
 
     if run_on_startup:
         try:
             await sync_arsagera_once()
         except Exception:
             logger.exception("Initial Arsagera synchronization failed")
+
+    if published_sources and published_run_on_startup:
+        try:
+            await sync_published_sheets_sources_once(sources=published_sources)
+        except Exception:
+            logger.exception("Initial Published Sheets synchronization failed")
 
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
