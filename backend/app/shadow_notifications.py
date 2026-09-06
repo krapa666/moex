@@ -13,7 +13,14 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from .database import Base, SessionLocal
 from .shadow_history import ShadowDriftResult, build_shadow_drift_overview
 
-_NOTIFICATION_STATUSES = {"pending", "sent", "suppressed", "failed", "superseded", "not_applicable"}
+_NOTIFICATION_STATUSES = {
+    "pending",
+    "sent",
+    "suppressed",
+    "failed",
+    "superseded",
+    "not_applicable",
+}
 _MAX_ERROR_LENGTH = 1000
 _REASON_LABELS = {
     "large_baseline_divergence": "большое расхождение с медианой",
@@ -38,9 +45,14 @@ class ShadowDriftState(Base):
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     incident_notified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
 
@@ -69,7 +81,9 @@ class ShadowDriftNotificationEvent(Base):
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 @dataclass(frozen=True)
@@ -79,7 +93,6 @@ class ShadowNotificationSettings:
     cooldown_hours: float
     history_days: int
     max_attempts: int
-    smtp_enabled: bool
     smtp_host: str
     smtp_port: int
     smtp_username: str
@@ -91,7 +104,7 @@ class ShadowNotificationSettings:
 
     @property
     def smtp_configured(self) -> bool:
-        return bool(self.smtp_enabled and self.smtp_host and self.smtp_from)
+        return bool(self.smtp_host and self.smtp_from)
 
     @property
     def configured(self) -> bool:
@@ -140,10 +153,18 @@ def get_shadow_notification_settings() -> ShadowNotificationSettings:
     settings = ShadowNotificationSettings(
         enabled=_env_bool("SHADOW_NOTIFICATIONS_ENABLED", False),
         recipient=recipient,
-        cooldown_hours=max(float(os.getenv("SHADOW_NOTIFICATION_COOLDOWN_HOURS", "24")), 0.0),
-        history_days=max(min(int(os.getenv("SHADOW_NOTIFICATION_HISTORY_DAYS", "30")), 180), 2),
-        max_attempts=max(min(int(os.getenv("SHADOW_NOTIFICATION_MAX_ATTEMPTS", "5")), 20), 1),
-        smtp_enabled=_env_bool("VOLUME_SMTP_ENABLED", False),
+        cooldown_hours=max(
+            float(os.getenv("SHADOW_NOTIFICATION_COOLDOWN_HOURS", "24")),
+            0.0,
+        ),
+        history_days=max(
+            min(int(os.getenv("SHADOW_NOTIFICATION_HISTORY_DAYS", "30")), 180),
+            2,
+        ),
+        max_attempts=max(
+            min(int(os.getenv("SHADOW_NOTIFICATION_MAX_ATTEMPTS", "5")), 20),
+            1,
+        ),
         smtp_host=os.getenv("VOLUME_SMTP_HOST", "").strip(),
         smtp_port=int(os.getenv("VOLUME_SMTP_PORT", "587")),
         smtp_username=os.getenv("VOLUME_SMTP_USERNAME", ""),
@@ -176,26 +197,20 @@ def _status_transition_decision(
     now: datetime,
     settings: ShadowNotificationSettings,
 ) -> tuple[str, str | None]:
-    notifiable = False
     cooldown_applies = False
 
     if from_status == "stable" and to_status == "watch":
-        notifiable = True
         cooldown_applies = True
     elif from_status == "stable" and to_status == "alert":
-        notifiable = True
+        pass
     elif from_status == "watch" and to_status == "alert":
-        notifiable = True
+        pass
     elif from_status in {"watch", "alert"} and to_status == "stable":
-        if state.incident_notified:
-            notifiable = True
-        else:
+        if not state.incident_notified:
             return "not_applicable", "unnotified_recovery"
     else:
         return "not_applicable", "non_notifiable_transition"
 
-    if not notifiable:
-        return "not_applicable", "non_notifiable_transition"
     if not settings.enabled:
         return "suppressed", "notifications_disabled"
     if not settings.configured:
@@ -272,15 +287,29 @@ def send_shadow_notification_digest(
     rows: list[str] = []
     for event in events:
         transition = _render_transition(event.from_status, event.to_status)
-        delta = "—" if event.latest_delta_percent is None else f"{event.latest_delta_percent:+.1f}%"
-        reason_text = ", ".join(_REASON_LABELS.get(reason, reason) for reason in (event.reasons or []))
-        lines.append(f"{event.ticker}: {transition}; Δ weighted/median {delta}; {reason_text or 'без дополнительных причин'}")
+        delta = (
+            "—"
+            if event.latest_delta_percent is None
+            else f"{event.latest_delta_percent:+.1f}%"
+        )
+        reason_text = ", ".join(
+            _REASON_LABELS.get(reason, reason) for reason in (event.reasons or [])
+        )
+        lines.append(
+            f"{event.ticker}: {transition}; Δ weighted/median {delta}; "
+            f"{reason_text or 'без дополнительных причин'}"
+        )
         ticker_url = ""
         if settings.public_base_url:
-            ticker_url = settings.public_base_url.rstrip("/") + f"/analytics/?ticker={event.ticker}"
+            ticker_url = (
+                settings.public_base_url.rstrip("/")
+                + f"/analytics/?ticker={event.ticker}"
+            )
         ticker_cell = html.escape(event.ticker)
         if ticker_url:
-            ticker_cell = f'<a href="{html.escape(ticker_url, quote=True)}">{ticker_cell}</a>'
+            ticker_cell = (
+                f'<a href="{html.escape(ticker_url, quote=True)}">{ticker_cell}</a>'
+            )
         rows.append(
             "<tr>"
             f"<td>{ticker_cell}</td>"
@@ -291,13 +320,16 @@ def send_shadow_notification_digest(
         )
 
     if settings.public_base_url:
-        lines.extend(["", f"Analytics: {settings.public_base_url.rstrip('/')}/analytics/"])
+        lines.extend(
+            ["", f"Analytics: {settings.public_base_url.rstrip('/')}/analytics/"]
+        )
     message.set_content("\n".join(lines))
     message.add_alternative(
         "<html><body>"
         f"<h2>Shadow drift: {html.escape(label)}</h2>"
         "<table border='1' cellpadding='6' cellspacing='0'>"
-        "<thead><tr><th>Тикер</th><th>Переход</th><th>Δ weighted / median</th><th>Причины</th></tr></thead>"
+        "<thead><tr><th>Тикер</th><th>Переход</th>"
+        "<th>Δ weighted / median</th><th>Причины</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>"
         "<p>Это operational model-monitoring, а не торговый сигнал.</p>"
         "</body></html>",
@@ -337,7 +369,10 @@ def _deliver_events(
                 ShadowDriftNotificationEvent.delivery_status.in_(("pending", "failed")),
                 ShadowDriftNotificationEvent.delivery_attempts < settings.max_attempts,
             )
-            .order_by(ShadowDriftNotificationEvent.observed_at.asc(), ShadowDriftNotificationEvent.id.asc())
+            .order_by(
+                ShadowDriftNotificationEvent.observed_at.asc(),
+                ShadowDriftNotificationEvent.id.asc(),
+            )
         ).all()
     )
     if not candidates:
@@ -388,7 +423,11 @@ def _deliver_events(
         event.notified_at = now
         event.error = None
         state = state_by_ticker.get(event.ticker)
-        if state is not None and state.target_year == event.target_year and state.status == event.to_status:
+        if (
+            state is not None
+            and state.target_year == event.target_year
+            and state.status == event.to_status
+        ):
             state.last_notified_at = now
             if event.to_status in {"watch", "alert"}:
                 state.incident_notified = True
@@ -406,7 +445,10 @@ def process_shadow_drift_transitions(
 ) -> ShadowNotificationRunResult:
     current = _as_utc(observed_at or datetime.now(timezone.utc))
     effective_settings = settings or get_shadow_notification_settings()
-    overview = build_shadow_drift_overview(db, days=effective_settings.history_days)
+    overview = build_shadow_drift_overview(
+        db,
+        days=effective_settings.history_days,
+    )
 
     existing_states = {
         state.ticker: state
@@ -561,23 +603,21 @@ def build_shadow_notification_status(db: Session) -> ShadowNotificationStatus:
         )
         .limit(1)
     ).first()
-    pending = len(
-        list(
-            db.scalars(
-                select(ShadowDriftNotificationEvent.id).where(
-                    ShadowDriftNotificationEvent.delivery_status == "pending"
-                )
-            ).all()
+    pending = int(
+        db.scalar(
+            select(func.count())
+            .select_from(ShadowDriftNotificationEvent)
+            .where(ShadowDriftNotificationEvent.delivery_status == "pending")
         )
+        or 0
     )
-    failed = len(
-        list(
-            db.scalars(
-                select(ShadowDriftNotificationEvent.id).where(
-                    ShadowDriftNotificationEvent.delivery_status == "failed"
-                )
-            ).all()
+    failed = int(
+        db.scalar(
+            select(func.count())
+            .select_from(ShadowDriftNotificationEvent)
+            .where(ShadowDriftNotificationEvent.delivery_status == "failed")
         )
+        or 0
     )
     return ShadowNotificationStatus(
         enabled=settings.enabled,
@@ -589,5 +629,9 @@ def build_shadow_notification_status(db: Session) -> ShadowNotificationStatus:
         pending_events=pending,
         failed_events=failed,
         last_event_at=_as_utc(last_event.observed_at) if last_event is not None else None,
-        last_sent_at=_as_utc(last_sent.notified_at) if last_sent is not None and last_sent.notified_at else None,
+        last_sent_at=(
+            _as_utc(last_sent.notified_at)
+            if last_sent is not None and last_sent.notified_at
+            else None
+        ),
     )
