@@ -407,6 +407,7 @@ def get_consensus_backtest(
     response_model=list[ConsensusBacktestObservationRead],
 )
 def list_consensus_backtest_observations(
+    request: Request,
     snapshot: AccuracySnapshot = Query(default="pre_year"),
     min_sources: int = Query(default=2, ge=2, le=10),
     shrinkage_samples: int = Query(default=5, ge=0, le=100),
@@ -417,6 +418,7 @@ def list_consensus_backtest_observations(
     limit: int = Query(default=200, ge=1, le=1000),
     db: Session = Depends(get_db),
 ) -> list[ConsensusBacktestObservation]:
+    require_local_access(request)
     observations = build_consensus_backtest_observations(
         db,
         snapshot=snapshot,
