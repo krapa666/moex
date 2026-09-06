@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -81,7 +90,7 @@ async def _read_csv(file: UploadFile) -> bytes:
     return content
 
 
-def _completed_end_year(end_year: int | None) -> int:
+def _completed_end_year(end_year: int | None, years: int) -> int:
     completed_year = datetime.now(timezone.utc).year - 1
     resolved = completed_year if end_year is None else int(end_year)
     if resolved > completed_year:
@@ -91,6 +100,11 @@ def _completed_end_year(end_year: int | None) -> int:
         )
     if resolved < 2000:
         raise HTTPException(status_code=422, detail="end_year must be 2000 or later")
+    if resolved - int(years) + 1 < 2000:
+        raise HTTPException(
+            status_code=422,
+            detail="Actual-result worklist cannot start before fiscal year 2000",
+        )
     return resolved
 
 
@@ -108,7 +122,7 @@ def get_actual_result_worklist(
     return build_actual_result_worklist(
         db,
         years=years,
-        end_year=_completed_end_year(end_year),
+        end_year=_completed_end_year(end_year, years),
     )
 
 
@@ -123,7 +137,7 @@ def download_actual_result_worklist(
     worklist = build_actual_result_worklist(
         db,
         years=years,
-        end_year=_completed_end_year(end_year),
+        end_year=_completed_end_year(end_year, years),
     )
     filename = f"actual-results-worklist-{worklist['start_year']}-{worklist['end_year']}.csv"
     return Response(
