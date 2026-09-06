@@ -13,6 +13,8 @@
   const form = panel.querySelector('[data-actual-form]');
   const formStatus = panel.querySelector('[data-actual-form-status]');
   const minSamples = 5;
+  let syncButton = null;
+  let syncStatus = null;
 
   function formatNumber(value, digits = 1) {
     if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
@@ -138,6 +140,65 @@
     }
   }
 
+  function ensureSyncControls() {
+    if (syncButton) return;
+    const controls = document.createElement('div');
+    controls.className = 'source-accuracy-controls';
+    controls.dataset.actualSyncControls = '';
+
+    syncButton = document.createElement('button');
+    syncButton.type = 'button';
+    syncButton.className = 'btn';
+    syncButton.dataset.actualSyncButton = '';
+    syncButton.textContent = 'Синхронизировать MOEX CCI';
+
+    syncStatus = document.createElement('span');
+    syncStatus.className = 'actual-result-form-status';
+    syncStatus.dataset.actualSyncStatus = '';
+    syncStatus.setAttribute('role', 'status');
+    syncStatus.setAttribute('aria-live', 'polite');
+
+    controls.append(syncButton, syncStatus);
+    adminBlock.insertBefore(controls, form);
+    syncButton.addEventListener('click', syncActuals);
+  }
+
+  async function loadSyncStatus() {
+    ensureSyncControls();
+    syncButton.disabled = true;
+    syncStatus.textContent = 'Проверка MOEX CCI…';
+    try {
+      const source = await fetchJson('/api/analytics/actual-net-profits/sync-status');
+      if (!source.enabled) {
+        syncStatus.textContent = 'MOEX CCI: автосинхронизация отключена';
+        return;
+      }
+      if (!source.configured) {
+        syncStatus.textContent = 'MOEX CCI: нужны учётные данные в .env';
+        return;
+      }
+      syncButton.disabled = false;
+      syncStatus.textContent = `MOEX CCI: готово · ${source.years_back} лет · каждые ${formatNumber(source.interval_hours, 1)} ч`;
+    } catch (error) {
+      syncStatus.textContent = error.message;
+    }
+  }
+
+  async function syncActuals() {
+    syncButton.disabled = true;
+    syncStatus.textContent = 'Синхронизация MOEX CCI…';
+    try {
+      const result = await fetchJson('/api/analytics/actual-net-profits/sync', { method: 'POST' });
+      const changed = Number(result.records_created || 0) + Number(result.records_updated || 0);
+      syncStatus.textContent = `MOEX CCI: обновлено ${changed} · без изменений ${result.records_unchanged || 0} · защищено ${result.records_protected || 0}`;
+      await Promise.all([loadFacts(), loadAccuracy()]);
+    } catch (error) {
+      syncStatus.textContent = error.message;
+    } finally {
+      await loadSyncStatus();
+    }
+  }
+
   async function saveFact(event) {
     event.preventDefault();
     const data = new FormData(form);
@@ -162,7 +223,7 @@
           source_url: sourceUrl || null,
         }),
       });
-      formStatus.textContent = `${ticker} ${fiscalYear}: факт сохранён`;
+      formStatus.textContent = `${ticker} ${fiscalYear}: факт сохранён вручную`;
       form.querySelector('[name="net_profit_billion_rub"]').value = '';
       await Promise.all([loadFacts(), loadAccuracy()]);
     } catch (error) {
@@ -180,7 +241,9 @@
 
     snapshotSelect.addEventListener('change', loadAccuracy);
     form.addEventListener('submit', saveFact);
-    await Promise.all([loadFacts(), loadAccuracy()]);
+    const initialLoads = [loadFacts(), loadAccuracy()];
+    if (accessState.isAdmin) initialLoads.push(loadSyncStatus());
+    await Promise.all(initialLoads);
   }
 
   init().catch((error) => {

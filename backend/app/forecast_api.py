@@ -2,11 +2,13 @@ import math
 from datetime import datetime
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from .actual_result_sync import ActualSyncResult
 from .database import get_db
 from .forecast_accuracy import (
     AccuracySample,
@@ -16,6 +18,7 @@ from .forecast_accuracy import (
 )
 from .forecast_history import ForecastRevision
 from .forecast_source_runs import ForecastSourceRun
+from .moex_cci_actuals import get_moex_cci_public_status, sync_moex_cci_actuals_once
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 AccuracySnapshot = Literal["pre_year", "mid_year", "year_end"]
@@ -79,6 +82,7 @@ class ActualNetProfitRead(BaseModel):
     id: int
     ticker: str
     fiscal_year: int
+    source_key: str
     net_profit_billion_rub: float
     source_name: str
     source_url: str | None
@@ -86,6 +90,20 @@ class ActualNetProfitRead(BaseModel):
     reported_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class ActualSyncResultRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    tickers_total: int
+    tickers_mapped: int
+    records_found: int
+    records_created: int
+    records_updated: int
+    records_unchanged: int
+    records_protected: int
+    tickers_skipped: int
+    errors: dict[str, str]
 
 
 class AccuracySampleRead(BaseModel):
@@ -193,6 +211,27 @@ def list_actual_net_profits(
     return list(db.scalars(statement).all())
 
 
+@router.get("/actual-net-profits/sync-status")
+def actual_net_profit_sync_status() -> dict[str, object]:
+    return get_moex_cci_public_status()
+
+
+@router.post("/actual-net-profits/sync", response_model=ActualSyncResultRead)
+async def sync_actual_net_profits(request: Request) -> ActualSyncResult:
+    require_local_access(request)
+    status_payload = get_moex_cci_public_status()
+    if not status_payload["enabled"]:
+        raise HTTPException(status_code=503, detail="MOEX CCI sync is disabled")
+    if not status_payload["configured"]:
+        raise HTTPException(status_code=503, detail="MOEX CCI credentials are not configured")
+    try:
+        return await sync_moex_cci_actuals_once()
+    except PermissionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (RuntimeError, ValueError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @router.put(
     "/actual-net-profits/{ticker}/{fiscal_year}",
     response_model=ActualNetProfitRead,
@@ -222,6 +261,7 @@ def upsert_actual_net_profit(
         row = ActualNetProfit(ticker=normalized_ticker, fiscal_year=fiscal_year)
         db.add(row)
 
+    row.source_key = "manual"
     row.net_profit_billion_rub = float(payload.net_profit_billion_rub)
     row.source_name = source_name
     row.source_url = (payload.source_url or "").strip() or None

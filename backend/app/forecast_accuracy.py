@@ -24,6 +24,7 @@ class ActualNetProfit(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticker: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     fiscal_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    source_key: Mapped[str] = mapped_column(String(64), nullable=False, default="manual", server_default="manual")
     net_profit_billion_rub: Mapped[float] = mapped_column(Float, nullable=False)
     source_name: Mapped[str] = mapped_column(String(255), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

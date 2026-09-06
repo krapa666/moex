@@ -43,6 +43,7 @@ const facts = [
     id: 1,
     ticker: 'SBER',
     fiscal_year: 2025,
+    source_key: 'manual',
     net_profit_billion_rub: 1580.3,
     source_name: 'МСФО, отчёт эмитента',
     source_url: null,
@@ -53,8 +54,9 @@ const facts = [
   },
 ];
 
-async function mockAnalyticsApi(page, { isAdmin }) {
+async function mockAnalyticsApi(page, { isAdmin, cciEnabled = false } = {}) {
   let savedFact = null;
+  let syncCalled = false;
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -73,6 +75,38 @@ async function mockAnalyticsApi(page, { isAdmin }) {
     if (url.pathname === '/api/analytics/actual-net-profits') {
       return route.fulfill({ json: facts });
     }
+    if (url.pathname === '/api/analytics/actual-net-profits/sync-status') {
+      return route.fulfill({
+        json: {
+          source_key: 'moex-cci',
+          source_name: 'MOEX CCI · МСФО',
+          enabled: cciEnabled,
+          configured: cciEnabled,
+          interval_hours: 24,
+          run_on_startup: false,
+          years_back: 5,
+        },
+      });
+    }
+    if (
+      url.pathname === '/api/analytics/actual-net-profits/sync'
+      && request.method() === 'POST'
+    ) {
+      syncCalled = true;
+      return route.fulfill({
+        json: {
+          tickers_total: 2,
+          tickers_mapped: 2,
+          records_found: 2,
+          records_created: 1,
+          records_updated: 1,
+          records_unchanged: 0,
+          records_protected: 0,
+          tickers_skipped: 0,
+          errors: {},
+        },
+      });
+    }
     if (
       url.pathname === '/api/analytics/actual-net-profits/GAZP/2025'
       && request.method() === 'PUT'
@@ -83,6 +117,7 @@ async function mockAnalyticsApi(page, { isAdmin }) {
           id: 2,
           ticker: 'GAZP',
           fiscal_year: 2025,
+          source_key: 'manual',
           ...savedFact,
           source_url: savedFact.source_url || null,
           source_comment: null,
@@ -96,11 +131,14 @@ async function mockAnalyticsApi(page, { isAdmin }) {
     if (url.pathname === '/api/ticker-comparison') return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { detail: `Unexpected ${url.pathname}` } });
   });
-  return () => savedFact;
+  return {
+    getSavedFact: () => savedFact,
+    getSyncCalled: () => syncCalled,
+  };
 }
 
 test('local analytics shows source ranking, facts and editable actual result form', async ({ page }) => {
-  const getSavedFact = await mockAnalyticsApi(page, { isAdmin: true });
+  const state = await mockAnalyticsApi(page, { isAdmin: true });
   await page.goto('/analytics/');
 
   const rows = page.locator('[data-accuracy-table-body] tr');
@@ -113,6 +151,8 @@ test('local analytics shows source ranking, facts and editable actual result for
   await expect(page.locator('[data-actual-facts-body]')).toContainText('SBER');
   await expect(page.locator('[data-actual-facts-body]')).toContainText('1 580,3');
   await expect(page.locator('[data-actual-admin]')).toBeVisible();
+  await expect(page.locator('[data-actual-sync-button]')).toBeDisabled();
+  await expect(page.locator('[data-actual-sync-status]')).toContainText('отключена');
 
   await page.locator('[data-actual-form] [name="ticker"]').fill('gazp');
   await page.locator('[data-actual-form] [name="fiscal_year"]').fill('2025');
@@ -121,10 +161,21 @@ test('local analytics shows source ranking, facts and editable actual result for
   await page.locator('[data-actual-form] button[type="submit"]').click();
 
   await expect(page.locator('[data-actual-form-status]')).toContainText('GAZP 2025');
-  expect(getSavedFact()).toMatchObject({
+  expect(state.getSavedFact()).toMatchObject({
     net_profit_billion_rub: 125.5,
     source_name: 'Отчёт эмитента',
   });
+});
+
+test('local analytics can trigger configured MOEX CCI sync', async ({ page }) => {
+  const state = await mockAnalyticsApi(page, { isAdmin: true, cciEnabled: true });
+  await page.goto('/analytics/');
+
+  const button = page.locator('[data-actual-sync-button]');
+  await expect(button).toBeEnabled();
+  await expect(page.locator('[data-actual-sync-status]')).toContainText('готово');
+  await button.click();
+  await expect.poll(state.getSyncCalled).toBe(true);
 });
 
 test('internet analytics masks source names and keeps actual results read-only', async ({ page }) => {
@@ -138,5 +189,6 @@ test('internet analytics masks source names and keeps actual results read-only',
   await expect(rows.nth(1)).toContainText('Аналитик 2');
   await expect(rows.nth(1)).not.toContainText('fin-vista');
   await expect(page.locator('[data-actual-admin]')).toBeHidden();
+  await expect(page.locator('[data-actual-sync-button]')).toHaveCount(0);
   await expect(page.locator('[data-actual-facts-body]')).toContainText('SBER');
 });
