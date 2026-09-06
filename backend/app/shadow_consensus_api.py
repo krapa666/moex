@@ -18,6 +18,14 @@ from .shadow_history import (
     capture_shadow_consensus,
     list_shadow_history,
 )
+from .shadow_notifications import (
+    ShadowDriftNotificationEvent,
+    ShadowNotificationStatus,
+    build_shadow_notification_status,
+    get_shadow_notification_settings,
+    list_shadow_notification_events,
+    send_shadow_notification_test,
+)
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -129,6 +137,44 @@ class ShadowDriftOverviewRead(BaseModel):
     items: list[ShadowDriftRead]
 
 
+class ShadowNotificationEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ticker: str
+    target_year: int | None
+    from_status: str | None
+    to_status: str
+    transition_kind: str
+    observed_at: datetime
+    latest_delta_percent: float | None
+    reasons: list[str] | None
+    delivery_status: str
+    delivery_reason: str | None
+    delivery_attempts: int
+    last_attempt_at: datetime | None
+    notified_at: datetime | None
+
+
+class ShadowNotificationStatusRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    enabled: bool
+    configured: bool
+    smtp_configured: bool
+    recipient_configured: bool
+    cooldown_hours: float
+    history_days: int
+    pending_events: int
+    failed_events: int
+    last_event_at: datetime | None
+    last_sent_at: datetime | None
+
+
+class ShadowNotificationTestRead(BaseModel):
+    sent: bool
+
+
 class ConsensusReadinessGateRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -201,6 +247,43 @@ def get_shadow_consensus_overview(
     db: Session = Depends(get_db),
 ) -> ShadowDriftOverviewResult:
     return build_shadow_drift_overview(db, days=days)
+
+
+@router.get(
+    "/shadow-consensus/notifications/status",
+    response_model=ShadowNotificationStatusRead,
+)
+def get_shadow_notification_status(
+    db: Session = Depends(get_db),
+) -> ShadowNotificationStatus:
+    return build_shadow_notification_status(db)
+
+
+@router.get(
+    "/shadow-consensus/notifications/events",
+    response_model=list[ShadowNotificationEventRead],
+)
+def get_shadow_notification_events(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> list[ShadowDriftNotificationEvent]:
+    return list_shadow_notification_events(db, limit=limit)
+
+
+@router.post(
+    "/shadow-consensus/notifications/test",
+    response_model=ShadowNotificationTestRead,
+)
+def test_shadow_notifications(request: Request) -> ShadowNotificationTestRead:
+    require_local_access(request)
+    settings = get_shadow_notification_settings()
+    if not settings.configured:
+        raise HTTPException(status_code=503, detail="SMTP или адрес shadow-уведомлений не настроены")
+    try:
+        send_shadow_notification_test(settings)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Ошибка отправки shadow-уведомления: {exc}") from exc
+    return ShadowNotificationTestRead(sent=True)
 
 
 @router.post("/shadow-consensus/capture", response_model=ShadowCaptureRead)
