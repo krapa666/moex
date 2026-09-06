@@ -1,0 +1,153 @@
+.canary-evidence-health {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.canary-health-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.canary-health-heading h3 {
+  margin: 4px 0 6px;
+}
+
+.canary-health-heading p,
+.canary-health-policy,
+.canary-health-empty {
+  color: var(--muted);
+}
+
+.canary-health-heading-actions {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.canary-health-heading-actions label {
+  display: grid;
+  gap: 4px;
+  min-width: 92px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.canary-health-heading-actions select {
+  min-height: 36px;
+}
+
+.canary-health-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  white-space: nowrap;
+}
+
+.canary-health-badge[data-status="healthy"] {
+  border-color: color-mix(in srgb, #1f9d55 55%, var(--border));
+  background: color-mix(in srgb, #1f9d55 12%, var(--surface));
+}
+
+.canary-health-badge[data-status="warming_up"],
+.canary-health-badge[data-status="not_configured"] {
+  background: var(--surface-subtle);
+}
+
+.canary-health-badge[data-status="degraded"] {
+  border-color: color-mix(in srgb, #c78b17 55%, var(--border));
+  background: color-mix(in srgb, #c78b17 12%, var(--surface));
+}
+
+.canary-health-badge[data-status="stale"] {
+  border-color: color-mix(in srgb, #c13c3c 55%, var(--border));
+  background: color-mix(in srgb, #c13c3c 12%, var(--surface));
+}
+
+.canary-health-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.canary-health-kpis article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+
+.canary-health-kpis span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.canary-health-kpis strong {
+  font-size: 1rem;
+}
+
+.canary-health-policy {
+  margin: 14px 0 10px;
+  font-size: 0.82rem;
+}
+
+.canary-health-table-wrap {
+  overflow-x: auto;
+}
+
+.canary-health-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.canary-health-table th,
+.canary-health-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.canary-health-table th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.canary-health-table tr[data-status="stale"],
+.canary-health-table tr[data-status="degraded"] {
+  background: var(--surface-subtle);
+}
+
+@media (max-width: 1050px) {
+  .canary-health-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .canary-health-heading {
+    display: grid;
+  }
+
+  .canary-health-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
