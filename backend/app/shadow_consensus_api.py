@@ -4,11 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from .consensus_readiness import (
-    ConsensusReadinessGate,
-    ConsensusReadinessResult,
-    build_consensus_readiness,
-)
+from .consensus_readiness import ConsensusReadinessResult, build_consensus_readiness
 from .database import get_db
 from .forecast_accuracy import AccuracySnapshot
 from .shadow_consensus import ShadowConsensusResult, build_shadow_consensus
