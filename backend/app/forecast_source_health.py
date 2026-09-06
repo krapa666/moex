@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -117,10 +116,6 @@ def _interval_from_env(name: str, default: float = 6.0) -> tuple[float, str | No
     return max(value, 1.0), None
 
 
-def _source_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:10]
-
-
 def load_forecast_source_health_configs() -> list[ForecastSourceHealthConfig]:
     configs: list[ForecastSourceHealthConfig] = []
 
@@ -198,7 +193,7 @@ def load_forecast_source_health_configs() -> list[ForecastSourceHealthConfig]:
         for index, source in enumerate(sheets_sources, start=1):
             configs.append(
                 ForecastSourceHealthConfig(
-                    source_id=f"published-sheets:{_source_hash(source.analyst_name)}",
+                    source_id=f"published-sheets:{index}",
                     source_key="published-sheets",
                     analyst_name=source.analyst_name,
                     public_name=f"Published Sheets #{index}",
