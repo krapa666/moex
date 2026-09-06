@@ -66,7 +66,7 @@ def test_dividend_only_source_keeps_profit_source_comment(tmp_path) -> None:
 
     with Session(engine) as db:
         table = AnalystTable(
-            analyst_name="ДОХОДЪ",
+            analyst_name="DOHOD",
             year_offset=0,
             forecast_start_year=2099,
             sort_order=1,
@@ -102,7 +102,7 @@ def test_dividend_only_source_keeps_profit_source_comment(tmp_path) -> None:
     try:
         result = asyncio.run(
             sync_forecast_source_once(
-                analyst_name="ДОХОДЪ",
+                analyst_name="DOHOD",
                 source_comment="ДОХОДЪ — автоматический прогноз дивидендов",
                 changed_by="dohod-sync",
                 client=DividendOnlyClient(),
