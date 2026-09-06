@@ -1,9 +1,4 @@
-from app.dohod_source import (
-    DohodParseError,
-    load_dohod_aliases,
-    parse_dohod_catalog_slugs,
-    parse_dohod_dividend_html,
-)
+from app import dohod_source
 
 
 CATALOG_HTML = """
@@ -61,7 +56,7 @@ def assert_raises(exc_type, message: str, callback) -> None:
 
 
 def test_catalog_maps_tickers_to_dohod_slugs() -> None:
-    found, errors = parse_dohod_catalog_slugs(
+    found, errors = dohod_source.parse_dohod_catalog_slugs(
         CATALOG_HTML,
         ["SBER", "SBERP", "MOEX", "UNKNOWN"],
     )
@@ -71,7 +66,7 @@ def test_catalog_maps_tickers_to_dohod_slugs() -> None:
 
 
 def test_catalog_supports_explicit_slug_aliases() -> None:
-    found, errors = parse_dohod_catalog_slugs(
+    found, errors = dohod_source.parse_dohod_catalog_slugs(
         CATALOG_HTML,
         ["MOEXOLD"],
         aliases={"MOEXOLD": "moex"},
@@ -82,7 +77,12 @@ def test_catalog_supports_explicit_slug_aliases() -> None:
 
 
 def test_parse_dohod_builds_full_calendar_year_dividend_map() -> None:
-    forecast = parse_dohod_dividend_html("SBER", "sber", DIVIDEND_HTML, current_year=2026)
+    forecast = dohod_source.parse_dohod_dividend_html(
+        "SBER",
+        "sber",
+        DIVIDEND_HTML,
+        current_year=2026,
+    )
 
     assert forecast.ticker == "SBER"
     assert forecast.net_profit_billion_rub == {}
@@ -90,7 +90,7 @@ def test_parse_dohod_builds_full_calendar_year_dividend_map() -> None:
 
 
 def test_parse_dohod_sums_multiple_payments_in_same_calendar_year() -> None:
-    forecast = parse_dohod_dividend_html(
+    forecast = dohod_source.parse_dohod_dividend_html(
         "YDEX",
         "ydex",
         MULTI_PAYMENT_HTML,
@@ -102,17 +102,25 @@ def test_parse_dohod_sums_multiple_payments_in_same_calendar_year() -> None:
 
 def test_parse_dohod_requires_payment_table() -> None:
     assert_raises(
-        DohodParseError,
+        dohod_source.DohodParseError,
         "таблица выплат",
-        lambda: parse_dohod_dividend_html("SBER", "sber", "<html><body>no table</body></html>"),
+        lambda: dohod_source.parse_dohod_dividend_html(
+            "SBER",
+            "sber",
+            "<html><body>no table</body></html>",
+        ),
     )
 
 
 def test_dohod_alias_config_validation() -> None:
-    assert load_dohod_aliases('{"SBER":"sber","SNGSP":"sngsp"}') == {
+    assert dohod_source.load_dohod_aliases('{"SBER":"sber","SNGSP":"sngsp"}') == {
         "SBER": "sber",
         "SNGSP": "sngsp",
     }
 
-    assert_raises(ValueError, "JSON object", lambda: load_dohod_aliases("[]"))
-    assert_raises(ValueError, "invalid DOHOD slug", lambda: load_dohod_aliases('{"SBER":"../bad"}'))
+    assert_raises(ValueError, "JSON object", lambda: dohod_source.load_dohod_aliases("[]"))
+    assert_raises(
+        ValueError,
+        "invalid DOHOD slug",
+        lambda: dohod_source.load_dohod_aliases('{"SBER":"../bad"}'),
+    )
