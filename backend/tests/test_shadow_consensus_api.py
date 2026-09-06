@@ -11,6 +11,7 @@ def test_shadow_consensus_routes_are_registered() -> None:
     assert "/api/analytics/shadow-consensus" in paths
     assert "/api/analytics/shadow-consensus/history" in paths
     assert "/api/analytics/shadow-consensus/drift" in paths
+    assert "/api/analytics/shadow-consensus/overview" in paths
     assert "/api/analytics/shadow-consensus/capture" in paths
     assert "/api/analytics/consensus-readiness" in paths
 
