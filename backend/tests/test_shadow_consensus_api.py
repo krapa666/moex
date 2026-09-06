@@ -12,6 +12,9 @@ def test_shadow_consensus_routes_are_registered() -> None:
     assert "/api/analytics/shadow-consensus/history" in paths
     assert "/api/analytics/shadow-consensus/drift" in paths
     assert "/api/analytics/shadow-consensus/overview" in paths
+    assert "/api/analytics/shadow-consensus/notifications/status" in paths
+    assert "/api/analytics/shadow-consensus/notifications/events" in paths
+    assert "/api/analytics/shadow-consensus/notifications/test" in paths
     assert "/api/analytics/shadow-consensus/capture" in paths
     assert "/api/analytics/consensus-readiness" in paths
 
@@ -19,6 +22,12 @@ def test_shadow_consensus_routes_are_registered() -> None:
 def test_shadow_capture_requires_explicit_local_scope() -> None:
     client = TestClient(app)
     response = client.post("/api/analytics/shadow-consensus/capture")
+    assert response.status_code == 403
+
+
+def test_shadow_notification_test_requires_explicit_local_scope() -> None:
+    client = TestClient(app)
+    response = client.post("/api/analytics/shadow-consensus/notifications/test")
     assert response.status_code == 403
 
 
