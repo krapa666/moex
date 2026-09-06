@@ -56,27 +56,24 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - текущий shadow weighted consensus рядом с production median;
 - readiness gate для будущего решения о production weighting;
 - forward-only shadow history и drift monitoring;
-- глобальный shadow drift overview по universe основной таблицы.
+- глобальный shadow drift overview по universe основной таблицы;
+- stateful email-уведомления о значимых drift-переходах и историю их доставки.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
-С v0.15.0 backtest сравнивает на одинаковом наборе наблюдений:
+С v0.15.0 backtest сравнивает медиану, арифметическое среднее и консервативный accuracy-weighted вариант с shrinkage/weight cap на одном и том же наборе наблюдений. Training использует только более ранние факты с известным `reported_at`, опубликованные до target cutoff.
 
-- медиану;
-- арифметическое среднее;
-- консервативный accuracy-weighted вариант с shrinkage и ограничением весов.
+С v0.16.0 robustness layer проверяет результат по финансовым годам и тикерам, leave-one-out и фиксированной сетке 27 комбинаций `shrinkage / error floor / weight cap`.
 
-Для обучения веса допускаются только более ранние факты с известным `reported_at`, опубликованные до целевой backtest-отсечки. Детальные source weights доступны только local scope.
+С v0.17.0 приложение рассчитывает текущий **shadow weighted consensus**. Historical snapshot для весов выбирается по фазе target year. Readiness policy содержит 11 gates; `READY` сам по себе ничего не переключает.
 
-С v0.16.0 robustness layer отдельно показывает, сохраняется ли преимущество weighted-метода по финансовым годам и тикерам, после исключения одного года/тикера и на фиксированной сетке из 27 разумных комбинаций `shrinkage / error floor / weight cap`.
+С v0.18.0 `arsagera-worker` сохраняет forward-only snapshot `median vs shadow weighted` по доступным бумагам основной таблицы. История не backfill-ится из старых ревизий, чтобы не вносить hindsight bias.
 
-С v0.17.0 приложение рассчитывает текущий **shadow weighted consensus** для выбранного тикера. Historical snapshot для весов выбирается по фазе текущего целевого года, а факты могут обучать веса только если были опубликованы раньше текущего момента. Shadow output не раскрывает source names/weights и безопасен для internet mode. Рядом с robustness показывается explicit readiness policy из 11 критериев. `READY` сам по себе ничего не переключает.
+С v0.19.0 Analytics показывает **глобальный shadow drift overview**. Он использует тот же drift-policy, что детальная карточка тикера, сортирует `ALERT → WATCH → STABLE → insufficient` и явно показывает coverage истории/классификации. Бумага без history остаётся видимой как `insufficient`.
 
-С v0.18.0 `arsagera-worker` каждые 6 часов по умолчанию сохраняет публично безопасный snapshot `median vs shadow weighted` по доступным бумагам основной таблицы. Analytics показывает forward chart и operational drift status. История не backfill-ится из старых ревизий, чтобы не вносить hindsight bias.
+С v0.20.0 поверх этого monitoring layer работает **stateful notification engine**. Он хранит per-ticker state и transition ledger и не отправляет письмо при каждом шестичасовом snapshot. Письма создаются для значимых переходов (`STABLE→WATCH`, escalation в `ALERT`, полноценный recovery), одинаковое состояние дедуплицируется, повторный вход в WATCH защищён cooldown, а неудачная SMTP-доставка может быть повторена только пока событие ещё актуально. Рассылка выключена по умолчанию.
 
-С v0.19.0 Analytics дополнительно показывает **глобальный shadow drift overview**. Он использует тот же drift-policy, что и детальная карточка тикера, сортирует бумаги `ALERT → WATCH → STABLE → insufficient`, показывает coverage истории и классификации и позволяет фильтровать только требующие внимания бумаги. Universe берётся из текущей основной таблицы; бумага без forward history остаётся видимой как `insufficient`.
-
-**Production consensus target price остаётся медианным; shadow/readiness/monitoring layer не меняет fair value, Watchlist, expected return или ranking.**
+**Production consensus target price остаётся медианным; shadow/readiness/monitoring/notification layer не меняет fair value, Watchlist, expected return или ranking.**
 
 Подробнее:
 
@@ -84,6 +81,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - [`docs/source-accuracy.md`](docs/source-accuracy.md)
 - [`docs/consensus-backtest.md`](docs/consensus-backtest.md)
 - [`docs/shadow-consensus.md`](docs/shadow-consensus.md)
+- [`docs/shadow-notifications.md`](docs/shadow-notifications.md)
 
 ### Фактические годовые результаты
 
@@ -115,7 +113,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - первый запуск обновляет историю, последующие используют сохранённую историю и обновляют текущий оборот;
 - уведомления дедуплицируются по тикеру и торговой дате.
 
-Расписание настраивается через:
+Расписание:
 
 ```dotenv
 VOLUME_SCHEDULE_HOUR=18
@@ -143,6 +141,8 @@ Frontend и backend публикуются Compose только на loopback:
 
 Не публикуйте эти порты напрямую в интернет. Внешний доступ должен идти через хостовый Nginx на `80/443`.
 
+Shadow notification status/event endpoints публично возвращают только operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Test-email endpoint является local-only.
+
 ## Архитектура
 
 ```text
@@ -155,7 +155,7 @@ Docker Compose
    ├─ backend          FastAPI + SQLAlchemy + Alembic
    ├─ arsagera-worker  Arsagera + DOHOD + optional fin-vista + Published Sheets
    │                   + optional MOEX CCI actual-result sync
-   │                   + shadow consensus forward-history capture
+   │                   + shadow history/drift state/notification cycle
    ├─ volume-worker    MOEX TQBR volume scheduler/collector
    ├─ db               PostgreSQL 16
    └─ pgbackup         scheduled PostgreSQL backups
@@ -199,7 +199,7 @@ curl http://127.0.0.1:18000/api/health
 
 ### Snapshot restore
 
-Режим по умолчанию:
+По умолчанию:
 
 ```text
 MOEX_RESTORE_SYNC_SNAPSHOT=auto
@@ -221,7 +221,7 @@ MOEX_RESTORE_SYNC_SNAPSHOT=force ./scripts/compose-up.sh
 sudo ./scripts/configure-nginx-compose-proxy.sh --reload
 ```
 
-Явный HTTPS:
+HTTPS:
 
 ```bash
 sudo ./scripts/configure-nginx-compose-proxy.sh \
@@ -234,7 +234,7 @@ sudo ./scripts/configure-nginx-compose-proxy.sh \
 
 ## Важные переменные `.env`
 
-Минимально необходим пароль существующей/новой PostgreSQL:
+Минимально необходим пароль PostgreSQL:
 
 ```dotenv
 POSTGRES_DB=fair_price
@@ -261,6 +261,28 @@ SHADOW_HISTORY_INTERVAL_HOURS=6
 SHADOW_HISTORY_RUN_ON_STARTUP=true
 SHADOW_HISTORY_RETENTION_DAYS=730
 ```
+
+Shadow emails по умолчанию выключены. Для их включения используется существующий SMTP transport volume monitor:
+
+```dotenv
+SHADOW_NOTIFICATIONS_ENABLED=true
+SHADOW_NOTIFICATION_EMAIL=<recipient@example.com>
+SHADOW_NOTIFICATION_COOLDOWN_HOURS=24
+SHADOW_NOTIFICATION_HISTORY_DAYS=30
+SHADOW_NOTIFICATION_MAX_ATTEMPTS=5
+
+VOLUME_SMTP_ENABLED=true
+VOLUME_SMTP_HOST=<smtp-host>
+VOLUME_SMTP_PORT=587
+VOLUME_SMTP_USERNAME=<smtp-user>
+VOLUME_SMTP_PASSWORD=<smtp-secret>
+VOLUME_SMTP_FROM=<verified-sender@example.com>
+VOLUME_SMTP_STARTTLS=true
+VOLUME_SMTP_SSL=false
+VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
+```
+
+Если `SHADOW_NOTIFICATION_EMAIL` пуст, используется `VOLUME_NOTIFICATION_EMAIL`.
 
 Реальные SMTP/CCI/PostgreSQL credentials и адреса получателей нельзя коммитить в Git. `.env.example` содержит только имена параметров и безопасные пустые/демонстрационные значения.
 
@@ -296,6 +318,9 @@ SHADOW_HISTORY_RETENTION_DAYS=730
 - `GET /api/analytics/shadow-consensus/history?ticker=SBER`
 - `GET /api/analytics/shadow-consensus/drift?ticker=SBER`
 - `GET /api/analytics/shadow-consensus/overview`
+- `GET /api/analytics/shadow-consensus/notifications/status`
+- `GET /api/analytics/shadow-consensus/notifications/events`
+- `POST /api/analytics/shadow-consensus/notifications/test` — local
 - `POST /api/analytics/shadow-consensus/capture` — local
 - `GET /api/analytics/consensus-readiness`
 - `GET /api/analytics/actual-net-profits`
@@ -313,7 +338,7 @@ SHADOW_HISTORY_RETENTION_DAYS=730
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют локальный scope. Observation-level backtest дополнительно является local-only, потому что содержит реальные имена/веса источников. Shadow/readiness/history/drift/overview endpoints содержат только агрегаты и безопасны для internet/read-only режима.
+Все изменяющие endpoints требуют local scope. Observation-level backtest local-only, потому что содержит реальные имена/веса источников. Shadow/readiness/history/drift/overview/notification status/event endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
 
 ## Миграции
 
@@ -323,17 +348,14 @@ Backend-контейнер перед стартом выполняет:
 alembic upgrade head
 ```
 
-Текущий schema head — `0021_shadow_consensus_snapshots`. v0.19.0 новых миграций не добавляет.
+Текущий schema head — `0022_shadow_drift_notifications`.
 
-Последние ключевые изменения схемы включают:
+v0.20.0 добавляет:
 
-- интеграцию volume monitor в общую PostgreSQL;
-- абсолютный `forecast_start_year`;
-- историю ревизий прогнозов;
-- операционную историю запусков forecast sources;
-- `actual_net_profits`;
-- `source_key` для безопасного владения фактическими результатами;
-- `shadow_consensus_snapshots` для forward-only monitoring агрегатов.
+- `shadow_drift_states` — текущее per-ticker operational state;
+- `shadow_drift_notification_events` — transition/delivery ledger.
+
+Последние ключевые изменения схемы также включают `actual_net_profits`, `source_key`, `forecast_source_runs`, `forecast_revisions` и `shadow_consensus_snapshots`.
 
 Исторические migration-файлы являются источником истины: `backend/alembic/versions/`.
 
@@ -364,10 +386,11 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 
 - [`docs/forecast-editing.md`](docs/forecast-editing.md) — правила ручного редактирования прогнозов;
 - [`docs/forecast-sources.md`](docs/forecast-sources.md) — автоматические источники прогнозов;
-- [`docs/analytics.md`](docs/analytics.md) — consensus и история Analytics;
+- [`docs/analytics.md`](docs/analytics.md) — consensus, history и evidence UI/API;
 - [`docs/source-accuracy.md`](docs/source-accuracy.md) — методология оценки точности;
-- [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest и robustness-анализ consensus ЧП;
+- [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest и robustness;
 - [`docs/shadow-consensus.md`](docs/shadow-consensus.md) — shadow weighted consensus, readiness, forward drift monitoring и global overview;
+- [`docs/shadow-notifications.md`](docs/shadow-notifications.md) — state machine, cooldown, retry, SMTP и runbook уведомлений;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
