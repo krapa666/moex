@@ -13,9 +13,9 @@ Shadow-модель:
 - не изменяет expected return/ranking;
 - не изменяет persisted forecast values.
 
-С v0.18.0 shadow сохраняется как forward-only monitoring history, с v0.19.0 агрегируется по всему primary universe, а с v0.20.0 значимые drift transitions могут создавать stateful email-уведомления.
+С v0.18.0 shadow сохраняется как forward-only monitoring history, с v0.19.0 агрегируется по всему primary universe, с v0.20.0 значимые drift transitions могут создавать stateful email-уведомления, а с v0.21.0 historical/forward evidence дополняется Production Impact Simulator и promotion dossier.
 
-Даже `READY` и наличие стабильного forward-monitoring не переключают production consensus автоматически.
+Даже `READY` или `READY_FOR_MANUAL_PROMOTION` не переключают production consensus автоматически.
 
 ## Текущий target year
 
@@ -292,6 +292,8 @@ Global panel отображается без выбора тикера и пок
 
 С v0.20.0 global panel также показывает notification mode, cooldown, pending/failed count, last sent timestamp и recent transition events. Local admin при configured SMTP получает кнопку test email.
 
+С v0.21.0 отдельный global panel показывает production-impact profile и promotion dossier без выбора тикера.
+
 ## Readiness gate
 
 Readiness — historical evidence-policy, а не feature flag.
@@ -317,11 +319,34 @@ GET /api/analytics/consensus-backtest/robustness?snapshot=pre_year
 GET /api/analytics/consensus-readiness?snapshot=pre_year
 ```
 
-`READY` означает только выполнение current evidence-policy.
+`READY` означает только выполнение current historical evidence-policy.
+
+## Production impact и promotion dossier
+
+С v0.21.0:
+
+```http
+GET /api/analytics/production-impact?top_n=10&history_days=30
+GET /api/analytics/promotion-dossier?top_n=10&history_days=30
+```
+
+Impact simulator использует текущий batch shadow result и сравнивает median vs weighted scenario на одном comparable universe. Он измеряет target/return/rank/Top-N divergence и гипотетическую Watchlist-score sensitivity.
+
+Promotion dossier добавляет к historical readiness forward coverage/stability и portfolio impact gates. Возможные состояния:
+
+```text
+NOT_READY
+OBSERVE
+READY_FOR_MANUAL_PROMOTION
+```
+
+Текущий `/watchlist/` основан на primary table №1, поэтому median/weighted Watchlist score из dossier — simulation будущего consensus-driven режима, а не текущая production ranking.
+
+Полная методология и точные gates: [`production-impact.md`](production-impact.md).
 
 ## Database
 
-Current schema head начиная с v0.20.0:
+Current schema head начиная с v0.20.0 и без изменений в v0.21.0:
 
 ```text
 0022_shadow_drift_notifications
@@ -333,15 +358,16 @@ Backend startup выполняет Alembic upgrade автоматически.
 
 ## Production boundary
 
-v0.20.0 **не меняет**:
+v0.21.0 **не меняет**:
 
 - production median consensus;
 - fair-value formulas;
-- expected-return calculations;
-- Watchlist ranking;
+- persisted expected-return calculations;
+- текущий primary-table Watchlist;
 - volume monitor;
 - weighting defaults;
 - readiness gates;
-- drift thresholds.
+- drift thresholds;
+- notification state machine.
 
-Forward history, overview и notifications остаются evidence/observability layer перед любым отдельным решением о production promotion.
+Forward history, overview, notifications и production-impact dossier остаются evidence/observability/decision-support layer перед отдельным controlled promotion release.
