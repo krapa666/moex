@@ -1,6 +1,5 @@
 from app import dohod_source
 
-
 CATALOG_HTML = """
 <html><body>
 <a href="/ik/analytics/dividend/sber">Сбербанк-ао</a>
