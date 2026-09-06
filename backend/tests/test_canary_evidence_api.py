@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 def test_canary_evidence_routes_are_registered() -> None:
     paths = {route.path for route in app.routes}
     assert "/api/analytics/consensus-canary/evidence" in paths
+    assert "/api/analytics/consensus-canary/evidence/health" in paths
     assert "/api/analytics/consensus-canary/evidence/ticker" in paths
     assert "/api/analytics/consensus-canary/evidence/history" in paths
     assert "/api/analytics/consensus-canary/evidence/capture" in paths

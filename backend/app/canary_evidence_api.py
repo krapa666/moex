@@ -14,6 +14,10 @@ from .canary_evidence import (
     capture_canary_evidence,
     list_canary_evidence_history,
 )
+from .canary_evidence_health import (
+    CanaryEvidenceHealthOverviewResult,
+    build_canary_evidence_health,
+)
 from .consensus_canary_api import require_local_actor
 from .database import get_db
 
@@ -100,6 +104,50 @@ class CanaryEvidenceOverviewRead(BaseModel):
     items: list[CanaryTickerEvidenceRead]
 
 
+class CanaryTickerEvidenceHealthRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    ticker: str
+    status: str
+    reasons: list[str]
+    expected_interval_hours: float
+    snapshots: int
+    first_captured_at: datetime | None
+    last_captured_at: datetime | None
+    latest_age_hours: float | None
+    history_span_hours: float
+    observed_intervals: int
+    gap_violations: int
+    missed_cycles_estimate: int
+    longest_gap_hours: float
+    continuity_percent: float | None
+
+
+class CanaryEvidenceHealthOverviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    generated_at: datetime
+    history_days: int
+    canary_enabled: bool
+    configured_tickers: int
+    expected_interval_hours: float
+    status: str
+    tickers_with_evidence: int
+    healthy_tickers: int
+    warming_up_tickers: int
+    degraded_tickers: int
+    stale_tickers: int
+    fresh_tickers: int
+    delayed_tickers: int
+    missed_cycles_estimate: int
+    gap_violations: int
+    latest_capture_at: datetime | None
+    latest_capture_age_hours: float | None
+    longest_gap_hours: float
+    median_continuity_percent: float | None
+    items: list[CanaryTickerEvidenceHealthRead]
+
+
 class CanaryEvidenceCaptureRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -115,6 +163,17 @@ def get_canary_evidence_overview(
     db: Session = Depends(get_db),
 ) -> CanaryEvidenceOverviewResult:
     return build_canary_evidence_overview(db, days=days)
+
+
+@router.get(
+    "/consensus-canary/evidence/health",
+    response_model=CanaryEvidenceHealthOverviewRead,
+)
+def get_canary_evidence_health(
+    days: int = Query(default=30, ge=1, le=730),
+    db: Session = Depends(get_db),
+) -> CanaryEvidenceHealthOverviewResult:
+    return build_canary_evidence_health(db, days=days)
 
 
 @router.get("/consensus-canary/evidence/ticker", response_model=CanaryTickerEvidenceRead)

@@ -67,6 +67,7 @@
     '/analytics/production-impact.css',
     '/analytics/canary.css',
     '/analytics/canary-evidence.css',
+    '/analytics/canary-evidence-health.css',
   ]) {
     const style = document.createElement('link');
     style.rel = 'stylesheet';
@@ -78,6 +79,7 @@
     '/analytics/production-impact.js',
     '/analytics/canary.js',
     '/analytics/canary-evidence.js',
+    '/analytics/canary-evidence-health.js',
   ]) {
     const script = document.createElement('script');
     script.src = src;
