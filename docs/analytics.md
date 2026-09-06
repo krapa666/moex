@@ -1,6 +1,6 @@
 # Analytics
 
-Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate и forward shadow monitoring.
+Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate, forward shadow monitoring и глобальный drift overview.
 
 ## Режим доступа
 
@@ -10,7 +10,7 @@ Analytics использует общий сетевой access scope прило
 - internet-клиент работает read-only и видит нейтральные подписи `Аналитик 1`, `Аналитик 2` и т. д.;
 - если scope определить не удалось, интерфейс безопасно трактует пользователя как guest.
 
-Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift сводки не содержат source-level имён изначально.
+Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift/overview сводки не содержат source-level имён изначально.
 
 ## Текущий consensus
 
@@ -274,6 +274,43 @@ Drift является operational policy, а не статистическим 
 
 Analytics показывает forward chart `median vs weighted`, последние snapshots, длительность monitoring history и причины текущего drift status. Разные `target_year` на одном тренде не смешиваются.
 
+## Global shadow drift overview
+
+С v0.19.0 Analytics показывает global monitoring panel ещё до выбора конкретного тикера.
+
+API:
+
+```http
+GET /api/analytics/shadow-consensus/overview?days=30
+```
+
+Overview использует **тот же drift classifier и те же thresholds**, что и `/shadow-consensus/drift`. Отдельного «глобального» алгоритма оценки нет.
+
+Universe берётся из текущей основной таблицы. Поэтому в coverage учитываются и бумаги, у которых shadow history ещё отсутствует. Они остаются в response со статусом `insufficient` и причиной `no_history`.
+
+Backend делает пакетные запросы к `shadow_consensus_snapshots`: отдельно получает последние snapshot по universe и точки текущего monitoring-window, затем группирует их в памяти. Это устраняет N+1 pattern вида «один database query-set на каждый тикер».
+
+Сводка показывает:
+
+- размер universe;
+- число бумаг с хотя бы одной forward-history точкой;
+- число бумаг, уже прошедших минимальные требования классификации;
+- количество `ALERT`, `WATCH`, `STABLE`, `insufficient`;
+- `actionable = ALERT + WATCH`;
+- history coverage и classified coverage.
+
+Строки по умолчанию сортируются:
+
+```text
+ALERT → WATCH → STABLE → insufficient
+```
+
+а внутри статуса — по убыванию абсолютного текущего расхождения weighted к median.
+
+UI позволяет переключить окно 7 / 30 / 90 / 180 дней и фильтровать `Все`, `ALERT + WATCH`, отдельные статусы или только бумаги в стадии накопления history. Клик по тикеру открывает детальный Analytics view этой бумаги.
+
+Overview публичен и не содержит analyst names, source-level forecasts или source-level weights.
+
 ## Readiness к production weighting
 
 Readiness является explicit engineering policy, а не автоматическим feature flag и не тестом статистической значимости.
@@ -318,6 +355,7 @@ POST /api/analytics/actual-net-profits/sync
 
 - история прогнозов начинается только с реально сохранённых `forecast_revisions`;
 - forward shadow history начинается только после установки v0.18.0 и не backfill-ится;
+- global overview universe следует текущей основной таблице и не показывает source-only тикеры вне неё;
 - разные прогнозные годы не смешиваются в одной consensus/drift точке;
 - источник с малой выборкой остаётся видимым, но не получает надёжного rank;
 - training weight не использует факт без известного `reported_at`;
