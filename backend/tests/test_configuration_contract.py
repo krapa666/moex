@@ -26,3 +26,24 @@ def test_example_and_compose_use_volume_schedule_minutes_contract() -> None:
     compose_entry = "VOLUME_SCHEDULE_MINUTES: ${VOLUME_SCHEDULE_MINUTES:-20,35,45}"
     assert compose.count(compose_entry) == 2
     assert "VOLUME_SCHEDULE_MINUTE:" not in compose
+
+
+def test_backend_and_worker_share_forecast_source_health_configuration() -> None:
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    shared_entries = [
+        "ARSAGERA_ANALYST_NAME: ${ARSAGERA_ANALYST_NAME:-Арсагера}",
+        "ARSAGERA_SYNC_INTERVAL_HOURS: ${ARSAGERA_SYNC_INTERVAL_HOURS:-6}",
+        "FORECAST_SHEETS_SOURCES_JSON: ${FORECAST_SHEETS_SOURCES_JSON:-[]}",
+        "FORECAST_SHEETS_SYNC_INTERVAL_HOURS: ${FORECAST_SHEETS_SYNC_INTERVAL_HOURS:-6}",
+        "DOHOD_ENABLED: ${DOHOD_ENABLED:-true}",
+        "DOHOD_ANALYST_NAME: ${DOHOD_ANALYST_NAME:-ДОХОДЪ}",
+        "DOHOD_SYNC_INTERVAL_HOURS: ${DOHOD_SYNC_INTERVAL_HOURS:-6}",
+        "FINVISTA_ENABLED: ${FINVISTA_ENABLED:-false}",
+        'FINVISTA_ANALYST_NAME: "${FINVISTA_ANALYST_NAME:-fin-vista (модель)}"',
+        "FINVISTA_SYNC_INTERVAL_HOURS: ${FINVISTA_SYNC_INTERVAL_HOURS:-6}",
+    ]
+    for entry in shared_entries:
+        assert compose.count(entry) == 2
+
+    assert "MOEX_CCI_PASSWORD: ${MOEX_CCI_PASSWORD:?" not in compose

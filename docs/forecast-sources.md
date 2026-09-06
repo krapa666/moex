@@ -155,6 +155,48 @@ FORECAST_SHEETS_RUN_ON_STARTUP=true
 
 Запись истории работает в fail-open режиме: сбой служебной записи логируется, но не блокирует саму синхронизацию прогнозов.
 
+## Forecast Source Health
+
+С v0.25.0 история `forecast_source_runs` используется для отдельного operational health слоя на `/dashboard/`.
+
+Public endpoint:
+
+```http
+GET /api/dashboard/source-health?days=30
+```
+
+Local-only diagnostics:
+
+```http
+GET /api/dashboard/source-health/details?days=30
+X-Moex-Access-Scope: local
+```
+
+Health учитывает собственный sync interval каждого источника, последний завершённый status, partial/failed-series и изменение coverage относительно собственной недавней истории.
+
+Состояния:
+
+```text
+HEALTHY
+DEGRADED
+STALE
+FAILED
+```
+
+Freshness thresholds задаются относительно cadence:
+
+```text
+normal       <= 1.5 × interval
+DEGRADED     >  1.5 × interval
+STALE        >  2.5 × interval
+```
+
+Абсолютно низкое coverage само по себе не считается ошибкой. `coverage_drop` появляется только после минимум трёх предыдущих comparable запусков и при снижении текущего coverage минимум на 10 п.п. относительно median собственного baseline источника.
+
+В публичном ответе имена кастомных Published Sheets маскируются как `Published Sheets #N`, а raw `error_message/error_details` не выдаются. Они доступны только через local details endpoint.
+
+Health ничего автоматически не отключает и не меняет исходные прогнозы. Подробная методология и runbook: [`forecast-source-health.md`](forecast-source-health.md).
+
 ## Арсагера
 
 Встроенная Арсагера продолжает работать через прежние переменные `ARSAGERA_*` и прежний сервис Compose `arsagera-worker`. Имя сервиса намеренно сохранено для совместимости deployment/runbook-команд, хотя процесс теперь планирует Арсагеру, ДОХОДЪ, опциональную модель fin-vista и конфигурируемые Published Sheets sources.

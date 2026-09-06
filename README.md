@@ -36,9 +36,14 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - **fin-vista (модель)** — опциональный автоматический источник календарной ЧП и дивидендов, выключен по умолчанию;
 - дополнительные опубликованные Google Sheets через конфигурацию.
 
-Каждый запуск прогнозного источника сохраняется в `forecast_source_runs` с покрытием, числом обновлений и диагностикой ошибок.
+Каждый запуск прогнозного источника сохраняется в `forecast_source_runs` с покрытием, числом обновлений и диагностикой ошибок. С v0.25.0 `/dashboard/` строит поверх этой истории **Forecast Source Health**: freshness относительно собственного cadence, `success/partial/failed` серии и self-relative coverage-drop без произвольного абсолютного порога покрытия.
 
-Подробнее: [`docs/forecast-sources.md`](docs/forecast-sources.md).
+Public health маскирует имена кастомных Published Sheets и не выдаёт raw exception text; фактические analyst names и подробности ошибок доступны только через local-only endpoint.
+
+Подробнее:
+
+- [`docs/forecast-sources.md`](docs/forecast-sources.md)
+- [`docs/forecast-source-health.md`](docs/forecast-source-health.md)
 
 ### Analytics, история и evidence layer
 
@@ -60,7 +65,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - stateful email-уведомления о значимых drift-переходах и историю их доставки;
 - Production Impact Simulator и Promotion Decision Dashboard;
 - Controlled Canary control plane и карточку фактически применяемого Active consensus;
-- forward-only Canary Observability: time-weighted uptime, fallback/recovery и per-ticker timeline фактически применённого режима.
+- forward-only Canary Observability: time-weighted uptime, fallback/recovery и per-ticker timeline фактически применённого режима;
+- Capture Health для проверки freshness/continuity самого потока canary evidence.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
@@ -82,6 +88,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 С v0.23.0 **Canary Observability & Evidence** сохраняет forward-only историю фактически применённого `MEDIAN / WEIGHTED CANARY / MEDIAN FALLBACK`. Uptime считается по реальному времени между snapshot, fallback incident — только при входе в fallback, recovery — только при возврате в weighted внутри того же target year и непрерывного canary режима. История до v0.23.0 намеренно не реконструируется.
 
+С v0.24.0 **Canary Evidence Capture Health** отдельно проверяет качество самого потока evidence: ожидаемый cadence, возраст последней точки, gaps, estimated missed cycles и continuity. `HEALTHY` здесь означает только пригодность потока для интерпретации и не является promotion signal.
+
 **Median остаётся fail-safe default. Weighted может влиять только на Active consensus для явно выбранных canary ticker. Текущий Watchlist, source rows, `stock_rows`, persisted expected return/ranking и volume monitor не переключаются на weighted.**
 
 Подробнее:
@@ -94,6 +102,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - [`docs/production-impact.md`](docs/production-impact.md)
 - [`docs/consensus-canary.md`](docs/consensus-canary.md)
 - [`docs/canary-evidence.md`](docs/canary-evidence.md)
+- [`docs/canary-evidence-health.md`](docs/canary-evidence-health.md)
 
 ### Фактические годовые результаты
 
@@ -153,7 +162,7 @@ Frontend и backend публикуются Compose только на loopback:
 
 Не публикуйте эти порты напрямую в интернет. Внешний доступ должен идти через хостовый Nginx на `80/443`.
 
-Shadow notification status/event, production-impact, canary status, active-consensus и canary-evidence endpoints публично возвращают только безопасные aggregate/operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Canary configure/rollback/audit, manual canary-evidence capture, observation-level backtest и test-email endpoints являются local-only.
+Shadow notification status/event, production-impact, canary status, active-consensus, canary-evidence и forecast-source-health public endpoints возвращают только безопасные aggregate/operational metadata. Recipient, SMTP credentials, SMTP error text, private Published Sheets names, raw source errors, analyst names, source-level forecasts и source-level weights наружу не выдаются. Canary configure/rollback/audit, manual canary-evidence capture, source-health details, observation-level backtest и test-email endpoints являются local-only.
 
 ## Архитектура
 
@@ -299,6 +308,8 @@ VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
 
 Canary не требует новых `.env` параметров: состояние хранится в БД и управляется local-only API/UI.
 
+Forecast Source Health также не вводит новых `.env` параметров. Backend получает через Compose уже существующие `ARSAGERA_*`, `DOHOD_*`, `FINVISTA_*` и `FORECAST_SHEETS_*` name/enabled/interval настройки, чтобы health использовал тот же active-source contract, что scheduler.
+
 Реальные SMTP/CCI/PostgreSQL credentials и адреса получателей нельзя коммитить в Git. `.env.example` содержит только имена параметров и безопасные пустые/демонстрационные значения.
 
 ## Основные API
@@ -308,6 +319,11 @@ Canary не требует новых `.env` параметров: состоя�
 - `GET /api/live`
 - `GET /api/health`
 - `GET /api/auth/me`
+
+### Dashboard / data quality
+
+- `GET /api/dashboard/source-health`
+- `GET /api/dashboard/source-health/details` — local
 
 ### Таблицы и строки
 
@@ -346,6 +362,7 @@ Canary не требует новых `.env` параметров: состоя�
 - `GET /api/analytics/consensus-canary/events` — local
 - `GET /api/analytics/active-consensus?ticker=SBER`
 - `GET /api/analytics/consensus-canary/evidence?days=30`
+- `GET /api/analytics/consensus-canary/evidence/health?days=30`
 - `GET /api/analytics/consensus-canary/evidence/ticker?ticker=SBER&days=30`
 - `GET /api/analytics/consensus-canary/evidence/history?ticker=SBER&days=30`
 - `POST /api/analytics/consensus-canary/evidence/capture` — local
@@ -364,7 +381,7 @@ Canary не требует новых `.env` параметров: состоя�
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют local scope. Observation-level backtest и canary audit local-only. Shadow/readiness/history/drift/overview/notification status/event, production-impact, canary status, active-consensus и canary-evidence read endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
+Все изменяющие endpoints требуют local scope. Observation-level backtest, canary audit и source-health details local-only. Shadow/readiness/history/drift/overview/notification status/event, production-impact, canary status, active-consensus, canary-evidence и public source-health endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
 
 ## Миграции
 
@@ -388,9 +405,11 @@ v0.22.0 добавил:
 - `consensus_canary_settings` — singleton enabled/allowlist state;
 - `consensus_canary_events` — append-only audit trail enable/disable/reconfigure/rollback.
 
-v0.23.0 добавляет:
+v0.23.0 добавил:
 
 - `canary_evidence_snapshots` — forward-only history фактически применённого Active consensus и runtime fallback state.
+
+v0.24.0 и v0.25.0 schema не меняют.
 
 Последние ключевые изменения схемы также включают `actual_net_profits`, `source_key`, `forecast_source_runs`, `forecast_revisions` и `shadow_consensus_snapshots`.
 
@@ -423,6 +442,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 
 - [`docs/forecast-editing.md`](docs/forecast-editing.md) — правила ручного редактирования прогнозов;
 - [`docs/forecast-sources.md`](docs/forecast-sources.md) — автоматические источники прогнозов;
+- [`docs/forecast-source-health.md`](docs/forecast-source-health.md) — freshness, coverage baseline, failures и privacy operational health источников;
 - [`docs/analytics.md`](docs/analytics.md) — consensus, history и evidence UI/API;
 - [`docs/source-accuracy.md`](docs/source-accuracy.md) — методология оценки точности;
 - [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest и robustness;
@@ -431,6 +451,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/production-impact.md`](docs/production-impact.md) — impact simulator, portfolio stability и promotion policy;
 - [`docs/consensus-canary.md`](docs/consensus-canary.md) — controlled canary policy, Active consensus, safety guards и rollback runbook;
 - [`docs/canary-evidence.md`](docs/canary-evidence.md) — forward canary history, time-weighted uptime, fallback/recovery и evidence runbook;
+- [`docs/canary-evidence-health.md`](docs/canary-evidence-health.md) — freshness, gaps и continuity canary evidence stream;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
