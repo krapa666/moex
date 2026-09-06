@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from statistics import median
 from typing import Literal
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String, select
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from .database import Base
