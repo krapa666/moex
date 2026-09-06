@@ -8,13 +8,15 @@ from app.models import AnalystTable, Base, StockRow
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
+ANALYST_NAME = "Test Source"
+
 
 def _prepare_engine(tmp_path, tickers: list[str]):
     engine = create_engine(f"sqlite:///{tmp_path / 'source-runs.db'}")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         table = AnalystTable(
-            analyst_name="Источник",
+            analyst_name=ANALYST_NAME,
             year_offset=0,
             forecast_start_year=2099,
             sort_order=1,
@@ -65,7 +67,7 @@ class FailedClient:
 def _sync(client):
     return asyncio.run(
         sync_forecast_source_once(
-            analyst_name="Источник",
+            analyst_name=ANALYST_NAME,
             source_comment="Тестовый источник",
             changed_by="test-sync",
             client=client,
@@ -84,7 +86,7 @@ def test_successful_source_sync_is_persisted(tmp_path, monkeypatch) -> None:
     with Session(engine) as db:
         run = db.scalars(select(ForecastSourceRun)).one()
         assert run.source_key == "test-source"
-        assert run.analyst_name == "Источник"
+        assert run.analyst_name == ANALYST_NAME
         assert run.status == "success"
         assert run.finished_at is not None
         assert run.tickers_total == 1
