@@ -1,10 +1,10 @@
+import pytest
 from app.dohod_source import (
     DohodParseError,
     load_dohod_aliases,
     parse_dohod_catalog_slugs,
     parse_dohod_dividend_html,
 )
-import pytest
 
 
 CATALOG_HTML = """
