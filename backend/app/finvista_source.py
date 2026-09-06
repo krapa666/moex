@@ -188,10 +188,7 @@ def parse_finvista_prospect_html(
     )
     if dividends:
         multiplier = _dividend_multiplier(page_text)
-        dividends = {
-            year: round(value * multiplier, 8)
-            for year, value in dividends.items()
-        }
+        dividends = {year: round(value * multiplier, 8) for year, value in dividends.items()}
 
     return FinVistaForecast(
         ticker=ticker.strip().upper(),
@@ -304,4 +301,5 @@ async def sync_finvista_once(
         client=FinVistaClient(aliases=effective_aliases),
         concurrency=effective_concurrency,
         create_table_if_missing=True,
+        source_key="fin-vista",
     )
