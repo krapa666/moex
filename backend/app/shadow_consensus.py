@@ -15,7 +15,12 @@ from .consensus_backtest import (
     _available_training_samples,
     _source_weights,
 )
-from .forecast_accuracy import AccuracySnapshot, ActualNetProfit, build_accuracy_samples
+from .forecast_accuracy import (
+    AccuracySample,
+    AccuracySnapshot,
+    ActualNetProfit,
+    build_accuracy_samples,
+)
 from .models import AnalystTable, StockRow
 
 
@@ -52,6 +57,15 @@ class _ShadowComponent:
     net_profit_billion_rub: float
     target_price: float
     current_price: float | None
+
+
+@dataclass(frozen=True)
+class _ShadowContext:
+    tables: list[AnalystTable]
+    target_year: int
+    snapshot: AccuracySnapshot
+    as_of: datetime
+    training_samples: list[AccuracySample]
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -155,63 +169,17 @@ def _empty_result(
     )
 
 
-def build_shadow_consensus(
-    db: Session,
-    *,
-    ticker: str,
-    as_of: datetime | None = None,
-) -> ShadowConsensusResult:
-    normalized_ticker = ticker.strip().upper()
-    current = _as_utc(as_of or datetime.now(timezone.utc))
-    if not normalized_ticker:
-        return _empty_result(
-            ticker="",
-            as_of=current,
-            target_year=None,
-            snapshot=None,
-            sources=0,
-            reason="ticker is required",
-        )
-
+def _load_shadow_context(db: Session, *, as_of: datetime) -> _ShadowContext | None:
     tables = list(
         db.scalars(
             select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc())
         ).all()
     )
     if not tables:
-        return _empty_result(
-            ticker=normalized_ticker,
-            as_of=current,
-            target_year=None,
-            snapshot=None,
-            sources=0,
-            reason="no analyst tables",
-        )
+        return None
 
     target_year = int(tables[0].forecast_start_year)
-    snapshot = training_snapshot_for_target(target_year, current)
-    rows = list(db.scalars(select(StockRow).where(StockRow.ticker == normalized_ticker)).all())
-    row_by_table_id = {row.table_id: row for row in rows}
-    component_by_source: dict[str, _ShadowComponent] = {}
-    for table in tables:
-        row = row_by_table_id.get(table.id)
-        if row is None:
-            continue
-        component = _component_for_row(row, table, target_year=target_year)
-        if component is not None:
-            component_by_source.setdefault(component.analyst_name, component)
-    components = list(component_by_source.values())
-
-    if len(components) < 2:
-        return _empty_result(
-            ticker=normalized_ticker,
-            as_of=current,
-            target_year=target_year,
-            snapshot=snapshot,
-            sources=len(components),
-            reason="at least two comparable current forecasts are required",
-        )
-
+    snapshot = training_snapshot_for_target(target_year, as_of)
     samples = build_accuracy_samples(db, snapshot=snapshot)
     actual_rows = list(db.scalars(select(ActualNetProfit)).all())
     reported_at_by_key = {
@@ -220,14 +188,48 @@ def build_shadow_consensus(
     training_samples = _available_training_samples(
         samples,
         target_fiscal_year=target_year,
-        target_cutoff=current,
+        target_cutoff=as_of,
         reported_at_by_key=reported_at_by_key,
     )
+    return _ShadowContext(
+        tables=tables,
+        target_year=target_year,
+        snapshot=snapshot,
+        as_of=as_of,
+        training_samples=training_samples,
+    )
+
+
+def _build_shadow_result(
+    *,
+    ticker: str,
+    context: _ShadowContext,
+    rows_by_table_id: dict[int, StockRow],
+) -> ShadowConsensusResult:
+    component_by_source: dict[str, _ShadowComponent] = {}
+    for table in context.tables:
+        row = rows_by_table_id.get(table.id)
+        if row is None:
+            continue
+        component = _component_for_row(row, table, target_year=context.target_year)
+        if component is not None:
+            component_by_source.setdefault(component.analyst_name, component)
+    components = list(component_by_source.values())
+
+    if len(components) < 2:
+        return _empty_result(
+            ticker=ticker,
+            as_of=context.as_of,
+            target_year=context.target_year,
+            snapshot=context.snapshot,
+            sources=len(components),
+            reason="at least two comparable current forecasts are required",
+        )
 
     source_names = [component.analyst_name for component in components]
     weights, counts = _source_weights(
         source_names,
-        training_samples,
+        context.training_samples,
         shrinkage_samples=DEFAULT_SHRINKAGE_SAMPLES,
         error_floor_percent=DEFAULT_ERROR_FLOOR_PERCENT,
         relative_score_cap=DEFAULT_RELATIVE_SCORE_CAP,
@@ -269,10 +271,10 @@ def build_shadow_consensus(
     source_training_samples = sum(counts.values())
 
     return ShadowConsensusResult(
-        ticker=normalized_ticker,
-        target_year=target_year,
-        training_snapshot=snapshot,
-        as_of=current,
+        ticker=ticker,
+        target_year=context.target_year,
+        training_snapshot=context.snapshot,
+        as_of=context.as_of,
         shadow_available=True,
         reason=None,
         sources=len(components),
@@ -292,4 +294,97 @@ def build_shadow_consensus(
         current_price=current_price,
         median_market_gap_percent=median_market_gap,
         weighted_market_gap_percent=weighted_market_gap,
+    )
+
+
+def build_shadow_consensus_batch(
+    db: Session,
+    *,
+    tickers: list[str] | tuple[str, ...] | set[str] | None = None,
+    as_of: datetime | None = None,
+) -> list[ShadowConsensusResult]:
+    current = _as_utc(as_of or datetime.now(timezone.utc))
+    requested = None
+    if tickers is not None:
+        requested = {ticker.strip().upper() for ticker in tickers if ticker.strip()}
+        if not requested:
+            return []
+
+    context = _load_shadow_context(db, as_of=current)
+    if context is None:
+        if requested is None:
+            return []
+        return [
+            _empty_result(
+                ticker=ticker,
+                as_of=current,
+                target_year=None,
+                snapshot=None,
+                sources=0,
+                reason="no analyst tables",
+            )
+            for ticker in sorted(requested)
+        ]
+
+    statement = select(StockRow)
+    if requested is not None:
+        statement = statement.where(StockRow.ticker.in_(sorted(requested)))
+    rows = list(db.scalars(statement).all())
+
+    rows_by_ticker: dict[str, dict[int, StockRow]] = {}
+    primary_tickers: set[str] = set()
+    primary_table_id = context.tables[0].id
+    for row in rows:
+        ticker = (row.ticker or "").strip().upper()
+        if not ticker:
+            continue
+        if requested is not None and ticker not in requested:
+            continue
+        rows_by_ticker.setdefault(ticker, {}).setdefault(row.table_id, row)
+        if row.table_id == primary_table_id:
+            primary_tickers.add(ticker)
+
+    target_tickers = sorted(requested if requested is not None else primary_tickers)
+    return [
+        _build_shadow_result(
+            ticker=ticker,
+            context=context,
+            rows_by_table_id=rows_by_ticker.get(ticker, {}),
+        )
+        for ticker in target_tickers
+    ]
+
+
+def build_shadow_consensus(
+    db: Session,
+    *,
+    ticker: str,
+    as_of: datetime | None = None,
+) -> ShadowConsensusResult:
+    normalized_ticker = ticker.strip().upper()
+    current = _as_utc(as_of or datetime.now(timezone.utc))
+    if not normalized_ticker:
+        return _empty_result(
+            ticker="",
+            as_of=current,
+            target_year=None,
+            snapshot=None,
+            sources=0,
+            reason="ticker is required",
+        )
+
+    results = build_shadow_consensus_batch(
+        db,
+        tickers=[normalized_ticker],
+        as_of=current,
+    )
+    if results:
+        return results[0]
+    return _empty_result(
+        ticker=normalized_ticker,
+        as_of=current,
+        target_year=None,
+        snapshot=None,
+        sources=0,
+        reason="shadow consensus is unavailable",
     )
