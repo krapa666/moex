@@ -12,10 +12,8 @@ from .dohod_source import sync_dohod_once
 from .finvista_source import sync_finvista_once
 from .forecast_sources import load_published_sheets_sources, sync_published_sheets_sources_once
 from .moex_cci_actuals import get_moex_cci_settings, sync_moex_cci_actuals_once
-from .shadow_history import (
-    capture_shadow_consensus_once,
-    get_shadow_history_settings,
-)
+from .shadow_history import capture_shadow_consensus_once, get_shadow_history_settings
+from .shadow_notifications import process_shadow_drift_transitions_once
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -27,6 +25,23 @@ def _env_bool(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def capture_shadow_monitoring_once():
+    capture_result = capture_shadow_consensus_once()
+    notification_result = process_shadow_drift_transitions_once()
+    logger.info(
+        "Shadow monitoring created %d/%d snapshots; state_changes=%d events=%d sent=%d suppressed=%d failed=%d superseded=%d",
+        capture_result.snapshots_created,
+        capture_result.tickers_total,
+        notification_result.state_changes,
+        notification_result.events_created,
+        notification_result.sent,
+        notification_result.suppressed,
+        notification_result.failed,
+        notification_result.superseded,
+    )
+    return capture_result
 
 
 async def main() -> None:
@@ -119,7 +134,7 @@ async def main() -> None:
             minutes=SHADOW_HISTORY_CAPTURE_OFFSET_MINUTES,
         )
         scheduler.add_job(
-            capture_shadow_consensus_once,
+            capture_shadow_monitoring_once,
             IntervalTrigger(
                 hours=shadow_history_settings.interval_hours,
                 start_date=first_scheduled_capture,
@@ -170,7 +185,7 @@ async def main() -> None:
 
     if shadow_history_settings.enabled and shadow_history_settings.run_on_startup:
         try:
-            result = await asyncio.to_thread(capture_shadow_consensus_once)
+            result = await asyncio.to_thread(capture_shadow_monitoring_once)
             logger.info(
                 "Initial shadow history capture created %d/%d snapshots; skipped=%d expired=%d",
                 result.snapshots_created,
@@ -179,7 +194,7 @@ async def main() -> None:
                 result.deleted_expired,
             )
         except Exception:
-            logger.exception("Initial shadow consensus history capture failed")
+            logger.exception("Initial shadow consensus history/notification cycle failed")
 
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
