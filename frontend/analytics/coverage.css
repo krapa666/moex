@@ -1,0 +1,123 @@
+.actual-coverage {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--shell-surface-soft, var(--card));
+}
+
+.actual-coverage-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.actual-coverage h3,
+.actual-coverage h4 {
+  margin: 0 0 8px;
+}
+
+.actual-coverage-heading p,
+.actual-coverage-missing p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 900px;
+}
+
+.actual-coverage-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.actual-coverage-summary article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.actual-coverage-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.actual-coverage-summary strong {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.actual-coverage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.actual-coverage-table-wrap {
+  overflow-x: auto;
+}
+
+.actual-coverage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.actual-coverage-table th,
+.actual-coverage-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.actual-coverage-table th:first-child,
+.actual-coverage-table td:first-child {
+  text-align: left;
+}
+
+.actual-coverage-key {
+  font-weight: 650;
+}
+
+.actual-coverage-missing {
+  margin-top: 18px;
+}
+
+.actual-coverage-missing-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.actual-coverage-missing-item {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .actual-coverage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .actual-coverage-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .actual-coverage-summary {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,3 +1,4 @@
+from .actual_result_coverage_api import router as actual_result_coverage_router
 from .canary_evidence_api import router as canary_evidence_router
 from .consensus_canary_api import router as consensus_canary_router
 from .consensus_robustness_api import router as consensus_robustness_router
@@ -10,6 +11,7 @@ from .version import APP_VERSION
 
 app.version = APP_VERSION
 app.include_router(analytics_router)
+app.include_router(actual_result_coverage_router)
 app.include_router(consensus_robustness_router)
 app.include_router(shadow_consensus_router)
 app.include_router(production_impact_router)
