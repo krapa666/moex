@@ -10,6 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal
+from .forecast_source_runs import (
+    complete_forecast_source_run,
+    fail_forecast_source_run,
+    start_forecast_source_run,
+)
 from .main import (
     apply_net_profit_projection,
     copy_shared_row_fields,
@@ -128,6 +133,53 @@ def _get_or_create_target_tables(
     return ([created] if created is not None else []), created is not None
 
 
+def _run_status(result: ForecastSyncResult) -> str:
+    if not result.errors:
+        return "success"
+    if result.tickers_mapped == 0:
+        return "failed"
+    return "partial"
+
+
+def _start_run(source_key: str | None, analyst_name: str) -> int | None:
+    if not source_key:
+        return None
+    try:
+        return start_forecast_source_run(source_key=source_key, analyst_name=analyst_name)
+    except Exception:
+        logger.exception("Could not start forecast source run history for %r", analyst_name)
+        return None
+
+
+def _finish_run(run_id: int | None, result: ForecastSyncResult) -> None:
+    if run_id is None:
+        return
+    try:
+        complete_forecast_source_run(
+            run_id,
+            status=_run_status(result),
+            tables=result.tables,
+            tickers_total=result.tickers_total,
+            tickers_mapped=result.tickers_mapped,
+            tickers_updated=result.tickers_updated,
+            tickers_unchanged=result.tickers_unchanged,
+            tickers_skipped=result.tickers_skipped,
+            table_created=result.table_created,
+            error_details=result.errors,
+        )
+    except Exception:
+        logger.exception("Could not complete forecast source run history id=%s", run_id)
+
+
+def _fail_run(run_id: int | None, error: Exception) -> None:
+    if run_id is None:
+        return
+    try:
+        fail_forecast_source_run(run_id, error)
+    except Exception:
+        logger.exception("Could not fail forecast source run history id=%s", run_id)
+
+
 async def sync_forecast_source_once(
     *,
     analyst_name: str,
@@ -136,11 +188,13 @@ async def sync_forecast_source_once(
     client: ForecastSourceClient,
     concurrency: int = 4,
     create_table_if_missing: bool = False,
+    source_key: str | None = None,
 ) -> ForecastSyncResult:
     target_name = analyst_name.strip()
     if not target_name:
         raise ValueError("analyst_name must not be empty")
 
+    run_id = _start_run(source_key, target_name)
     db = SessionLocal()
     try:
         tables, table_created = _get_or_create_target_tables(
@@ -155,7 +209,9 @@ async def sync_forecast_source_once(
                 else "таблица аналитика не найдена"
             )
             logger.warning("Forecast sync %r skipped: %s", target_name, error)
-            return ForecastSyncResult(0, 0, 0, 0, 0, 0, {"__table__": error}, False)
+            result = ForecastSyncResult(0, 0, 0, 0, 0, 0, {"__table__": error}, False)
+            _finish_run(run_id, result)
+            return result
 
         table_ids = [table.id for table in tables]
         rows = db.scalars(
@@ -165,7 +221,9 @@ async def sync_forecast_source_once(
         if not tickers:
             if table_created:
                 db.commit()
-            return ForecastSyncResult(len(tables), 0, 0, 0, 0, 0, {}, table_created)
+            result = ForecastSyncResult(len(tables), 0, 0, 0, 0, 0, {}, table_created)
+            _finish_run(run_id, result)
+            return result
 
         mapping, mapping_errors = await client.fetch_catalog_mapping(tickers)
         forecasts, fetch_errors = await _fetch_forecasts(client, mapping, concurrency)
@@ -211,6 +269,7 @@ async def sync_forecast_source_once(
             errors=errors,
             table_created=table_created,
         )
+        _finish_run(run_id, result)
         logger.info(
             "Forecast sync %r: tables=%s created=%s total=%s mapped=%s updated=%s unchanged=%s skipped=%s",
             target_name,
@@ -225,8 +284,9 @@ async def sync_forecast_source_once(
         for ticker, error in sorted(errors.items()):
             logger.warning("Forecast sync %r skipped %s: %s", target_name, ticker, error)
         return result
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        _fail_run(run_id, exc)
         raise
     finally:
         db.close()
