@@ -101,7 +101,7 @@ ALERT → WATCH       event only; это ещё не full recovery
 insufficient → *    event only
 ```
 
-`ALERT → WATCH` не считается recovery: модель всё ещё требует внимания. Полное recovery наступает только при `STABLE`.
+`ALERT → WATCH` не считается recovery: модель всё ещё требует внимания. Full recovery наступает только при `STABLE`.
 
 ### Смена target year
 
@@ -121,13 +121,7 @@ transition_kind = target_year_reset
 SHADOW_NOTIFICATION_COOLDOWN_HOURS=24
 ```
 
-Cooldown применяется к повторному входу:
-
-```text
-STABLE → WATCH
-```
-
-если по этому ticker недавно уже отправлялось уведомление.
+Cooldown применяется к повторному входу `STABLE → WATCH`, если по этому ticker недавно уже отправлялось уведомление.
 
 Escalation в `ALERT` cooldown не блокирует:
 
@@ -137,8 +131,6 @@ STABLE → ALERT
 ```
 
 Recovery также не блокируется cooldown, если предыдущий actionable incident действительно был отправлен.
-
-Таким образом быстрое дребезжание около WATCH threshold не превращается в поток писем, но усиление до ALERT проходит немедленно.
 
 ## Delivery retry и supersede
 
@@ -169,8 +161,6 @@ delivery_status = superseded
 reason = state_changed_before_delivery
 ```
 
-Это важнее попытки любой ценой доставить уже устаревший ALERT/WATCH.
-
 ## Disabled/configuration states
 
 Default:
@@ -181,14 +171,17 @@ SHADOW_NOTIFICATIONS_ENABLED=false
 
 Даже при выключенной рассылке state machine продолжает фиксировать текущее состояние и переходы. Would-be notification получает `suppressed`, поэтому после будущего включения не возникает ретроспективной рассылки старых событий.
 
-Если рассылка включена, но SMTP/recipient не настроены, transition также сохраняется как suppressed с причиной `delivery_not_configured`.
+Если рассылка включена, но SMTP/recipient не настроены, transition сохраняется как suppressed с причиной `delivery_not_configured`.
 
 ## SMTP configuration
 
-Shadow notifications используют существующий SMTP transport volume monitor, чтобы не хранить второй набор credentials:
+Shadow notifications переиспользуют существующие **SMTP credentials/transport parameters** volume monitor, но имеют независимый feature-toggle.
+
+Для shadow delivery **не требуется** `VOLUME_SMTP_ENABLED=true`: эта переменная управляет volume-mailing и не должна включаться только ради shadow notifications.
+
+Нужны SMTP transport values:
 
 ```dotenv
-VOLUME_SMTP_ENABLED=true
 VOLUME_SMTP_HOST=smtp.example.com
 VOLUME_SMTP_PORT=587
 VOLUME_SMTP_USERNAME=<smtp-user>
@@ -211,6 +204,8 @@ SHADOW_NOTIFICATION_MAX_ATTEMPTS=5
 
 Если `SHADOW_NOTIFICATION_EMAIL` пуст, используется `VOLUME_NOTIFICATION_EMAIL`.
 
+`VOLUME_SMTP_ENABLED` можно оставить `false`, если volume-monitor email не нужен.
+
 Secrets и реальные адреса получателей должны находиться только в локальном `.env`.
 
 ## Email content
@@ -225,12 +220,7 @@ Secrets и реальные адреса получателей должны н�
 - operational drift reasons;
 - ссылку на Analytics при настроенном `VOLUME_PUBLIC_BASE_URL`.
 
-Не включаются:
-
-- analyst/source identities;
-- source-level forecasts;
-- source-level weights;
-- SMTP credentials.
+Не включаются analyst/source identities, source-level forecasts/weights или SMTP credentials.
 
 ## API
 
@@ -270,7 +260,7 @@ Test отправляет отдельное диагностическое пи
 
 ## Analytics UI
 
-В global shadow overview появился блок **«Уведомления о переходах drift»**.
+В global shadow overview есть блок **«Уведомления о переходах drift»**.
 
 Он показывает:
 
@@ -281,7 +271,7 @@ Test отправляет отдельное диагностическое пи
 - время последнего успешного письма;
 - последние transition events и delivery status.
 
-Local admin при настроенном SMTP видит кнопку тестового письма. Internet/read-only пользователь видит только безопасный operational status/event history.
+Local admin при настроенном SMTP видит кнопку test email. Internet/read-only пользователь видит только безопасный operational status/event history.
 
 ## Deployment
 
@@ -295,13 +285,13 @@ Backend startup автоматически выполняет `alembic upgrade h
 
 Для обычного обновления обязательных `.env`-изменений нет, потому что notifications выключены по умолчанию.
 
-Чтобы **фактически включить** email, нужно отдельно настроить существующий SMTP и:
+Чтобы фактически включить shadow email, настройте SMTP transport values и:
 
 ```dotenv
 SHADOW_NOTIFICATIONS_ENABLED=true
 ```
 
-После изменения `.env` перезапустите Compose через штатный `./scripts/compose-up.sh`.
+После изменения `.env` перезапустите Compose через `./scripts/compose-up.sh`.
 
 ## Production boundary
 
