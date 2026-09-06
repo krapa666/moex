@@ -193,7 +193,8 @@ async def sync_forecast_source_once(
 
             row.net_profit_year_map = profit_map
             row.dividend_year_map = dividend_map
-            row.net_profit_source_comment = source_comment
+            if profit_changed:
+                row.net_profit_source_comment = source_comment
             row._forecast_changed_by = changed_by
             table = table_by_id[row.table_id]
             apply_net_profit_projection(row, table.forecast_start_year)
