@@ -9,6 +9,12 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from .actual_result_sync import ActualSyncResult
+from .consensus_backtest import (
+    ConsensusBacktestObservation,
+    ConsensusBacktestResult,
+    build_consensus_backtest,
+    build_consensus_backtest_observations,
+)
 from .database import get_db
 from .forecast_accuracy import (
     AccuracySample,
@@ -136,6 +142,57 @@ class SourceAccuracyRead(BaseModel):
     sign_accuracy_percent: float
     eligible: bool
     rank: int | None
+
+
+class ConsensusBacktestMethodRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    method: str
+    label: str
+    samples: int
+    tickers: int
+    years: int
+    median_smape_percent: float
+    mean_smape_percent: float
+    median_absolute_error_billion_rub: float
+    mean_absolute_error_billion_rub: float
+    mean_bias_billion_rub: float
+    sign_accuracy_percent: float
+    median_smape_delta_vs_median_pp: float
+    mean_smape_delta_vs_median_pp: float
+
+
+class ConsensusBacktestRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    snapshot: AccuracySnapshot
+    min_sources: int
+    shrinkage_samples: int
+    error_floor_percent: float
+    relative_score_cap: float
+    observations: int
+    tickers: int
+    years: int
+    methods: list[ConsensusBacktestMethodRead]
+
+
+class ConsensusBacktestObservationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    ticker: str
+    fiscal_year: int
+    snapshot: AccuracySnapshot
+    cutoff: datetime
+    actual_billion_rub: float
+    sources: int
+    sources_with_training_history: int
+    training_samples: int
+    source_forecasts: dict[str, float]
+    source_weights: dict[str, float]
+    source_training_samples: dict[str, int]
+    median_forecast_billion_rub: float
+    mean_forecast_billion_rub: float
+    weighted_forecast_billion_rub: float
 
 
 def require_local_access(request: Request) -> None:
@@ -324,3 +381,54 @@ def list_source_accuracy_samples(
         samples = [sample for sample in samples if sample.fiscal_year == fiscal_year]
     samples.sort(key=lambda sample: (sample.fiscal_year, sample.ticker, sample.analyst_name), reverse=True)
     return samples[:limit]
+
+
+@router.get("/consensus-backtest", response_model=ConsensusBacktestRead)
+def get_consensus_backtest(
+    snapshot: AccuracySnapshot = Query(default="pre_year"),
+    min_sources: int = Query(default=2, ge=2, le=10),
+    shrinkage_samples: int = Query(default=5, ge=0, le=100),
+    error_floor_percent: float = Query(default=5.0, gt=0, le=100),
+    relative_score_cap: float = Query(default=2.0, ge=1, le=10),
+    db: Session = Depends(get_db),
+) -> ConsensusBacktestResult:
+    return build_consensus_backtest(
+        db,
+        snapshot=snapshot,
+        min_sources=min_sources,
+        shrinkage_samples=shrinkage_samples,
+        error_floor_percent=error_floor_percent,
+        relative_score_cap=relative_score_cap,
+    )
+
+
+@router.get(
+    "/consensus-backtest/observations",
+    response_model=list[ConsensusBacktestObservationRead],
+)
+def list_consensus_backtest_observations(
+    snapshot: AccuracySnapshot = Query(default="pre_year"),
+    min_sources: int = Query(default=2, ge=2, le=10),
+    shrinkage_samples: int = Query(default=5, ge=0, le=100),
+    error_floor_percent: float = Query(default=5.0, gt=0, le=100),
+    relative_score_cap: float = Query(default=2.0, ge=1, le=10),
+    ticker: str | None = Query(default=None, max_length=32, pattern=r"^[A-Za-z0-9._-]+$"),
+    fiscal_year: int | None = Query(default=None, ge=2000, le=2100),
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+) -> list[ConsensusBacktestObservation]:
+    observations = build_consensus_backtest_observations(
+        db,
+        snapshot=snapshot,
+        min_sources=min_sources,
+        shrinkage_samples=shrinkage_samples,
+        error_floor_percent=error_floor_percent,
+        relative_score_cap=relative_score_cap,
+    )
+    if ticker:
+        normalized_ticker = ticker.strip().upper()
+        observations = [item for item in observations if item.ticker == normalized_ticker]
+    if fiscal_year is not None:
+        observations = [item for item in observations if item.fiscal_year == fiscal_year]
+    observations.sort(key=lambda item: (item.fiscal_year, item.ticker), reverse=True)
+    return observations[:limit]
