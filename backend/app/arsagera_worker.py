@@ -10,6 +10,7 @@ from .arsagera_sync import sync_arsagera_once
 from .dohod_source import sync_dohod_once
 from .finvista_source import sync_finvista_once
 from .forecast_sources import load_published_sheets_sources, sync_published_sheets_sources_once
+from .moex_cci_actuals import get_moex_cci_settings, sync_moex_cci_actuals_once
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ async def main() -> None:
     finvista_enabled = _env_bool("FINVISTA_ENABLED", False)
     finvista_interval_hours = max(float(os.getenv("FINVISTA_SYNC_INTERVAL_HOURS", "6")), 1.0)
     finvista_run_on_startup = _env_bool("FINVISTA_RUN_ON_STARTUP", True)
+    cci_settings = get_moex_cci_settings()
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
@@ -87,6 +89,23 @@ async def main() -> None:
         )
         logger.info("fin-vista model sync scheduled every %.1f hours", finvista_interval_hours)
 
+    if cci_settings.enabled:
+        if cci_settings.configured:
+            scheduler.add_job(
+                sync_moex_cci_actuals_once,
+                IntervalTrigger(hours=cci_settings.interval_hours),
+                id="moex-cci-actual-result-sync",
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=3600,
+            )
+            logger.info(
+                "MOEX CCI actual-result sync scheduled every %.1f hours",
+                cci_settings.interval_hours,
+            )
+        else:
+            logger.error("MOEX CCI actual-result sync enabled but credentials are not configured")
+
     scheduler.start()
 
     if run_on_startup:
@@ -112,6 +131,12 @@ async def main() -> None:
             await sync_finvista_once()
         except Exception:
             logger.exception("Initial fin-vista model synchronization failed")
+
+    if cci_settings.enabled and cci_settings.configured and cci_settings.run_on_startup:
+        try:
+            await sync_moex_cci_actuals_once()
+        except Exception:
+            logger.exception("Initial MOEX CCI actual-result synchronization failed")
 
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
