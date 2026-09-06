@@ -6,7 +6,6 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -257,7 +256,13 @@ class MoexCciClient:
             raise RuntimeError("MOEX Passport did not issue MicexPassportCert")
         self._authenticated = True
 
-    async def _get_json(self, path: str, *, params: dict[str, object] | None = None, cci: bool = False) -> dict:
+    async def _get_json(
+        self,
+        path: str,
+        *,
+        params: dict[str, object] | None = None,
+        cci: bool = False,
+    ) -> dict:
         if cci:
             await self._authenticate()
         response = await self.client.get(f"{ISS_BASE_URL}{path}", params=params)
@@ -365,7 +370,7 @@ class MoexCciClient:
 
     async def fetch_actuals(
         self,
-        tickers: Iterable[str],
+        tickers: list[str],
         *,
         min_fiscal_year: int,
     ) -> tuple[list[MoexCciActualRecord], dict[str, str]]:
