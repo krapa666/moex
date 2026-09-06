@@ -60,8 +60,8 @@ def test_merge_future_values_is_source_agnostic() -> None:
     assert merged == {"2099": 2.0, "2100": 3.0}
 
 
-def test_dividend_only_source_keeps_profit_source_comment() -> None:
-    engine = create_engine("sqlite:///:memory:")
+def test_dividend_only_source_keeps_profit_source_comment(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'partial-source.db'}")
     Base.metadata.create_all(engine)
 
     with Session(engine) as db:
