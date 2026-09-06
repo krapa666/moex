@@ -70,9 +70,10 @@ class ForecastSourceHealthPrivateOverviewRead(ForecastSourceHealthOverviewRead):
     items: list[ForecastSourceHealthPrivateItemRead]
 
 
-def _require_local(request: Request) -> None:
+def require_local_source_health(request: Request) -> str:
     if (request.headers.get("x-moex-access-scope") or "").strip().lower() != "local":
         raise HTTPException(status_code=403, detail="Доступ только из локальной сети")
+    return "local-network"
 
 
 @router.get("/source-health", response_model=ForecastSourceHealthOverviewRead)
@@ -85,9 +86,8 @@ def get_forecast_source_health(
 
 @router.get("/source-health/details", response_model=ForecastSourceHealthPrivateOverviewRead)
 def get_forecast_source_health_details(
-    request: Request,
+    _actor: str = Depends(require_local_source_health),
     days: int = Query(default=30, ge=1, le=180),
     db: Session = Depends(get_db),
 ) -> ForecastSourceHealthOverview:
-    _require_local(request)
     return build_forecast_source_health(db, days=days)
