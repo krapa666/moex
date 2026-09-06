@@ -27,7 +27,6 @@ class CanarySettingsRead(BaseModel):
     tickers: list[str]
     max_tickers: int
     safety_policy: str
-    updated_by: str | None
     updated_at: datetime | None
 
 
