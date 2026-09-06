@@ -98,21 +98,24 @@
 
   function renderCoverage(result) {
     const total = Number(result?.forecast_pairs || 0);
+    const actualRecords = Number(result?.actual_records || 0);
+
+    body.hidden = false;
     if (!total) {
-      body.hidden = true;
       empty.hidden = false;
-      empty.textContent = 'В выбранном окне пока нет исторических прогнозов, существовавших до этой отсечки.';
-      status.textContent = 'Нет исторической базы';
-      return;
+      empty.textContent = actualRecords
+        ? `В реестре уже ${formatNumber(actualRecords)} фактов, но в выбранном окне пока нет исторических прогнозов, существовавших до этой отсечки. Coverage ещё не применим.`
+        : 'Пока нет ни канонических фактов, ни исторических прогнозов, существовавших до этой отсечки.';
+    } else {
+      empty.hidden = true;
     }
 
-    empty.hidden = true;
-    body.hidden = false;
-
-    section.querySelector('[data-actual-coverage-kpi="coverage"]').textContent = formatPercent(result.coverage_percent);
+    section.querySelector('[data-actual-coverage-kpi="coverage"]').textContent = total
+      ? formatPercent(result.coverage_percent)
+      : 'н/д';
     section.querySelector('[data-actual-coverage-kpi="covered"]').textContent = `${formatNumber(result.covered_pairs)} / ${formatNumber(result.forecast_pairs)}`;
     section.querySelector('[data-actual-coverage-kpi="missing"]').textContent = formatNumber(result.missing_actual_records);
-    section.querySelector('[data-actual-coverage-kpi="actuals"]').textContent = formatNumber(result.actual_records);
+    section.querySelector('[data-actual-coverage-kpi="actuals"]').textContent = formatNumber(actualRecords);
 
     yearBody.replaceChildren();
     for (const row of result.by_year || []) {
@@ -122,7 +125,7 @@
         createCell(formatNumber(row.forecast_pairs)),
         createCell(formatNumber(row.covered_pairs)),
         createCell(formatNumber(row.missing_forecast_pairs)),
-        createCell(formatPercent(row.coverage_percent)),
+        createCell(Number(row.forecast_pairs || 0) ? formatPercent(row.coverage_percent) : 'н/д'),
         createCell(formatNumber(row.actual_records)),
       );
       yearBody.append(tr);
@@ -151,7 +154,11 @@
       missingList.append(item);
     }
 
-    status.textContent = `${formatNumber(result.covered_pairs)} из ${formatNumber(result.forecast_pairs)} · ${formatPercent(result.coverage_percent)}`;
+    status.textContent = total
+      ? `${formatNumber(result.covered_pairs)} из ${formatNumber(result.forecast_pairs)} · ${formatPercent(result.coverage_percent)}`
+      : actualRecords
+        ? `${formatNumber(actualRecords)} фактов · forecast history ещё не созрела`
+        : 'Нет исторической базы';
   }
 
   async function loadCoverage() {

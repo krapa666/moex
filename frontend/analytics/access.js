@@ -68,6 +68,7 @@
     '/analytics/canary.css',
     '/analytics/canary-evidence.css',
     '/analytics/canary-evidence-health.css',
+    '/analytics/backfill.css',
   ]) {
     const style = document.createElement('link');
     style.rel = 'stylesheet';
@@ -80,6 +81,7 @@
     '/analytics/canary.js',
     '/analytics/canary-evidence.js',
     '/analytics/canary-evidence-health.js',
+    '/analytics/backfill.js',
   ]) {
     const script = document.createElement('script');
     script.src = src;

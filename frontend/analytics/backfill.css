@@ -1,0 +1,98 @@
+.actual-backfill {
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.actual-backfill-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.actual-backfill-heading h4 {
+  margin: 0 0 6px;
+}
+
+.actual-backfill-heading p,
+.actual-backfill-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.actual-backfill-form {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.actual-backfill-form label {
+  display: grid;
+  gap: 5px;
+  min-width: 260px;
+}
+
+.actual-backfill-form label span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.actual-backfill-note {
+  margin-top: 10px;
+  font-size: 0.82rem;
+}
+
+.actual-backfill-summary {
+  margin-top: 12px;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.actual-backfill-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.actual-backfill-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.actual-backfill-table th,
+.actual-backfill-table td {
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.actual-backfill-table th:nth-child(1),
+.actual-backfill-table th:nth-child(3),
+.actual-backfill-table td:nth-child(1),
+.actual-backfill-table td:nth-child(3) {
+  text-align: right;
+}
+
+.actual-backfill-key,
+.actual-backfill-action {
+  font-weight: 650;
+}
+
+.actual-backfill-table tr[data-backfill-action="invalid"] .actual-backfill-action,
+.actual-backfill-table tr[data-backfill-action="protected"] .actual-backfill-action {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+@media (max-width: 640px) {
+  .actual-backfill-form label {
+    min-width: 100%;
+  }
+}
