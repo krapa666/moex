@@ -2,6 +2,7 @@ import math
 from datetime import datetime
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
@@ -227,7 +228,7 @@ async def sync_actual_net_profits(request: Request) -> ActualSyncResult:
         return await sync_moex_cci_actuals_once()
     except PermissionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except (RuntimeError, ValueError, httpx.HTTPError) as exc:  # type: ignore[name-defined]
+    except (RuntimeError, ValueError, httpx.HTTPError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
