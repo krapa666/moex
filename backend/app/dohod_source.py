@@ -277,4 +277,5 @@ async def sync_dohod_once(
         client=DohodClient(aliases=effective_aliases),
         concurrency=effective_concurrency,
         create_table_if_missing=True,
+        source_key="dohod",
     )
