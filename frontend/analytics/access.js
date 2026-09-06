@@ -62,4 +62,13 @@
       return Array.isArray(revisions) ? revisions.map(maskRevision) : [];
     },
   };
+
+  const impactStyle = document.createElement('link');
+  impactStyle.rel = 'stylesheet';
+  impactStyle.href = '/analytics/production-impact.css';
+  document.head.append(impactStyle);
+
+  const impactScript = document.createElement('script');
+  impactScript.src = '/analytics/production-impact.js';
+  document.body.append(impactScript);
 })();
