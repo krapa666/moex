@@ -11,8 +11,10 @@ from .shadow_consensus import ShadowConsensusResult, build_shadow_consensus
 from .shadow_history import (
     ShadowCaptureResult,
     ShadowConsensusSnapshot,
+    ShadowDriftOverviewResult,
     ShadowDriftResult,
     build_shadow_drift,
+    build_shadow_drift_overview,
     capture_shadow_consensus,
     list_shadow_history,
 )
@@ -109,6 +111,24 @@ class ShadowDriftRead(BaseModel):
     training_snapshot_changed: bool
 
 
+class ShadowDriftOverviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    generated_at: datetime
+    history_days: int
+    universe_tickers: int
+    tickers_with_history: int
+    classified_tickers: int
+    alert_tickers: int
+    watch_tickers: int
+    stable_tickers: int
+    insufficient_tickers: int
+    actionable_tickers: int
+    history_coverage_percent: float
+    classified_coverage_percent: float
+    items: list[ShadowDriftRead]
+
+
 class ConsensusReadinessGateRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -173,6 +193,14 @@ def get_shadow_consensus_drift(
     db: Session = Depends(get_db),
 ) -> ShadowDriftResult:
     return build_shadow_drift(db, ticker=ticker, days=days)
+
+
+@router.get("/shadow-consensus/overview", response_model=ShadowDriftOverviewRead)
+def get_shadow_consensus_overview(
+    days: int = Query(default=30, ge=2, le=180),
+    db: Session = Depends(get_db),
+) -> ShadowDriftOverviewResult:
+    return build_shadow_drift_overview(db, days=days)
 
 
 @router.post("/shadow-consensus/capture", response_model=ShadowCaptureRead)
