@@ -15,6 +15,10 @@
   const minSamples = 5;
   let syncButton = null;
   let syncStatus = null;
+  let backtestStatus = null;
+  let backtestEmpty = null;
+  let backtestTableWrap = null;
+  let backtestBody = null;
 
   function formatNumber(value, digits = 1) {
     if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
@@ -27,6 +31,14 @@
   function formatPercent(value) {
     const formatted = formatNumber(value, 1);
     return formatted === '—' ? formatted : `${formatted}%`;
+  }
+
+  function formatDelta(value) {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+    const number = Number(value);
+    if (Math.abs(number) < 0.05) return '0 п.п.';
+    const sign = number > 0 ? '+' : '';
+    return `${sign}${formatNumber(number, 1)} п.п.`;
   }
 
   function createCell(text, className = '') {
@@ -110,6 +122,103 @@
     }
   }
 
+  function ensureBacktestSection() {
+    if (backtestBody) return;
+
+    const section = document.createElement('div');
+    section.className = 'actual-facts consensus-backtest';
+    section.dataset.consensusBacktest = '';
+
+    const heading = document.createElement('div');
+    heading.className = 'source-accuracy-controls';
+
+    const titleWrap = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = 'Backtest консенсуса чистой прибыли';
+    const description = document.createElement('p');
+    description.textContent = 'Один и тот же исторический набор сравнивает медиану, среднее и консервативный accuracy-weighted вариант. Положительная Δ означает улучшение sMAPE относительно медианы; боевой consensus не меняется.';
+    titleWrap.append(title, description);
+
+    backtestStatus = document.createElement('span');
+    backtestStatus.className = 'analytics-status';
+    backtestStatus.dataset.consensusBacktestStatus = '';
+    backtestStatus.setAttribute('role', 'status');
+    backtestStatus.setAttribute('aria-live', 'polite');
+    backtestStatus.textContent = 'Расчёт…';
+    heading.append(titleWrap, backtestStatus);
+
+    backtestEmpty = document.createElement('div');
+    backtestEmpty.className = 'source-accuracy-empty';
+    backtestEmpty.dataset.consensusBacktestEmpty = '';
+    backtestEmpty.hidden = true;
+
+    backtestTableWrap = document.createElement('div');
+    backtestTableWrap.className = 'source-accuracy-table-wrap';
+    backtestTableWrap.dataset.consensusBacktestTableWrap = '';
+    backtestTableWrap.hidden = true;
+
+    const table = document.createElement('table');
+    table.className = 'source-accuracy-table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Метод</th>
+          <th>Набл.</th>
+          <th>Бумаг</th>
+          <th>Лет</th>
+          <th>Md sMAPE</th>
+          <th>Δ Md к медиане</th>
+          <th>Mean sMAPE</th>
+          <th>MAE, млрд ₽</th>
+          <th>Bias, млрд ₽</th>
+          <th>Знак верен</th>
+        </tr>
+      </thead>
+    `;
+    backtestBody = document.createElement('tbody');
+    backtestBody.dataset.consensusBacktestBody = '';
+    table.append(backtestBody);
+    backtestTableWrap.append(table);
+
+    section.append(heading, backtestEmpty, backtestTableWrap);
+    tableWrap.insertAdjacentElement('afterend', section);
+  }
+
+  function renderBacktest(result) {
+    ensureBacktestSection();
+    backtestBody.replaceChildren();
+    const methods = Array.isArray(result?.methods) ? result.methods : [];
+    if (!methods.length || !Number(result?.observations || 0)) {
+      backtestEmpty.hidden = false;
+      backtestTableWrap.hidden = true;
+      backtestEmpty.textContent = 'Пока нет годов, где на одной и той же отсечке доступны минимум два прогноза ЧП и канонический факт.';
+      backtestStatus.textContent = 'Недостаточно истории';
+      return;
+    }
+
+    backtestEmpty.hidden = true;
+    backtestTableWrap.hidden = false;
+    for (const row of methods) {
+      const tr = document.createElement('tr');
+      if (row.method === 'weighted') tr.classList.add('accuracy-source');
+      tr.append(
+        createCell(row.label || row.method || '—', 'accuracy-source'),
+        createCell(String(row.samples ?? '—')),
+        createCell(String(row.tickers ?? '—')),
+        createCell(String(row.years ?? '—')),
+        createCell(formatPercent(row.median_smape_percent)),
+        createCell(formatDelta(row.median_smape_delta_vs_median_pp)),
+        createCell(formatPercent(row.mean_smape_percent)),
+        createCell(formatNumber(row.mean_absolute_error_billion_rub, 2)),
+        createCell(formatNumber(row.mean_bias_billion_rub, 2)),
+        createCell(formatPercent(row.sign_accuracy_percent)),
+      );
+      backtestBody.append(tr);
+    }
+
+    backtestStatus.textContent = `${result.observations} наблюдений · ${result.tickers} бумаг · ${result.years} лет`;
+  }
+
   async function loadAccuracy() {
     status.textContent = 'Расчёт…';
     const snapshot = snapshotSelect.value || 'pre_year';
@@ -127,6 +236,23 @@
       tableWrap.hidden = true;
       empty.textContent = error.message;
       status.textContent = 'Ошибка';
+    }
+  }
+
+  async function loadBacktest() {
+    ensureBacktestSection();
+    backtestStatus.textContent = 'Расчёт…';
+    const snapshot = snapshotSelect.value || 'pre_year';
+    try {
+      const result = await fetchJson(
+        `/api/analytics/consensus-backtest?snapshot=${encodeURIComponent(snapshot)}`,
+      );
+      renderBacktest(result || {});
+    } catch (error) {
+      backtestEmpty.hidden = false;
+      backtestTableWrap.hidden = true;
+      backtestEmpty.textContent = error.message;
+      backtestStatus.textContent = 'Ошибка';
     }
   }
 
@@ -191,7 +317,7 @@
       const result = await fetchJson('/api/analytics/actual-net-profits/sync', { method: 'POST' });
       const changed = Number(result.records_created || 0) + Number(result.records_updated || 0);
       syncStatus.textContent = `MOEX CCI: обновлено ${changed} · без изменений ${result.records_unchanged || 0} · защищено ${result.records_protected || 0}`;
-      await Promise.all([loadFacts(), loadAccuracy()]);
+      await Promise.all([loadFacts(), loadAccuracy(), loadBacktest()]);
     } catch (error) {
       syncStatus.textContent = error.message;
     } finally {
@@ -225,10 +351,14 @@
       });
       formStatus.textContent = `${ticker} ${fiscalYear}: факт сохранён вручную`;
       form.querySelector('[name="net_profit_billion_rub"]').value = '';
-      await Promise.all([loadFacts(), loadAccuracy()]);
+      await Promise.all([loadFacts(), loadAccuracy(), loadBacktest()]);
     } catch (error) {
       formStatus.textContent = error.message;
     }
+  }
+
+  async function reloadSnapshotPanels() {
+    await Promise.all([loadAccuracy(), loadBacktest()]);
   }
 
   async function init() {
@@ -239,9 +369,10 @@
     const yearInput = form.querySelector('[name="fiscal_year"]');
     if (yearInput && !yearInput.value) yearInput.value = String(new Date().getFullYear() - 1);
 
-    snapshotSelect.addEventListener('change', loadAccuracy);
+    ensureBacktestSection();
+    snapshotSelect.addEventListener('change', reloadSnapshotPanels);
     form.addEventListener('submit', saveFact);
-    const initialLoads = [loadFacts(), loadAccuracy()];
+    const initialLoads = [loadFacts(), loadAccuracy(), loadBacktest()];
     if (accessState.isAdmin) initialLoads.push(loadSyncStatus());
     await Promise.all(initialLoads);
   }

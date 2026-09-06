@@ -38,6 +38,64 @@ const accuracy = [
   },
 ];
 
+const consensusBacktest = {
+  snapshot: 'pre_year',
+  min_sources: 2,
+  shrinkage_samples: 5,
+  error_floor_percent: 5,
+  relative_score_cap: 2,
+  observations: 9,
+  tickers: 6,
+  years: 2,
+  methods: [
+    {
+      method: 'median',
+      label: 'Медиана',
+      samples: 9,
+      tickers: 6,
+      years: 2,
+      median_smape_percent: 14.2,
+      mean_smape_percent: 16.1,
+      median_absolute_error_billion_rub: 48,
+      mean_absolute_error_billion_rub: 55,
+      mean_bias_billion_rub: 4,
+      sign_accuracy_percent: 100,
+      median_smape_delta_vs_median_pp: 0,
+      mean_smape_delta_vs_median_pp: 0,
+    },
+    {
+      method: 'mean',
+      label: 'Среднее',
+      samples: 9,
+      tickers: 6,
+      years: 2,
+      median_smape_percent: 13.8,
+      mean_smape_percent: 15.9,
+      median_absolute_error_billion_rub: 45,
+      mean_absolute_error_billion_rub: 53,
+      mean_bias_billion_rub: 3,
+      sign_accuracy_percent: 100,
+      median_smape_delta_vs_median_pp: 0.4,
+      mean_smape_delta_vs_median_pp: 0.2,
+    },
+    {
+      method: 'weighted',
+      label: 'Accuracy-weighted',
+      samples: 9,
+      tickers: 6,
+      years: 2,
+      median_smape_percent: 10.1,
+      mean_smape_percent: 12.0,
+      median_absolute_error_billion_rub: 35,
+      mean_absolute_error_billion_rub: 41,
+      mean_bias_billion_rub: -1,
+      sign_accuracy_percent: 100,
+      median_smape_delta_vs_median_pp: 4.1,
+      mean_smape_delta_vs_median_pp: 4.1,
+    },
+  ],
+};
+
 const facts = [
   {
     id: 1,
@@ -71,6 +129,9 @@ async function mockAnalyticsApi(page, { isAdmin, cciEnabled = false } = {}) {
     if (url.pathname === '/api/tables') return route.fulfill({ json: tables });
     if (url.pathname === '/api/analytics/source-accuracy') {
       return route.fulfill({ json: accuracy });
+    }
+    if (url.pathname === '/api/analytics/consensus-backtest') {
+      return route.fulfill({ json: consensusBacktest });
     }
     if (url.pathname === '/api/analytics/actual-net-profits') {
       return route.fulfill({ json: facts });
@@ -137,7 +198,7 @@ async function mockAnalyticsApi(page, { isAdmin, cciEnabled = false } = {}) {
   };
 }
 
-test('local analytics shows source ranking, facts and editable actual result form', async ({ page }) => {
+test('local analytics shows source ranking, consensus backtest, facts and editable actual result form', async ({ page }) => {
   const state = await mockAnalyticsApi(page, { isAdmin: true });
   await page.goto('/analytics/');
 
@@ -147,6 +208,13 @@ test('local analytics shows source ranking, facts and editable actual result for
   await expect(rows.first()).toContainText('11,2%');
   await expect(rows.nth(1)).toContainText('fin-vista (модель)');
   await expect(rows.nth(1)).toContainText('< 5 наблюдений');
+
+  const backtestRows = page.locator('[data-consensus-backtest-body] tr');
+  await expect(backtestRows).toHaveCount(3);
+  await expect(backtestRows.first()).toContainText('Медиана');
+  await expect(backtestRows.nth(2)).toContainText('Accuracy-weighted');
+  await expect(backtestRows.nth(2)).toContainText('+4,1 п.п.');
+  await expect(page.locator('[data-consensus-backtest-status]')).toContainText('9 наблюдений');
 
   await expect(page.locator('[data-actual-facts-body]')).toContainText('SBER');
   await expect(page.locator('[data-actual-facts-body]')).toContainText('1 580,3');
@@ -178,7 +246,7 @@ test('local analytics can trigger configured MOEX CCI sync', async ({ page }) =>
   await expect.poll(state.getSyncCalled).toBe(true);
 });
 
-test('internet analytics masks source names and keeps actual results read-only', async ({ page }) => {
+test('internet analytics masks source names, shows safe backtest summary and keeps actual results read-only', async ({ page }) => {
   await mockAnalyticsApi(page, { isAdmin: false });
   await page.goto('/analytics/');
 
@@ -188,6 +256,11 @@ test('internet analytics masks source names and keeps actual results read-only',
   await expect(rows.first()).not.toContainText('Арсагера');
   await expect(rows.nth(1)).toContainText('Аналитик 2');
   await expect(rows.nth(1)).not.toContainText('fin-vista');
+
+  await expect(page.locator('[data-consensus-backtest-body]')).toContainText('Accuracy-weighted');
+  await expect(page.locator('[data-consensus-backtest]')).not.toContainText('Арсагера');
+  await expect(page.locator('[data-consensus-backtest]')).not.toContainText('fin-vista');
+
   await expect(page.locator('[data-actual-admin]')).toBeHidden();
   await expect(page.locator('[data-actual-sync-button]')).toHaveCount(0);
   await expect(page.locator('[data-actual-facts-body]')).toContainText('SBER');
