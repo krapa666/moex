@@ -356,7 +356,7 @@ def test_failed_event_becomes_superseded_after_state_change(monkeypatch) -> None
         process_shadow_drift_transitions(
             db,
             observed_at=T0 + timedelta(hours=2),
-            settings=_settings(enabled=False),
+            settings=_settings(),
         )
         stale = db.scalars(
             select(ShadowDriftNotificationEvent)
