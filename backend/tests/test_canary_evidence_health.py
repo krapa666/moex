@@ -108,6 +108,20 @@ def test_stale_latest_snapshot_has_priority_over_gap_degradation() -> None:
     assert result.latest_age_hours == pytest.approx(18.0)
 
 
+def test_single_old_snapshot_is_stale_not_warming_up() -> None:
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    result = _build_ticker_health_from_rows(
+        ticker="AAA",
+        rows=[_snapshot(row_id=1, ticker="AAA", captured_at=now - timedelta(hours=18))],
+        expected_interval_hours=6.0,
+        now=now,
+    )
+
+    assert result.status == "stale"
+    assert result.reasons == ["latest_snapshot_stale"]
+    assert result.observed_intervals == 0
+
+
 def test_target_year_rollover_is_not_counted_as_capture_gap() -> None:
     now = datetime(2027, 1, 1, 12, tzinfo=timezone.utc)
     rows = [
