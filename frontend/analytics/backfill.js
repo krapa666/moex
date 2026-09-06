@@ -18,6 +18,21 @@
     }[action] || String(action || '—').toUpperCase();
   }
 
+  async function fetchJson(path) {
+    const response = await fetch(path, { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      let detail = `Ошибка API: ${response.status}`;
+      try {
+        const payload = await response.json();
+        if (payload?.detail) detail = String(payload.detail);
+      } catch (_error) {
+        // Keep the HTTP fallback.
+      }
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
   async function postCsv(path, file) {
     const formData = new FormData();
     formData.append('file', file, file.name);
@@ -96,7 +111,24 @@
         <h4>Исторический backfill фактической ЧП</h4>
         <p>CSV импортируется только из локального доступа. Сначала preview; существующие канонические факты никогда не перезаписываются bulk-import’ом.</p>
       </div>
-      <button class="btn" type="button" data-actual-backfill-template>CSV-шаблон</button>
+      <button class="btn" type="button" data-actual-backfill-template>Пустой CSV-шаблон</button>
+    </div>
+    <div class="actual-worklist" data-actual-worklist>
+      <div>
+        <strong>Worklist текущего primary universe</strong>
+        <p>Формирует отсутствующие пары «тикер × завершённый год». Это операционный список для заполнения фактов, а не историческая accuracy-метрика.</p>
+      </div>
+      <label>
+        <span>Глубина</span>
+        <select data-actual-worklist-years>
+          <option value="3">3 года</option>
+          <option value="5" selected>5 лет</option>
+          <option value="7">7 лет</option>
+          <option value="10">10 лет</option>
+        </select>
+      </label>
+      <button class="btn" type="button" data-actual-worklist-download disabled>Скачать worklist CSV</button>
+      <span class="actual-result-form-status" data-actual-worklist-status role="status" aria-live="polite">Расчёт…</span>
     </div>
     <form class="actual-backfill-form" data-actual-backfill-form>
       <label>
@@ -129,7 +161,11 @@
   const summary = section.querySelector('[data-actual-backfill-summary]');
   const tableWrap = section.querySelector('[data-actual-backfill-table-wrap]');
   const tableBody = section.querySelector('[data-actual-backfill-body]');
+  const worklistYears = section.querySelector('[data-actual-worklist-years]');
+  const worklistButton = section.querySelector('[data-actual-worklist-download]');
+  const worklistStatus = section.querySelector('[data-actual-worklist-status]');
   let previewedFile = null;
+  let worklistResult = null;
 
   function resetPreview() {
     previewedFile = null;
@@ -138,6 +174,56 @@
     tableWrap.hidden = true;
     tableBody.replaceChildren();
     status.textContent = '';
+  }
+
+  async function loadWorklist() {
+    worklistButton.disabled = true;
+    worklistStatus.textContent = 'Расчёт…';
+    worklistResult = null;
+    const years = Number(worklistYears.value || 5);
+    try {
+      const result = await fetchJson(
+        `/api/analytics/actual-net-profits/backfill/worklist?years=${encodeURIComponent(years)}`,
+      );
+      worklistResult = result;
+      const coverage = Number(result.coverage_percent || 0).toLocaleString('ru-RU', {
+        maximumFractionDigits: 1,
+      });
+      worklistStatus.textContent = `${result.primary_tickers || 0} тикеров · ${result.existing_pairs || 0}/${result.expected_pairs || 0} фактов (${coverage}%) · не хватает ${result.missing_pairs || 0}`;
+      worklistButton.disabled = Number(result.missing_pairs || 0) === 0;
+    } catch (error) {
+      worklistStatus.textContent = error.message;
+    }
+  }
+
+  async function downloadWorklist() {
+    if (!worklistResult || Number(worklistResult.missing_pairs || 0) === 0) return;
+    const years = Number(worklistYears.value || 5);
+    worklistButton.disabled = true;
+    worklistStatus.textContent = 'Формирую CSV…';
+    try {
+      const response = await fetch(
+        `/api/analytics/actual-net-profits/backfill/worklist.csv?years=${encodeURIComponent(years)}`,
+      );
+      if (!response.ok) throw new Error(`Ошибка API: ${response.status}`);
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+      const filename = filenameMatch?.[1] || 'actual-results-worklist.csv';
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      worklistStatus.textContent = `Worklist скачан · ${worklistResult.missing_pairs} строк для заполнения`;
+    } catch (error) {
+      worklistStatus.textContent = error.message;
+    } finally {
+      worklistButton.disabled = Number(worklistResult?.missing_pairs || 0) === 0;
+    }
   }
 
   async function preview(event) {
@@ -202,9 +288,12 @@
   form.addEventListener('submit', preview);
   applyButton.addEventListener('click', applyBackfill);
   templateButton.addEventListener('click', downloadTemplate);
+  worklistYears.addEventListener('change', loadWorklist);
+  worklistButton.addEventListener('click', downloadWorklist);
 
-  window.MoexAnalyticsAccess.load().then((state) => {
+  window.MoexAnalyticsAccess.load().then(async (state) => {
     section.hidden = !state.isAdmin;
+    if (state.isAdmin) await loadWorklist();
   }).catch(() => {
     section.hidden = true;
   });
