@@ -11,6 +11,10 @@ from .dohod_source import sync_dohod_once
 from .finvista_source import sync_finvista_once
 from .forecast_sources import load_published_sheets_sources, sync_published_sheets_sources_once
 from .moex_cci_actuals import get_moex_cci_settings, sync_moex_cci_actuals_once
+from .shadow_history import (
+    capture_shadow_consensus_once,
+    get_shadow_history_settings,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -39,6 +43,7 @@ async def main() -> None:
     finvista_interval_hours = max(float(os.getenv("FINVISTA_SYNC_INTERVAL_HOURS", "6")), 1.0)
     finvista_run_on_startup = _env_bool("FINVISTA_RUN_ON_STARTUP", True)
     cci_settings = get_moex_cci_settings()
+    shadow_history_settings = get_shadow_history_settings()
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
@@ -106,6 +111,21 @@ async def main() -> None:
         else:
             logger.error("MOEX CCI actual-result sync enabled but credentials are not configured")
 
+    if shadow_history_settings.enabled:
+        scheduler.add_job(
+            capture_shadow_consensus_once,
+            IntervalTrigger(hours=shadow_history_settings.interval_hours),
+            id="shadow-consensus-history-capture",
+            coalesce=True,
+            max_instances=1,
+            misfire_grace_time=3600,
+        )
+        logger.info(
+            "Shadow consensus history scheduled every %.1f hours with %d-day retention",
+            shadow_history_settings.interval_hours,
+            shadow_history_settings.retention_days,
+        )
+
     scheduler.start()
 
     if run_on_startup:
@@ -137,6 +157,19 @@ async def main() -> None:
             await sync_moex_cci_actuals_once()
         except Exception:
             logger.exception("Initial MOEX CCI actual-result synchronization failed")
+
+    if shadow_history_settings.enabled and shadow_history_settings.run_on_startup:
+        try:
+            result = await asyncio.to_thread(capture_shadow_consensus_once)
+            logger.info(
+                "Initial shadow history capture created %d/%d snapshots; skipped=%d expired=%d",
+                result.snapshots_created,
+                result.tickers_total,
+                result.skipped_unavailable,
+                result.deleted_expired,
+            )
+        except Exception:
+            logger.exception("Initial shadow consensus history capture failed")
 
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
