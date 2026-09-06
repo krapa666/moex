@@ -389,7 +389,7 @@ def build_canary_evidence_overview(
     for row in all_rows:
         grouped.setdefault(row.ticker, []).append(row)
 
-    tickers = sorted(set(settings.tickers) | set(grouped))
+    tickers = sorted(settings.tickers)
     items = [
         _build_ticker_evidence_from_rows(ticker=ticker, days=days, rows=grouped.get(ticker, []))
         for ticker in tickers
