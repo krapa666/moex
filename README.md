@@ -40,7 +40,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 Подробнее: [`docs/forecast-sources.md`](docs/forecast-sources.md).
 
-### Analytics и история прогнозов
+### Analytics, история и evidence layer
 
 Страница `/analytics/` показывает:
 
@@ -50,14 +50,24 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - историю `forecast_revisions`;
 - динамику consensus;
 - изменения прогнозов за текущий день;
-- рейтинг точности источников по фактической годовой ЧП.
+- рейтинг точности источников по фактической годовой ЧП;
+- out-of-sample backtest способов агрегирования прогнозов ЧП.
 
-Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата. До отдельного backtest рейтинг **не меняет веса текущего consensus**.
+Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
+
+С v0.15.0 backtest сравнивает на одинаковом наборе наблюдений:
+
+- медиану;
+- арифметическое среднее;
+- консервативный accuracy-weighted вариант с shrinkage и ограничением весов.
+
+Для обучения веса допускаются только более ранние факты с известным `reported_at`, опубликованные до целевой backtest-отсечки. Детальные source weights доступны только local scope. **Production consensus target price остаётся прежним; backtest пока не переключает его на weighted-режим.**
 
 Подробнее:
 
 - [`docs/analytics.md`](docs/analytics.md)
 - [`docs/source-accuracy.md`](docs/source-accuracy.md)
+- [`docs/consensus-backtest.md`](docs/consensus-backtest.md)
 
 ### Фактические годовые результаты
 
@@ -253,6 +263,8 @@ MOEX_CCI_ACTUALS_YEARS_BACK=5
 - `GET /api/analytics/source-runs`
 - `GET /api/analytics/source-accuracy`
 - `GET /api/analytics/source-accuracy/samples`
+- `GET /api/analytics/consensus-backtest`
+- `GET /api/analytics/consensus-backtest/observations` — local
 - `GET /api/analytics/actual-net-profits`
 - `PUT/DELETE /api/analytics/actual-net-profits/{ticker}/{fiscal_year}` — local
 - `GET /api/analytics/actual-net-profits/sync-status`
@@ -268,7 +280,7 @@ MOEX_CCI_ACTUALS_YEARS_BACK=5
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют локальный scope.
+Все изменяющие endpoints требуют локальный scope. Observation-level backtest дополнительно является local-only, потому что содержит реальные имена/веса источников.
 
 ## Миграции
 
@@ -278,7 +290,7 @@ Backend-контейнер перед стартом выполняет:
 alembic upgrade head
 ```
 
-Текущий schema head после v0.14.0 — `0020_actual_source_key`.
+Текущий schema head — `0020_actual_source_key`. v0.15.0 не добавляет миграций.
 
 Последние ключевые изменения схемы включают:
 
@@ -320,6 +332,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/forecast-sources.md`](docs/forecast-sources.md) — автоматические источники прогнозов;
 - [`docs/analytics.md`](docs/analytics.md) — consensus и история Analytics;
 - [`docs/source-accuracy.md`](docs/source-accuracy.md) — методология оценки точности;
+- [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest методов consensus ЧП;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
