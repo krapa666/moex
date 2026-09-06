@@ -5,7 +5,7 @@ import os
 from .arsagera_source import ArsageraClient
 from .forecast_source_sync import (
     ForecastSyncResult,
-    merge_future_values as _merge_future_values,
+    merge_future_values,
     sync_forecast_source_once,
 )
 
@@ -13,6 +13,7 @@ DEFAULT_ANALYST_NAME = "Арсагера"
 DEFAULT_CONCURRENCY = 4
 SOURCE_COMMENT = "Арсагера — автоматическая синхронизация"
 ArsageraSyncResult = ForecastSyncResult
+_merge_future_values = merge_future_values
 
 
 async def sync_arsagera_once(
