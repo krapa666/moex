@@ -2,9 +2,6 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
 from app.consensus_canary import (
     CanaryPolicyError,
     ConsensusCanarySettings,
@@ -16,6 +13,8 @@ from app.consensus_canary import (
 )
 from app.models import AnalystTable, Base, StockRow
 from app.shadow_consensus import ShadowConsensusResult
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 
 def _engine():
