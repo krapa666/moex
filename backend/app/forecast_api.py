@@ -1,3 +1,4 @@
+import math
 from datetime import datetime
 from typing import Literal
 
@@ -67,6 +68,8 @@ class ActualNetProfitRead(BaseModel):
 
 
 class AccuracySampleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     table_id: int
     analyst_name: str
     ticker: str
@@ -156,6 +159,8 @@ def upsert_actual_net_profit(
     source_name = payload.source_name.strip()
     if not source_name:
         raise HTTPException(status_code=422, detail="source_name must not be blank")
+    if not math.isfinite(payload.net_profit_billion_rub):
+        raise HTTPException(status_code=422, detail="net_profit_billion_rub must be finite")
 
     row = db.scalars(
         select(ActualNetProfit).where(
