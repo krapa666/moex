@@ -190,18 +190,17 @@ def build_shadow_consensus(
 
     target_year = int(tables[0].forecast_start_year)
     snapshot = training_snapshot_for_target(target_year, current)
-    table_by_id = {table.id: table for table in tables}
-    rows = list(
-        db.scalars(select(StockRow).where(StockRow.ticker == normalized_ticker)).all()
-    )
-    components: list[_ShadowComponent] = []
-    for row in rows:
-        table = table_by_id.get(row.table_id)
-        if table is None:
+    rows = list(db.scalars(select(StockRow).where(StockRow.ticker == normalized_ticker)).all())
+    row_by_table_id = {row.table_id: row for row in rows}
+    component_by_source: dict[str, _ShadowComponent] = {}
+    for table in tables:
+        row = row_by_table_id.get(table.id)
+        if row is None:
             continue
         component = _component_for_row(row, table, target_year=target_year)
         if component is not None:
-            components.append(component)
+            component_by_source.setdefault(component.analyst_name, component)
+    components = list(component_by_source.values())
 
     if len(components) < 2:
         return _empty_result(
