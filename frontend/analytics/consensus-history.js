@@ -48,6 +48,20 @@
     return finite(value) ? `${percentFormatter.format(Number(value))} %` : '—';
   }
 
+  function formatSigned(value, formatter, suffix) {
+    if (!finite(value)) return '—';
+    const number = Number(value);
+    const sign = number > 0 ? '+' : '';
+    return `${sign}${formatter.format(number)}${suffix}`;
+  }
+
+  function trendArrow(value) {
+    if (!finite(value)) return '';
+    const number = Number(value);
+    if (Math.abs(number) < 0.000001) return '→';
+    return number > 0 ? '↑' : '↓';
+  }
+
   function formatDateTime(value) {
     const date = value ? new Date(value) : null;
     return date && !Number.isNaN(date.valueOf()) ? dateTimeFormatter.format(date) : '—';
@@ -127,6 +141,28 @@
     return points;
   }
 
+  function previousSameYear(points, latest) {
+    for (let index = points.length - 2; index >= 0; index -= 1) {
+      if (points[index].year === latest.year) return points[index];
+    }
+    return null;
+  }
+
+  function formatMedianDelta(latest, previous) {
+    if (!previous || !finite(latest?.medianTarget) || !finite(previous?.medianTarget) || Number(previous.medianTarget) <= 0) {
+      return '—';
+    }
+    const delta = Number(latest.medianTarget) - Number(previous.medianTarget);
+    const relative = (delta / Number(previous.medianTarget)) * 100;
+    return `${trendArrow(delta)} ${formatSigned(delta, numberFormatter, ' ₽')} · ${formatSigned(relative, percentFormatter, ' %')}`;
+  }
+
+  function formatSpreadDelta(latest, previous) {
+    if (!previous || !finite(latest?.spreadPercent) || !finite(previous?.spreadPercent)) return '—';
+    const delta = Number(latest.spreadPercent) - Number(previous.spreadPercent);
+    return `${trendArrow(delta)} ${formatSigned(delta, percentFormatter, ' п.п.')}`;
+  }
+
   function svgElement(tag, attributes = {}) {
     const element = document.createElementNS(SVG_NS, tag);
     Object.entries(attributes).forEach(([name, value]) => element.setAttribute(name, String(value)));
@@ -176,7 +212,7 @@
     const rawMax = Math.max(...validPoints.map((point) => Number(point[key])));
     const rawSpan = rawMax - rawMin;
     const padding = rawSpan > 0 ? rawSpan * 0.12 : Math.max(Math.abs(rawMax) * 0.08, key === 'spreadPercent' ? 1 : 10);
-    const minValue = key === 'spreadPercent' ? Math.max(0, rawMin - padding) : Math.max(0, rawMin - padding);
+    const minValue = Math.max(0, rawMin - padding);
     const maxValue = rawMax + padding;
     const valueSpan = Math.max(maxValue - minValue, 1);
     const x = (timestamp) => {
@@ -303,9 +339,12 @@
     }
 
     const latest = points[points.length - 1];
+    const previous = previousSameYear(points, latest);
     setSummary('points', String(points.length));
     setSummary('median', formatPrice(latest.medianTarget));
+    setSummary('median-delta', formatMedianDelta(latest, previous));
     setSummary('spread', formatPercent(latest.spreadPercent));
+    setSummary('spread-delta', formatSpreadDelta(latest, previous));
     setSummary('targets', String(latest.targetCount));
 
     renderChart(medianChart, points, {
