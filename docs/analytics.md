@@ -1,6 +1,6 @@
 # Analytics
 
-Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate, forward shadow monitoring, глобальный drift overview и stateful notification history.
+Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate, forward shadow monitoring, глобальный drift overview, stateful notification history и Production Impact Simulator.
 
 ## Режим доступа
 
@@ -10,7 +10,7 @@ Analytics использует общий сетевой access scope прило
 - internet-клиент работает read-only и видит нейтральные подписи `Аналитик 1`, `Аналитик 2` и т. д.;
 - если scope определить не удалось, интерфейс безопасно трактует пользователя как guest.
 
-Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift/overview/notification сводки не содержат source-level имён изначально.
+Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift/overview/notification/production-impact сводки не содержат source-level имён изначально.
 
 ## Текущий consensus
 
@@ -280,6 +280,41 @@ Readiness — engineering policy из 11 gates, а не feature flag и не с�
 
 Подробно: [`shadow-consensus.md`](shadow-consensus.md).
 
+## Production Impact Simulator и Promotion Decision Dashboard
+
+С v0.21.0 Analytics содержит глобальный read-only блок, который отвечает на вопрос: **что изменилось бы при median→shadow-weighted promotion на текущем universe?**
+
+```http
+GET /api/analytics/production-impact?top_n=10&history_days=30
+GET /api/analytics/promotion-dossier?top_n=10&history_days=30
+```
+
+Сравниваются:
+
+- median и weighted target price;
+- полная ожидаемая доходность;
+- expected-return rank;
+- Top-N membership/turnover;
+- Spearman rank correlation;
+- expected-return sign flips;
+- гипотетическая median/weighted Watchlist score sensitivity.
+
+Weighted scenario меняет только price-target layer. Dividend layer, уже содержащийся в median full return, сохраняется неизменным. Поэтому simulator изолирует влияние агрегатора и не подмешивает новую дивидендную модель.
+
+Текущий `/watchlist/` использует primary table №1, а не median consensus. Поэтому simulated Watchlist score в этом блоке — **гипотетическая consensus-driven sensitivity**, не фактическая текущая Watchlist ranking. Ничего не записывается обратно в `stock_rows`.
+
+Promotion dossier содержит 10 gates и три состояния:
+
+```text
+NOT_READY
+OBSERVE
+READY_FOR_MANUAL_PROMOTION
+```
+
+Он объединяет historical 11/11 readiness, comparable impact coverage, rank/Top-N stability и forward drift coverage/span. `READY_FOR_MANUAL_PROMOTION` остаётся только decision-support статусом и не переключает production автоматически.
+
+Подробно: [`production-impact.md`](production-impact.md).
+
 ## Фактические результаты и MOEX CCI
 
 ```http
@@ -306,5 +341,7 @@ POST /api/analytics/actual-net-profits/sync
 - drift thresholds являются operational policy, не статистическим тестом;
 - notification state machine использует те же drift statuses, а не отдельный classifier;
 - suppressed/failed/superseded notification events не меняют drift state;
-- `READY` не меняет production mode автоматически;
+- production-impact Watchlist score является simulation, потому что текущий Watchlist основан на primary table;
+- promotion dossier является engineering policy, а не автоматическим feature flag;
+- `READY`/`READY_FOR_MANUAL_PROMOTION` не меняют production mode автоматически;
 - accuracy-weighted production consensus намеренно отключён.
