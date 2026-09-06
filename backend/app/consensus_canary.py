@@ -12,11 +12,17 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from .database import Base
 from .models import AnalystTable, StockRow
 from .production_impact import build_production_impact
-from .shadow_consensus import build_shadow_consensus, build_shadow_consensus_batch
-from .shadow_history import build_shadow_drift, build_shadow_drift_overview
+from .shadow_consensus import ShadowConsensusResult, build_shadow_consensus, build_shadow_consensus_batch
+from .shadow_history import (
+    DRIFT_WATCH_ABS_DIVERGENCE_PERCENT,
+    DRIFT_WATCH_CONCENTRATION_RATIO,
+    build_shadow_drift,
+    build_shadow_drift_overview,
+)
 
 MAX_CANARY_TICKERS = 5
 CANARY_HISTORY_DAYS = 30
+MIN_CANARY_TRAINED_SOURCES = 2
 CanaryMode = Literal["median", "weighted_canary"]
 EffectiveConsensusMode = Literal["median", "weighted"]
 
@@ -115,7 +121,10 @@ def get_canary_settings(db: Session) -> CanarySettingsResult:
         enabled=bool(stored.enabled) if stored else False,
         tickers=_normalize_tickers(stored.tickers or []) if stored else [],
         max_tickers=MAX_CANARY_TICKERS,
-        safety_policy="weighted only while selected ticker drift is STABLE; otherwise median fallback",
+        safety_policy=(
+            "weighted requires >=2 trained sources, live divergence/concentration below WATCH "
+            "and forward drift STABLE; otherwise median fallback"
+        ),
         updated_by=stored.updated_by if stored else None,
         updated_at=stored.updated_at if stored else None,
     )
@@ -151,6 +160,31 @@ def _validate_tickers_in_universe(db: Session, tickers: list[str]) -> None:
         raise CanaryPolicyError(f"Тикеры вне основной таблицы: {', '.join(missing)}")
 
 
+def _live_shadow_guard_reason(shadow: ShadowConsensusResult) -> str | None:
+    if not shadow.shadow_available or _finite(shadow.weighted_target_price) is None:
+        return "shadow_unavailable"
+    if (
+        not shadow.weighting_uses_history
+        or shadow.sources_with_training_history < MIN_CANARY_TRAINED_SOURCES
+    ):
+        return "insufficient_weight_history"
+
+    divergence = _finite(shadow.weighted_vs_median_target_delta_percent)
+    if divergence is None:
+        return "live_divergence_unknown"
+    if abs(divergence) >= DRIFT_WATCH_ABS_DIVERGENCE_PERCENT:
+        return "live_divergence_watch"
+
+    max_weight = _finite(shadow.max_source_weight_percent)
+    if max_weight is None or shadow.sources <= 0:
+        return "live_weight_concentration_unknown"
+    equal_weight = 100.0 / shadow.sources
+    concentration = max_weight / equal_weight
+    if concentration >= DRIFT_WATCH_CONCENTRATION_RATIO:
+        return "live_weight_concentration_watch"
+    return None
+
+
 def _validate_enable_policy(db: Session, tickers: list[str]) -> str:
     if not tickers:
         raise CanaryPolicyError("Для включения canary нужен непустой allowlist")
@@ -166,15 +200,17 @@ def _validate_enable_policy(db: Session, tickers: list[str]) -> str:
         item.ticker: item
         for item in build_shadow_consensus_batch(db, tickers=tickers)
     }
-    unavailable = sorted(
-        ticker
+    blocked = sorted(
+        f"{ticker}={reason}"
         for ticker in tickers
-        if ticker not in shadow_by_ticker or not shadow_by_ticker[ticker].shadow_available
+        for reason in [_live_shadow_guard_reason(shadow_by_ticker[ticker])]
+        if ticker in shadow_by_ticker and reason is not None
     )
-    if unavailable:
-        raise CanaryPolicyError(
-            f"Shadow weighted недоступен для: {', '.join(unavailable)}"
-        )
+    missing = sorted(ticker for ticker in tickers if ticker not in shadow_by_ticker)
+    if missing:
+        blocked.extend(f"{ticker}=shadow_unavailable" for ticker in missing)
+    if blocked:
+        raise CanaryPolicyError("Canary live guard не пройден: " + ", ".join(blocked))
 
     overview = build_shadow_drift_overview(db, days=CANARY_HISTORY_DAYS)
     status_by_ticker = {item.ticker: item.status for item in overview.items}
@@ -306,11 +342,7 @@ def _baseline_consensus(
         return None, 0, None, None, None
     target_year = int(tables[0].forecast_start_year)
     table_by_id = {table.id: table for table in tables}
-    rows = list(
-        db.scalars(
-            select(StockRow).where(StockRow.ticker == ticker)
-        ).all()
-    )
+    rows = list(db.scalars(select(StockRow).where(StockRow.ticker == ticker)).all())
     targets: list[float] = []
     returns: list[float] = []
     current_prices: list[float] = []
@@ -396,9 +428,8 @@ def build_active_consensus(
     safety_status = None
     fallback_reason = None
     if configured_weighted:
-        if not shadow.shadow_available or weighted_target is None:
-            fallback_reason = "shadow_unavailable"
-        else:
+        fallback_reason = _live_shadow_guard_reason(shadow)
+        if fallback_reason is None:
             drift = build_shadow_drift(db, ticker=normalized, days=CANARY_HISTORY_DAYS)
             safety_status = drift.status
             if drift.status == "stable":
