@@ -6,11 +6,9 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .production_impact import (
-    ProductionImpactItem,
     ProductionImpactResult,
     ProductionImpactSummary,
     PromotionDossier,
-    PromotionGate,
     build_production_impact,
     build_production_impact_summary,
     build_promotion_dossier,
