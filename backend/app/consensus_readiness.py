@@ -4,7 +4,10 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from .consensus_backtest import ConsensusBacktestRobustnessResult, build_consensus_backtest_robustness
+from .consensus_backtest import (
+    ConsensusBacktestRobustnessResult,
+    build_consensus_backtest_robustness,
+)
 from .forecast_accuracy import AccuracySnapshot
 
 READINESS_MIN_OBSERVATIONS = 30
