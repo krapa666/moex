@@ -51,7 +51,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - динамику consensus;
 - изменения прогнозов за текущий день;
 - рейтинг точности источников по фактической годовой ЧП;
-- out-of-sample backtest способов агрегирования прогнозов ЧП.
+- out-of-sample backtest способов агрегирования прогнозов ЧП;
+- robustness-анализ weighted backtest по годам, тикерам, leave-one-out и параметрам.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
@@ -61,7 +62,11 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - арифметическое среднее;
 - консервативный accuracy-weighted вариант с shrinkage и ограничением весов.
 
-Для обучения веса допускаются только более ранние факты с известным `reported_at`, опубликованные до целевой backtest-отсечки. Детальные source weights доступны только local scope. **Production consensus target price остаётся прежним; backtest пока не переключает его на weighted-режим.**
+Для обучения веса допускаются только более ранние факты с известным `reported_at`, опубликованные до целевой backtest-отсечки. Детальные source weights доступны только local scope.
+
+С v0.16.0 robustness layer отдельно показывает, сохраняется ли преимущество weighted-метода по финансовым годам и тикерам, после исключения одного года/тикера и на фиксированной сетке из 27 разумных комбинаций `shrinkage / error floor / weight cap`. В коде нет искусственного флага `robust=true`: интерфейс показывает фактическое покрытие и диапазон результата.
+
+**Production consensus target price остаётся прежним; evidence layer пока не переключает его на weighted-режим.**
 
 Подробнее:
 
@@ -264,6 +269,7 @@ MOEX_CCI_ACTUALS_YEARS_BACK=5
 - `GET /api/analytics/source-accuracy`
 - `GET /api/analytics/source-accuracy/samples`
 - `GET /api/analytics/consensus-backtest`
+- `GET /api/analytics/consensus-backtest/robustness`
 - `GET /api/analytics/consensus-backtest/observations` — local
 - `GET /api/analytics/actual-net-profits`
 - `PUT/DELETE /api/analytics/actual-net-profits/{ticker}/{fiscal_year}` — local
@@ -290,7 +296,7 @@ Backend-контейнер перед стартом выполняет:
 alembic upgrade head
 ```
 
-Текущий schema head — `0020_actual_source_key`. v0.15.0 не добавляет миграций.
+Текущий schema head — `0020_actual_source_key`. v0.16.0 не добавляет миграций.
 
 Последние ключевые изменения схемы включают:
 
@@ -332,7 +338,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/forecast-sources.md`](docs/forecast-sources.md) — автоматические источники прогнозов;
 - [`docs/analytics.md`](docs/analytics.md) — consensus и история Analytics;
 - [`docs/source-accuracy.md`](docs/source-accuracy.md) — методология оценки точности;
-- [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest методов consensus ЧП;
+- [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest и robustness-анализ consensus ЧП;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 

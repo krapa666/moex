@@ -1,6 +1,6 @@
 # Analytics
 
-Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников и backtest способов агрегирования прогнозов чистой прибыли.
+Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли и robustness-проверку weighted-метода.
 
 ## Режим доступа
 
@@ -10,7 +10,7 @@ Analytics использует общий сетевой access scope прило
 - internet-клиент работает read-only и видит нейтральные подписи `Аналитик 1`, `Аналитик 2` и т. д.;
 - если scope определить не удалось, интерфейс безопасно трактует пользователя как guest.
 
-Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности.
+Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness сводки не содержат source-level имён изначально.
 
 ## Текущий consensus
 
@@ -163,7 +163,48 @@ GET /api/analytics/consensus-backtest/observations
 
 Accuracy-weighted веса обучаются только на более старых фактах с известной датой публикации `reported_at`, которая была раньше целевой backtest-отсечки. Это исключает look-ahead bias. При отсутствии training history weighted-вариант совпадает с обычным средним.
 
-**Production consensus target price в v0.15.0 не меняется.** Backtest является evidence layer для будущего решения.
+## Robustness weighted backtest
+
+С v0.16.0 Analytics дополнительно проверяет, насколько преимущество weighted-метода устойчиво.
+
+Публичный endpoint:
+
+```http
+GET /api/analytics/consensus-backtest/robustness
+```
+
+Он использует тот же `snapshot` и возвращает только безопасные агрегаты, финансовые годы и публичные MOEX-тикеры.
+
+Проверяются четыре аспекта:
+
+1. **по годам** — weighted против медианы отдельно для каждого финансового года;
+2. **по тикерам** — тот же расчёт отдельно для каждой бумаги;
+3. **evaluation leave-one-out** — поочерёдное исключение одного тикера или одного года из scored set с повторным расчётом delta на оставшихся наблюдениях;
+4. **parameter sensitivity** — 27 комбинаций `shrinkage_samples`, `error_floor_percent`, `relative_score_cap`.
+
+Фиксированная сетка:
+
+```text
+shrinkage_samples = 2, 5, 10
+error_floor_percent = 2.5, 5, 10
+relative_score_cap = 1.5, 2, 3
+```
+
+Интерфейс показывает:
+
+- общий weighted delta;
+- число положительных тикерных и годовых срезов;
+- сколько leave-one-out случаев сохраняют положительную delta;
+- сколько из 27 наборов параметров сохраняют преимущество;
+- минимальную и максимальную median-delta по сетке;
+- таблицы по годам и тикерам;
+- разворачиваемую таблицу parameter sensitivity.
+
+Слабые ticker-срезы сортируются первыми. В коде нет бинарного `robust=true`: пользователю показываются сами диагностические данные.
+
+Один snapshot selector управляет source accuracy, основным backtest и robustness, поэтому сравниваемые показатели относятся к одной временной отсечке.
+
+**Production consensus target price в v0.16.0 не меняется.** Backtest и robustness остаются evidence layer для будущего решения.
 
 Подробная методология: [`consensus-backtest.md`](consensus-backtest.md).
 
@@ -201,4 +242,5 @@ Manual fact получает `source_key=manual` и защищён от посл
 - источник с малой выборкой остаётся видимым, но не получает надёжного rank;
 - training weight не использует факт без известного `reported_at`;
 - текущий canonical ledger не хранит полную историю рестейтментов, поэтому backtest в спорных временных случаях ведёт себя консервативно;
+- leave-one-out в robustness является evaluation jackknife и не переобучает веса после исключения сегмента;
 - accuracy-weighted production consensus пока намеренно отключён.
