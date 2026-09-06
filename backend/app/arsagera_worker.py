@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import signal
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -18,6 +19,7 @@ from .shadow_history import (
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+SHADOW_HISTORY_CAPTURE_OFFSET_MINUTES = 15
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -112,17 +114,25 @@ async def main() -> None:
             logger.error("MOEX CCI actual-result sync enabled but credentials are not configured")
 
     if shadow_history_settings.enabled:
+        first_scheduled_capture = datetime.now(timezone.utc) + timedelta(
+            hours=shadow_history_settings.interval_hours,
+            minutes=SHADOW_HISTORY_CAPTURE_OFFSET_MINUTES,
+        )
         scheduler.add_job(
             capture_shadow_consensus_once,
-            IntervalTrigger(hours=shadow_history_settings.interval_hours),
+            IntervalTrigger(
+                hours=shadow_history_settings.interval_hours,
+                start_date=first_scheduled_capture,
+            ),
             id="shadow-consensus-history-capture",
             coalesce=True,
             max_instances=1,
             misfire_grace_time=3600,
         )
         logger.info(
-            "Shadow consensus history scheduled every %.1f hours with %d-day retention",
+            "Shadow consensus history scheduled every %.1f hours with %d-minute offset and %d-day retention",
             shadow_history_settings.interval_hours,
+            SHADOW_HISTORY_CAPTURE_OFFSET_MINUTES,
             shadow_history_settings.retention_days,
         )
 
