@@ -12,7 +12,11 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from .database import Base
 from .models import AnalystTable, StockRow
 from .production_impact import build_production_impact
-from .shadow_consensus import ShadowConsensusResult, build_shadow_consensus, build_shadow_consensus_batch
+from .shadow_consensus import (
+    ShadowConsensusResult,
+    build_shadow_consensus,
+    build_shadow_consensus_batch,
+)
 from .shadow_history import (
     DRIFT_WATCH_ABS_DIVERGENCE_PERCENT,
     DRIFT_WATCH_CONCENTRATION_RATIO,
