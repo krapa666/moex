@@ -1,7 +1,6 @@
 (() => {
   const accuracyPanel = document.querySelector('[data-source-accuracy]');
-  const snapshotSelect = accuracyPanel?.querySelector('[data-accuracy-snapshot]');
-  if (!accuracyPanel || !snapshotSelect) return;
+  if (!accuracyPanel) return;
 
   let section = null;
   let status = null;
@@ -58,14 +57,17 @@
     accuracyPanel.append(section);
   }
 
-  async function fetchJson(path) {
-    const response = await fetch(path, { headers: { 'Content-Type': 'application/json' } });
-    if (!response.ok) throw new Error(`Ошибка API: ${response.status}`);
-    return response.json();
-  }
-
   function render(result) {
     ensureSection();
+    if (result?.error) {
+      empty.hidden = false;
+      summary.hidden = true;
+      body.parentElement.parentElement.hidden = true;
+      empty.textContent = String(result.error);
+      status.textContent = 'Ошибка';
+      return;
+    }
+
     const gates = Array.isArray(result?.gates) ? result.gates : [];
     if (!gates.length) {
       empty.hidden = false;
@@ -106,25 +108,6 @@
       : `SHADOW · ${result.gates_passed}/${result.gates_total}`;
   }
 
-  async function load() {
-    ensureSection();
-    status.textContent = 'Расчёт…';
-    const snapshot = snapshotSelect.value || 'pre_year';
-    try {
-      const result = await fetchJson(
-        `/api/analytics/consensus-readiness?snapshot=${encodeURIComponent(snapshot)}`,
-      );
-      render(result || {});
-    } catch (error) {
-      empty.hidden = false;
-      summary.hidden = true;
-      body.parentElement.parentElement.hidden = true;
-      empty.textContent = error.message;
-      status.textContent = 'Ошибка';
-    }
-  }
-
   ensureSection();
-  snapshotSelect.addEventListener('change', load);
-  load();
+  window.addEventListener('moex-consensus-readiness', (event) => render(event.detail || {}));
 })();
