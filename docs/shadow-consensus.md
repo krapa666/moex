@@ -17,6 +17,8 @@
 
 С v0.18.0 shadow-расчёт дополнительно сохраняется во времени как **forward-only monitoring history**. Эта история нужна для наблюдения за реальным поведением weighted-модели после её внедрения в shadow-режиме.
 
+С v0.19.0 тот же forward-monitoring агрегируется по всему universe основной таблицы в единый operational overview. Overview не вводит отдельные thresholds и не переопределяет статус: `ALERT/WATCH/STABLE/insufficient` для строки overview вычисляется тем же policy, что и детальный drift endpoint конкретного тикера.
+
 ## Текущий целевой год
 
 Shadow consensus использует тот же базовый год, что и текущий production consensus: `forecast_start_year` основной таблицы (`sort_order=1`).
@@ -92,7 +94,7 @@ GET /api/analytics/shadow-consensus?ticker=SBER
 
 ## Forward shadow history
 
-Новая таблица:
+Таблица:
 
 ```text
 shadow_consensus_snapshots
@@ -120,7 +122,7 @@ shadow_consensus_snapshots
 - source-level forecasts;
 - source-level weights.
 
-Поэтому history API безопасен для internet/read-only режима.
+Поэтому history и overview API безопасны для internet/read-only режима.
 
 ### Расписание
 
@@ -138,7 +140,8 @@ SHADOW_HISTORY_RETENTION_DAYS=730
 1. выполняет обычные initial forecast/actual sync;
 2. после них снимает initial shadow snapshot;
 3. затем повторяет capture каждые 6 часов;
-4. при capture удаляет записи старше retention.
+4. регулярный capture сдвинут на 15 минут относительно стартовой фазы forecast-sync jobs;
+5. при capture удаляет записи старше retention.
 
 Параметры опциональны: существующий `.env` менять необязательно.
 
@@ -238,13 +241,70 @@ max source weight / equal source weight
 - `watch` — достигнут хотя бы WATCH threshold;
 - `alert` — достигнут хотя бы ALERT threshold.
 
+## Global drift overview
+
+С v0.19.0 доступен публичный агрегированный endpoint:
+
+```http
+GET /api/analytics/shadow-consensus/overview?days=30
+```
+
+Параметр `days` использует тот же диапазон, что и детальный drift monitor: 2..180 дней, default 30.
+
+Universe определяется **текущей основной таблицей** — первой по `sort_order`, затем `id`. Это совпадает с выбором основной таблицы для production/shadow target year.
+
+Overview специально включает и бумаги без накопленной forward history. Они получают:
+
+```text
+status = insufficient
+reason = no_history
+```
+
+Это позволяет отличить реальное отсутствие аномалий от слабого monitoring coverage.
+
+Сводка возвращает:
+
+- `universe_tickers`;
+- `tickers_with_history`;
+- `classified_tickers`;
+- числа `alert/watch/stable/insufficient`;
+- `actionable_tickers = alert + watch`;
+- history coverage;
+- classified coverage;
+- список тех же `ShadowDriftResult` по каждому тикеру.
+
+Backend загружает последние snapshots и monitoring-window пакетно, а не вызывает детальный endpoint отдельно для каждого тикера. Это избегает N+1-query pattern.
+
+Порядок по умолчанию:
+
+```text
+ALERT → WATCH → STABLE → insufficient
+```
+
+Внутри одного статуса выше показывается бумага с большим абсолютным текущим расхождением weighted к median.
+
+Overview не хранит новых данных и не создаёт новой схемы БД — это read-only проекция существующей `shadow_consensus_snapshots`.
+
 ## Analytics UI
 
-После выбора тикера показываются два shadow-блока.
+### Global shadow drift
+
+Глобальный блок отображается без выбора тикера и показывает:
+
+- размер universe;
+- долю бумаг, у которых уже есть history;
+- число классифицированных бумаг;
+- количество `ALERT`, `WATCH`, `STABLE`, `insufficient`;
+- количество бумаг, требующих внимания (`ALERT + WATCH`);
+- таблицу с текущей delta, шагом delta, концентрацией веса, movement gap, длительностью history и причинами статуса;
+- фильтр `Все / ALERT+WATCH / ALERT / WATCH / STABLE / Накопление`;
+- переключатель monitoring-window 7 / 30 / 90 / 180 дней.
+
+Тикер является ссылкой на детальную Analytics-карточку этой бумаги.
 
 ### Shadow weighted consensus
 
-Текущий state:
+После выбора тикера показывается текущий state:
 
 - production median target;
 - shadow weighted target;
@@ -257,7 +317,7 @@ max source weight / equal source weight
 
 ### Shadow history и drift
 
-Forward monitoring показывает:
+Forward monitoring конкретного тикера показывает:
 
 - drift status;
 - число snapshots;
@@ -307,7 +367,7 @@ GET /api/analytics/consensus-readiness?snapshot=pre_year
 
 ## Production boundary
 
-v0.18.0 **не меняет**:
+v0.19.0 **не меняет**:
 
 - production median consensus;
 - fair-value formulas;
@@ -316,4 +376,4 @@ v0.18.0 **не меняет**:
 - volume monitor;
 - source weighting defaults.
 
-Forward monitoring — дополнительный evidence layer перед любым возможным promotion weighted consensus.
+Global overview, readiness и forward monitoring остаются evidence/observability layers перед любым возможным promotion weighted consensus.

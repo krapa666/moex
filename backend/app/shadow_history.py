@@ -6,11 +6,12 @@ from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Literal
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, delete, select
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, and_, delete, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from .database import Base, SessionLocal
 from .forecast_accuracy import AccuracySnapshot
+from .models import AnalystTable, StockRow
 from .shadow_consensus import build_shadow_consensus_batch
 
 ShadowDriftStatus = Literal["insufficient", "stable", "watch", "alert"]
@@ -25,6 +26,13 @@ DRIFT_WATCH_CONCENTRATION_RATIO = 1.5
 DRIFT_ALERT_CONCENTRATION_RATIO = 1.75
 DRIFT_WATCH_MOVEMENT_GAP_PERCENTAGE_POINTS = 5.0
 DRIFT_ALERT_MOVEMENT_GAP_PERCENTAGE_POINTS = 10.0
+
+_STATUS_PRIORITY: dict[ShadowDriftStatus, int] = {
+    "alert": 0,
+    "watch": 1,
+    "stable": 2,
+    "insufficient": 3,
+}
 
 
 class ShadowConsensusSnapshot(Base):
@@ -104,6 +112,23 @@ class ShadowDriftResult:
     weighted_target_change_percent: float | None
     relative_movement_gap_percentage_points: float | None
     training_snapshot_changed: bool
+
+
+@dataclass(frozen=True)
+class ShadowDriftOverviewResult:
+    generated_at: datetime
+    history_days: int
+    universe_tickers: int
+    tickers_with_history: int
+    classified_tickers: int
+    alert_tickers: int
+    watch_tickers: int
+    stable_tickers: int
+    insufficient_tickers: int
+    actionable_tickers: int
+    history_coverage_percent: float
+    classified_coverage_percent: float
+    items: list[ShadowDriftResult]
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -253,75 +278,60 @@ def _concentration_ratio(snapshot: ShadowConsensusSnapshot) -> float | None:
     return snapshot.max_source_weight_percent / equal_weight_percent
 
 
-def build_shadow_drift(
-    db: Session,
+def _empty_shadow_drift_result(
     *,
     ticker: str,
-    days: int = 30,
+    days: int,
+    reason: str = "no_history",
 ) -> ShadowDriftResult:
-    normalized_ticker = ticker.strip().upper()
-    latest = db.scalars(
-        select(ShadowConsensusSnapshot)
-        .where(ShadowConsensusSnapshot.ticker == normalized_ticker)
-        .order_by(
-            ShadowConsensusSnapshot.captured_at.desc(),
-            ShadowConsensusSnapshot.id.desc(),
-        )
-        .limit(1)
-    ).first()
-    if latest is None:
-        return ShadowDriftResult(
-            ticker=normalized_ticker,
-            target_year=None,
-            latest_training_snapshot=None,
-            status="insufficient",
-            reasons=["no_history"],
-            snapshots=0,
-            history_days=days,
-            history_span_hours=0.0,
-            first_captured_at=None,
-            last_captured_at=None,
-            latest_delta_percent=None,
-            previous_delta_percent=None,
-            delta_step_percentage_points=None,
-            median_abs_delta_percent=None,
-            max_abs_delta_percent=None,
-            latest_weight_concentration_ratio=None,
-            max_weight_concentration_ratio=None,
-            median_target_change_percent=None,
-            weighted_target_change_percent=None,
-            relative_movement_gap_percentage_points=None,
-            training_snapshot_changed=False,
-        )
-
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = list(
-        db.scalars(
-            select(ShadowConsensusSnapshot)
-            .where(
-                ShadowConsensusSnapshot.ticker == normalized_ticker,
-                ShadowConsensusSnapshot.target_year == latest.target_year,
-                ShadowConsensusSnapshot.captured_at >= cutoff,
-            )
-            .order_by(
-                ShadowConsensusSnapshot.captured_at.asc(),
-                ShadowConsensusSnapshot.id.asc(),
-            )
-        ).all()
+    return ShadowDriftResult(
+        ticker=ticker,
+        target_year=None,
+        latest_training_snapshot=None,
+        status="insufficient",
+        reasons=[reason],
+        snapshots=0,
+        history_days=days,
+        history_span_hours=0.0,
+        first_captured_at=None,
+        last_captured_at=None,
+        latest_delta_percent=None,
+        previous_delta_percent=None,
+        delta_step_percentage_points=None,
+        median_abs_delta_percent=None,
+        max_abs_delta_percent=None,
+        latest_weight_concentration_ratio=None,
+        max_weight_concentration_ratio=None,
+        median_target_change_percent=None,
+        weighted_target_change_percent=None,
+        relative_movement_gap_percentage_points=None,
+        training_snapshot_changed=False,
     )
-    if not rows:
-        rows = [latest]
 
-    first = rows[0]
-    last = rows[-1]
-    previous = rows[-2] if len(rows) >= 2 else None
+
+def _build_shadow_drift_from_rows(
+    *,
+    ticker: str,
+    days: int,
+    latest: ShadowConsensusSnapshot | None,
+    rows: list[ShadowConsensusSnapshot],
+) -> ShadowDriftResult:
+    if latest is None:
+        return _empty_shadow_drift_result(ticker=ticker, days=days)
+    effective_rows = rows or [latest]
+
+    first = effective_rows[0]
+    last = effective_rows[-1]
+    previous = effective_rows[-2] if len(effective_rows) >= 2 else None
     first_at = _as_utc(first.captured_at)
     last_at = _as_utc(last.captured_at)
     history_span_hours = max((last_at - first_at).total_seconds() / 3600.0, 0.0)
 
-    deltas = [float(row.weighted_vs_median_target_delta_percent) for row in rows]
+    deltas = [float(row.weighted_vs_median_target_delta_percent) for row in effective_rows]
     concentrations = [
-        value for value in (_concentration_ratio(row) for row in rows) if value is not None
+        value
+        for value in (_concentration_ratio(row) for row in effective_rows)
+        if value is not None
     ]
     latest_delta = float(last.weighted_vs_median_target_delta_percent)
     previous_delta = (
@@ -341,35 +351,35 @@ def build_shadow_drift(
         previous is not None and previous.training_snapshot != last.training_snapshot
     )
 
-    if len(rows) < DRIFT_MIN_SNAPSHOTS or history_span_hours < DRIFT_MIN_SPAN_HOURS:
+    common = dict(
+        ticker=ticker,
+        target_year=latest.target_year,
+        latest_training_snapshot=last.training_snapshot,
+        snapshots=len(effective_rows),
+        history_days=days,
+        history_span_hours=history_span_hours,
+        first_captured_at=first_at,
+        last_captured_at=last_at,
+        latest_delta_percent=latest_delta,
+        previous_delta_percent=previous_delta,
+        delta_step_percentage_points=delta_step,
+        median_abs_delta_percent=float(median(abs(value) for value in deltas)),
+        max_abs_delta_percent=max(abs(value) for value in deltas),
+        latest_weight_concentration_ratio=latest_concentration,
+        max_weight_concentration_ratio=max_concentration,
+        median_target_change_percent=median_target_change,
+        weighted_target_change_percent=weighted_target_change,
+        relative_movement_gap_percentage_points=movement_gap,
+        training_snapshot_changed=training_snapshot_changed,
+    )
+
+    if len(effective_rows) < DRIFT_MIN_SNAPSHOTS or history_span_hours < DRIFT_MIN_SPAN_HOURS:
         reasons = []
-        if len(rows) < DRIFT_MIN_SNAPSHOTS:
+        if len(effective_rows) < DRIFT_MIN_SNAPSHOTS:
             reasons.append("too_few_snapshots")
         if history_span_hours < DRIFT_MIN_SPAN_HOURS:
             reasons.append("history_too_short")
-        return ShadowDriftResult(
-            ticker=normalized_ticker,
-            target_year=latest.target_year,
-            latest_training_snapshot=last.training_snapshot,  # type: ignore[arg-type]
-            status="insufficient",
-            reasons=reasons,
-            snapshots=len(rows),
-            history_days=days,
-            history_span_hours=history_span_hours,
-            first_captured_at=first_at,
-            last_captured_at=last_at,
-            latest_delta_percent=latest_delta,
-            previous_delta_percent=previous_delta,
-            delta_step_percentage_points=delta_step,
-            median_abs_delta_percent=float(median(abs(value) for value in deltas)),
-            max_abs_delta_percent=max(abs(value) for value in deltas),
-            latest_weight_concentration_ratio=latest_concentration,
-            max_weight_concentration_ratio=max_concentration,
-            median_target_change_percent=median_target_change,
-            weighted_target_change_percent=weighted_target_change,
-            relative_movement_gap_percentage_points=movement_gap,
-            training_snapshot_changed=training_snapshot_changed,
-        )
+        return ShadowDriftResult(status="insufficient", reasons=reasons, **common)  # type: ignore[arg-type]
 
     alert_reasons: list[str] = []
     watch_reasons: list[str] = []
@@ -412,26 +422,179 @@ def build_shadow_drift(
         status = "stable"
         reasons = []
 
-    return ShadowDriftResult(
+    return ShadowDriftResult(status=status, reasons=reasons, **common)  # type: ignore[arg-type]
+
+
+def build_shadow_drift(
+    db: Session,
+    *,
+    ticker: str,
+    days: int = 30,
+) -> ShadowDriftResult:
+    normalized_ticker = ticker.strip().upper()
+    latest = db.scalars(
+        select(ShadowConsensusSnapshot)
+        .where(ShadowConsensusSnapshot.ticker == normalized_ticker)
+        .order_by(
+            ShadowConsensusSnapshot.captured_at.desc(),
+            ShadowConsensusSnapshot.id.desc(),
+        )
+        .limit(1)
+    ).first()
+    if latest is None:
+        return _empty_shadow_drift_result(ticker=normalized_ticker, days=days)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = list(
+        db.scalars(
+            select(ShadowConsensusSnapshot)
+            .where(
+                ShadowConsensusSnapshot.ticker == normalized_ticker,
+                ShadowConsensusSnapshot.target_year == latest.target_year,
+                ShadowConsensusSnapshot.captured_at >= cutoff,
+            )
+            .order_by(
+                ShadowConsensusSnapshot.captured_at.asc(),
+                ShadowConsensusSnapshot.id.asc(),
+            )
+        ).all()
+    )
+    return _build_shadow_drift_from_rows(
         ticker=normalized_ticker,
-        target_year=latest.target_year,
-        latest_training_snapshot=last.training_snapshot,  # type: ignore[arg-type]
-        status=status,
-        reasons=reasons,
-        snapshots=len(rows),
+        days=days,
+        latest=latest,
+        rows=rows,
+    )
+
+
+def build_shadow_drift_overview(
+    db: Session,
+    *,
+    days: int = 30,
+) -> ShadowDriftOverviewResult:
+    current = datetime.now(timezone.utc)
+    primary_table = db.scalars(
+        select(AnalystTable).order_by(AnalystTable.sort_order.asc(), AnalystTable.id.asc()).limit(1)
+    ).first()
+    if primary_table is None:
+        universe: list[str] = []
+    else:
+        universe = sorted(
+            {
+                ticker.strip().upper()
+                for ticker in db.scalars(
+                    select(StockRow.ticker).where(StockRow.table_id == primary_table.id)
+                ).all()
+                if ticker and ticker.strip()
+            }
+        )
+
+    if not universe:
+        return ShadowDriftOverviewResult(
+            generated_at=current,
+            history_days=days,
+            universe_tickers=0,
+            tickers_with_history=0,
+            classified_tickers=0,
+            alert_tickers=0,
+            watch_tickers=0,
+            stable_tickers=0,
+            insufficient_tickers=0,
+            actionable_tickers=0,
+            history_coverage_percent=0.0,
+            classified_coverage_percent=0.0,
+            items=[],
+        )
+
+    latest_time = (
+        select(
+            ShadowConsensusSnapshot.ticker.label("ticker"),
+            func.max(ShadowConsensusSnapshot.captured_at).label("captured_at"),
+        )
+        .where(ShadowConsensusSnapshot.ticker.in_(universe))
+        .group_by(ShadowConsensusSnapshot.ticker)
+        .subquery()
+    )
+    latest_rows = list(
+        db.scalars(
+            select(ShadowConsensusSnapshot)
+            .join(
+                latest_time,
+                and_(
+                    ShadowConsensusSnapshot.ticker == latest_time.c.ticker,
+                    ShadowConsensusSnapshot.captured_at == latest_time.c.captured_at,
+                ),
+            )
+            .order_by(ShadowConsensusSnapshot.ticker.asc(), ShadowConsensusSnapshot.id.desc())
+        ).all()
+    )
+    latest_by_ticker: dict[str, ShadowConsensusSnapshot] = {}
+    for row in latest_rows:
+        latest_by_ticker.setdefault(row.ticker, row)
+
+    cutoff = current - timedelta(days=days)
+    recent_rows = list(
+        db.scalars(
+            select(ShadowConsensusSnapshot)
+            .where(
+                ShadowConsensusSnapshot.ticker.in_(universe),
+                ShadowConsensusSnapshot.captured_at >= cutoff,
+            )
+            .order_by(
+                ShadowConsensusSnapshot.ticker.asc(),
+                ShadowConsensusSnapshot.captured_at.asc(),
+                ShadowConsensusSnapshot.id.asc(),
+            )
+        ).all()
+    )
+    recent_by_ticker: dict[str, list[ShadowConsensusSnapshot]] = {}
+    for row in recent_rows:
+        recent_by_ticker.setdefault(row.ticker, []).append(row)
+
+    items: list[ShadowDriftResult] = []
+    for ticker in universe:
+        latest = latest_by_ticker.get(ticker)
+        if latest is None:
+            items.append(_empty_shadow_drift_result(ticker=ticker, days=days))
+            continue
+        target_rows = [
+            row for row in recent_by_ticker.get(ticker, []) if row.target_year == latest.target_year
+        ]
+        items.append(
+            _build_shadow_drift_from_rows(
+                ticker=ticker,
+                days=days,
+                latest=latest,
+                rows=target_rows,
+            )
+        )
+
+    items.sort(
+        key=lambda item: (
+            _STATUS_PRIORITY[item.status],
+            -(abs(item.latest_delta_percent) if item.latest_delta_percent is not None else -1.0),
+            item.ticker,
+        )
+    )
+    status_counts = {
+        status: sum(1 for item in items if item.status == status) for status in _STATUS_PRIORITY
+    }
+    tickers_with_history = sum(1 for item in items if item.snapshots > 0)
+    classified_tickers = len(items) - status_counts["insufficient"]
+    universe_count = len(items)
+
+    return ShadowDriftOverviewResult(
+        generated_at=current,
         history_days=days,
-        history_span_hours=history_span_hours,
-        first_captured_at=first_at,
-        last_captured_at=last_at,
-        latest_delta_percent=latest_delta,
-        previous_delta_percent=previous_delta,
-        delta_step_percentage_points=delta_step,
-        median_abs_delta_percent=float(median(abs(value) for value in deltas)),
-        max_abs_delta_percent=max(abs(value) for value in deltas),
-        latest_weight_concentration_ratio=latest_concentration,
-        max_weight_concentration_ratio=max_concentration,
-        median_target_change_percent=median_target_change,
-        weighted_target_change_percent=weighted_target_change,
-        relative_movement_gap_percentage_points=movement_gap,
-        training_snapshot_changed=training_snapshot_changed,
+        universe_tickers=universe_count,
+        tickers_with_history=tickers_with_history,
+        classified_tickers=classified_tickers,
+        alert_tickers=status_counts["alert"],
+        watch_tickers=status_counts["watch"],
+        stable_tickers=status_counts["stable"],
+        insufficient_tickers=status_counts["insufficient"],
+        actionable_tickers=status_counts["alert"] + status_counts["watch"],
+        history_coverage_percent=100.0 * tickers_with_history / universe_count,
+        classified_coverage_percent=100.0 * classified_tickers / universe_count,
+        items=items,
     )

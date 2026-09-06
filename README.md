@@ -55,7 +55,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - robustness-анализ weighted backtest по годам, тикерам, leave-one-out и параметрам;
 - текущий shadow weighted consensus рядом с production median;
 - readiness gate для будущего решения о production weighting;
-- forward-only shadow history и drift monitoring.
+- forward-only shadow history и drift monitoring;
+- глобальный shadow drift overview по universe основной таблицы.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
@@ -72,6 +73,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 С v0.17.0 приложение рассчитывает текущий **shadow weighted consensus** для выбранного тикера. Historical snapshot для весов выбирается по фазе текущего целевого года, а факты могут обучать веса только если были опубликованы раньше текущего момента. Shadow output не раскрывает source names/weights и безопасен для internet mode. Рядом с robustness показывается explicit readiness policy из 11 критериев. `READY` сам по себе ничего не переключает.
 
 С v0.18.0 `arsagera-worker` каждые 6 часов по умолчанию сохраняет публично безопасный snapshot `median vs shadow weighted` по доступным бумагам основной таблицы. Analytics показывает forward chart и operational drift status. История не backfill-ится из старых ревизий, чтобы не вносить hindsight bias.
+
+С v0.19.0 Analytics дополнительно показывает **глобальный shadow drift overview**. Он использует тот же drift-policy, что и детальная карточка тикера, сортирует бумаги `ALERT → WATCH → STABLE → insufficient`, показывает coverage истории и классификации и позволяет фильтровать только требующие внимания бумаги. Universe берётся из текущей основной таблицы; бумага без forward history остаётся видимой как `insufficient`.
 
 **Production consensus target price остаётся медианным; shadow/readiness/monitoring layer не меняет fair value, Watchlist, expected return или ranking.**
 
@@ -292,6 +295,7 @@ SHADOW_HISTORY_RETENTION_DAYS=730
 - `GET /api/analytics/shadow-consensus?ticker=SBER`
 - `GET /api/analytics/shadow-consensus/history?ticker=SBER`
 - `GET /api/analytics/shadow-consensus/drift?ticker=SBER`
+- `GET /api/analytics/shadow-consensus/overview`
 - `POST /api/analytics/shadow-consensus/capture` — local
 - `GET /api/analytics/consensus-readiness`
 - `GET /api/analytics/actual-net-profits`
@@ -309,7 +313,7 @@ SHADOW_HISTORY_RETENTION_DAYS=730
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют локальный scope. Observation-level backtest дополнительно является local-only, потому что содержит реальные имена/веса источников. Shadow/readiness/history/drift endpoints содержат только агрегаты и безопасны для internet/read-only режима.
+Все изменяющие endpoints требуют локальный scope. Observation-level backtest дополнительно является local-only, потому что содержит реальные имена/веса источников. Shadow/readiness/history/drift/overview endpoints содержат только агрегаты и безопасны для internet/read-only режима.
 
 ## Миграции
 
@@ -319,7 +323,7 @@ Backend-контейнер перед стартом выполняет:
 alembic upgrade head
 ```
 
-Текущий schema head — `0021_shadow_consensus_snapshots`. v0.18.0 добавляет таблицу forward shadow history.
+Текущий schema head — `0021_shadow_consensus_snapshots`. v0.19.0 новых миграций не добавляет.
 
 Последние ключевые изменения схемы включают:
 
@@ -363,7 +367,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/analytics.md`](docs/analytics.md) — consensus и история Analytics;
 - [`docs/source-accuracy.md`](docs/source-accuracy.md) — методология оценки точности;
 - [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest и robustness-анализ consensus ЧП;
-- [`docs/shadow-consensus.md`](docs/shadow-consensus.md) — shadow weighted consensus, readiness и forward drift monitoring;
+- [`docs/shadow-consensus.md`](docs/shadow-consensus.md) — shadow weighted consensus, readiness, forward drift monitoring и global overview;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
