@@ -158,6 +158,8 @@
     status.textContent = 'Расчёт…';
     const snapshot = snapshotSelect.value || 'pre_year';
     try {
+      const access = window.MoexAnalyticsAccess;
+      if (access) await access.load();
       const response = await fetch(
         `/api/analytics/actual-net-profits/coverage?snapshot=${encodeURIComponent(snapshot)}&years=5&missing_limit=20`,
       );
