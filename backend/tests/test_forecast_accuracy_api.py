@@ -1,7 +1,7 @@
 from math import inf, nan
 
-from app.forecast_api import ActualNetProfitWrite, require_local_access, upsert_actual_net_profit
 from app.forecast_accuracy import ActualNetProfit
+from app.forecast_api import ActualNetProfitWrite, require_local_access, upsert_actual_net_profit
 from app.models import Base
 from fastapi import HTTPException
 from sqlalchemy import create_engine, select
