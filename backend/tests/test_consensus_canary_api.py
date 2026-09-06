@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
-
 from app.application import app
+from fastapi.testclient import TestClient
 
 
 def test_consensus_canary_routes_are_registered() -> None:
