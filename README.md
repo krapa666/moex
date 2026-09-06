@@ -58,7 +58,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - forward-only shadow history и drift monitoring;
 - глобальный shadow drift overview по universe основной таблицы;
 - stateful email-уведомления о значимых drift-переходах и историю их доставки;
-- Production Impact Simulator и Promotion Decision Dashboard для оценки последствий будущего median→weighted promotion.
+- Production Impact Simulator и Promotion Decision Dashboard;
+- Controlled Canary control plane и карточку фактически применяемого Active consensus.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
@@ -76,7 +77,9 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 С v0.21.0 **Production Impact Simulator** сравнивает median и shadow weighted на всём comparable universe: target price, полную ожидаемую доходность, expected-return ranking, Top-N turnover и гипотетическую sensitivity Watchlist score. Promotion dossier объединяет historical readiness, forward drift coverage и impact metrics в статусы `NOT_READY / OBSERVE / READY_FOR_MANUAL_PROMOTION`. Даже последний статус ничего автоматически не переключает.
 
-**Production consensus target price остаётся медианным; shadow/readiness/monitoring/notification/impact layer не меняет fair value, текущий Watchlist, persisted expected return или ranking.**
+С v0.22.0 добавлен **Controlled Canary Promotion**. Canary выключен по умолчанию, хранит allowlist максимум из 5 тикеров и включается только вручную из local scope. Enable требует `READY_FOR_MANUAL_PROMOTION`, реальной истории весов минимум по двум источникам, live divergence/concentration ниже WATCH и forward drift `STABLE`. Во время работы те же guards проверяются повторно: при нарушении конкретный ticker автоматически падает обратно в median. Rollback всегда доступен и не требует восстановления прогнозных данных.
+
+**Median остаётся fail-safe default. Weighted может влиять только на Active consensus для явно выбранных canary ticker. Текущий Watchlist, source rows, `stock_rows`, persisted expected return/ranking и volume monitor не переключаются на weighted.**
 
 Подробнее:
 
@@ -86,6 +89,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - [`docs/shadow-consensus.md`](docs/shadow-consensus.md)
 - [`docs/shadow-notifications.md`](docs/shadow-notifications.md)
 - [`docs/production-impact.md`](docs/production-impact.md)
+- [`docs/consensus-canary.md`](docs/consensus-canary.md)
 
 ### Фактические годовые результаты
 
@@ -102,7 +106,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 ### Watchlist
 
-Страница `/watchlist/` собирает рассчитанные оценки основной таблицы №1 в отдельный обзор для быстрого поиска наиболее интересных бумаг. Она использует `forecast_price_year1` / `upside_percent_year1` primary row и не является median-consensus portfolio. Начиная с v0.21.0 Analytics отдельно показывает гипотетическую median-vs-weighted sensitivity по той же формуле Watchlist score, не изменяя сам Watchlist.
+Страница `/watchlist/` собирает рассчитанные оценки основной таблицы №1 в отдельный обзор для быстрого поиска наиболее интересных бумаг. Она использует `forecast_price_year1` / `upside_percent_year1` primary row и не является median-consensus portfolio. Analytics отдельно показывает гипотетическую median-vs-weighted sensitivity по той же формуле Watchlist score, но v0.22.0 не меняет сам Watchlist даже при включённом canary.
 
 ### Монитор объёмов
 
@@ -145,7 +149,7 @@ Frontend и backend публикуются Compose только на loopback:
 
 Не публикуйте эти порты напрямую в интернет. Внешний доступ должен идти через хостовый Nginx на `80/443`.
 
-Shadow notification status/event и production-impact endpoints публично возвращают только безопасные aggregate/operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Test-email endpoint является local-only.
+Shadow notification status/event, production-impact, canary status и active-consensus endpoints публично возвращают только безопасные aggregate/operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Canary configure/rollback/audit, observation-level backtest и test-email endpoints являются local-only.
 
 ## Архитектура
 
@@ -287,6 +291,8 @@ VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
 
 Если `SHADOW_NOTIFICATION_EMAIL` пуст, используется `VOLUME_NOTIFICATION_EMAIL`. `VOLUME_SMTP_ENABLED` можно оставить `false`, если volume email не нужен.
 
+Canary не требует новых `.env` параметров: состояние хранится в БД и управляется local-only API/UI.
+
 Реальные SMTP/CCI/PostgreSQL credentials и адреса получателей нельзя коммитить в Git. `.env.example` содержит только имена параметров и безопасные пустые/демонстрационные значения.
 
 ## Основные API
@@ -328,6 +334,11 @@ VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
 - `GET /api/analytics/consensus-readiness`
 - `GET /api/analytics/production-impact`
 - `GET /api/analytics/promotion-dossier`
+- `GET /api/analytics/consensus-canary`
+- `PUT /api/analytics/consensus-canary` — local
+- `POST /api/analytics/consensus-canary/rollback` — local
+- `GET /api/analytics/consensus-canary/events` — local
+- `GET /api/analytics/active-consensus?ticker=SBER`
 - `GET /api/analytics/actual-net-profits`
 - `PUT/DELETE /api/analytics/actual-net-profits/{ticker}/{fiscal_year}` — local
 - `GET /api/analytics/actual-net-profits/sync-status`
@@ -343,7 +354,7 @@ VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют local scope. Observation-level backtest local-only, потому что содержит реальные имена/веса источников. Shadow/readiness/history/drift/overview/notification status/event и production-impact endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
+Все изменяющие endpoints требуют local scope. Observation-level backtest и canary audit local-only. Shadow/readiness/history/drift/overview/notification status/event, production-impact, canary status и active-consensus endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
 
 ## Миграции
 
@@ -353,14 +364,19 @@ Backend-контейнер перед стартом выполняет:
 alembic upgrade head
 ```
 
-Текущий schema head — `0022_shadow_drift_notifications`.
+Текущий schema head — `0023_consensus_canary`.
 
-v0.20.0 добавляет:
+v0.20.0 добавил:
 
 - `shadow_drift_states` — текущее per-ticker operational state;
 - `shadow_drift_notification_events` — transition/delivery ledger.
 
-v0.21.0 не меняет schema.
+v0.21.0 не менял schema.
+
+v0.22.0 добавляет:
+
+- `consensus_canary_settings` — singleton enabled/allowlist state;
+- `consensus_canary_events` — append-only audit trail enable/disable/reconfigure/rollback.
 
 Последние ключевые изменения схемы также включают `actual_net_profits`, `source_key`, `forecast_source_runs`, `forecast_revisions` и `shadow_consensus_snapshots`.
 
@@ -399,6 +415,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/shadow-consensus.md`](docs/shadow-consensus.md) — shadow weighted consensus, readiness, forward drift monitoring и global overview;
 - [`docs/shadow-notifications.md`](docs/shadow-notifications.md) — state machine, cooldown, retry, SMTP и runbook уведомлений;
 - [`docs/production-impact.md`](docs/production-impact.md) — impact simulator, portfolio stability и promotion policy;
+- [`docs/consensus-canary.md`](docs/consensus-canary.md) — controlled canary policy, Active consensus, safety guards и rollback runbook;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
