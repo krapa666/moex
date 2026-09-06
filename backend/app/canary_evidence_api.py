@@ -95,6 +95,7 @@ class CanaryEvidenceOverviewRead(BaseModel):
     current_weighted_tickers: int
     current_fallback_tickers: int
     current_median_tickers: int
+    current_unknown_tickers: int
     median_history_span_hours: float
     items: list[CanaryTickerEvidenceRead]
 
