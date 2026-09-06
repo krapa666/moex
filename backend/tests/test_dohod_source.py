@@ -1,4 +1,3 @@
-import pytest
 from app.dohod_source import (
     DohodParseError,
     load_dohod_aliases,
@@ -52,6 +51,15 @@ MULTI_PAYMENT_HTML = """
 """
 
 
+def assert_raises(exc_type, message: str, callback) -> None:
+    try:
+        callback()
+    except exc_type as exc:
+        assert message in str(exc)
+    else:
+        raise AssertionError(f"expected {exc_type.__name__}")
+
+
 def test_catalog_maps_tickers_to_dohod_slugs() -> None:
     found, errors = parse_dohod_catalog_slugs(
         CATALOG_HTML,
@@ -93,8 +101,11 @@ def test_parse_dohod_sums_multiple_payments_in_same_calendar_year() -> None:
 
 
 def test_parse_dohod_requires_payment_table() -> None:
-    with pytest.raises(DohodParseError, match="таблица выплат"):
-        parse_dohod_dividend_html("SBER", "sber", "<html><body>no table</body></html>")
+    assert_raises(
+        DohodParseError,
+        "таблица выплат",
+        lambda: parse_dohod_dividend_html("SBER", "sber", "<html><body>no table</body></html>"),
+    )
 
 
 def test_dohod_alias_config_validation() -> None:
@@ -103,8 +114,5 @@ def test_dohod_alias_config_validation() -> None:
         "SNGSP": "sngsp",
     }
 
-    with pytest.raises(ValueError, match="JSON object"):
-        load_dohod_aliases("[]")
-
-    with pytest.raises(ValueError, match="invalid DOHOD slug"):
-        load_dohod_aliases('{"SBER":"../bad"}')
+    assert_raises(ValueError, "JSON object", lambda: load_dohod_aliases("[]"))
+    assert_raises(ValueError, "invalid DOHOD slug", lambda: load_dohod_aliases('{"SBER":"../bad"}'))
