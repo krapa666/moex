@@ -45,16 +45,7 @@
       'reported_at',
       'source_comment',
     ].join(';');
-    const sample = [
-      'SBER',
-      '2025',
-      '1580.3',
-      'МСФО · отчёт эмитента',
-      'https://example.com/report',
-      '2026-02-27',
-      'ЧП, относимая к акционерам материнской компании',
-    ].join(';');
-    const blob = new Blob([`\uFEFF${header}\n${sample}\n`], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([`\uFEFF${header}\n`], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
