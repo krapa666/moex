@@ -14,31 +14,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
       - name: Resolve release metadata
         id: meta
         shell: bash
         run: |
-          notes_file="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" \
-            | grep -E '^\.release/v[0-9]+\.[0-9]+\.[0-9]+\.md$' \
-            | head -n 1 || true)"
-          if [ -z "$notes_file" ]; then
-            echo "No release notes file found in commit $GITHUB_SHA" >&2
-            exit 1
-          fi
-
           version="$(tr -d '[:space:]' < VERSION)"
           if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "VERSION is not valid SemVer: $version" >&2
             exit 1
           fi
 
-          tag="$(basename "$notes_file" .md)"
-          expected_tag="v$version"
-          if [ "$tag" != "$expected_tag" ]; then
-            echo "Release notes $tag do not match VERSION $version" >&2
+          tag="v$version"
+          notes_file=".release/$tag.md"
+          if [ ! -f "$notes_file" ]; then
+            echo "Release notes not found for VERSION $version: $notes_file" >&2
             exit 1
           fi
 
