@@ -89,6 +89,8 @@ SHADOW_HISTORY_RETENTION_DAYS=730
 
 Поэтому первая настоящая точка evidence появляется в первом shadow monitoring cycle после обновления до v0.23.0.
 
+До первого snapshot configured ticker имеет состояние **«не наблюдалось»**, а не предполагаемый `MEDIAN`. Это принципиально: evidence layer не подменяет отсутствующее наблюдение догадкой о runtime state.
+
 ## Режимы
 
 Сохраняются одновременно configured и effective mode.
@@ -232,27 +234,32 @@ fallback_reason_counts
 current_* mode/status/target/return
 ```
 
+Per-ticker history сохраняется и остаётся доступна даже после удаления ticker из текущего canary allowlist.
+
 ## Глобальный evidence overview
 
 ```http
 GET /api/analytics/consensus-canary/evidence?days=30
 ```
 
+Overview показывает **только текущий configured allowlist**. Исторический ticker, который уже удалён из allowlist, не остаётся в глобальной таблице с устаревшим последним режимом; его старые snapshot по-прежнему доступны через per-ticker API.
+
 Возвращает:
 
 - configured tickers;
 - tickers with evidence;
-- total snapshots;
+- total snapshots текущего allowlist;
 - total configured weighted time;
 - total weighted/fallback time;
 - time-weighted portfolio canary uptime;
 - fallback incidents;
 - recoveries;
-- сколько tickers сейчас `WEIGHTED`, `FALLBACK`, `MEDIAN`;
+- latest observed `WEIGHTED`, `FALLBACK`, `MEDIAN` counts;
+- `current_unknown_tickers` — configured tickers, для которых ещё нет evidence snapshot;
 - median history span;
-- breakdown по каждому ticker.
+- breakdown по каждому текущему configured ticker.
 
-Fallback tickers сортируются выше остальных.
+Fallback tickers сортируются выше остальных; `unknown` отображается отдельно и никогда не интерпретируется как median.
 
 ## История snapshot
 
@@ -281,11 +288,12 @@ POST /api/analytics/consensus-canary/evidence/capture
 Глобальный блок рядом с Production Impact показывает:
 
 - weighted uptime;
-- current weighted/fallback counts;
+- latest observed weighted/fallback counts;
+- configured tickers без наблюдения;
 - fallback incidents;
 - recoveries;
 - median observation span;
-- breakdown по ticker;
+- breakdown по текущему configured allowlist;
 - fallback reason counts.
 
 Окно можно переключать между 1 / 7 / 30 / 90 днями.
