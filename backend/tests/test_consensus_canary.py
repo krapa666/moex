@@ -1,8 +1,5 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
-
-import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
 from app.consensus_canary import (
     CanaryPolicyError,
@@ -15,6 +12,9 @@ from app.consensus_canary import (
 )
 from app.models import AnalystTable, Base, StockRow
 from app.shadow_consensus import ShadowConsensusResult
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 
 def _engine():
@@ -55,7 +55,7 @@ def _shadow(**overrides) -> ShadowConsensusResult:
         "ticker": "AAA",
         "target_year": 2027,
         "training_snapshot": "pre_year",
-        "as_of": __import__("datetime").datetime(2026, 9, 6, tzinfo=__import__("datetime").timezone.utc),
+        "as_of": datetime(2026, 9, 6, tzinfo=timezone.utc),
         "shadow_available": True,
         "reason": None,
         "sources": 3,
