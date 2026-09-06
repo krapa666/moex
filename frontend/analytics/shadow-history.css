@@ -1,0 +1,104 @@
+.shadow-history-panel[hidden],
+.shadow-history-body[hidden],
+[data-shadow-history-empty][hidden] {
+  display: none;
+}
+
+.shadow-history-body {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.shadow-history-body .consensus-history-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.shadow-history-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.shadow-history-legend span::before {
+  display: inline-block;
+  width: 16px;
+  height: 3px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: #2563eb;
+  vertical-align: middle;
+  content: "";
+}
+
+.shadow-history-legend span + span::before {
+  background: #7c3aed;
+}
+
+.shadow-history-median {
+  stroke: #2563eb;
+}
+
+.shadow-history-weighted {
+  stroke: #7c3aed;
+}
+
+[data-shadow-history-status][data-status="stable"] {
+  color: #15803d;
+}
+
+[data-shadow-history-status][data-status="watch"] {
+  color: #b45309;
+}
+
+[data-shadow-history-status][data-status="alert"] {
+  color: #b91c1c;
+}
+
+[data-theme="dark"] .shadow-history-legend {
+  color: #8fa0b8;
+}
+
+[data-theme="dark"] .shadow-history-legend span::before,
+[data-theme="dark"] .shadow-history-median {
+  background: #60a5fa;
+  stroke: #60a5fa;
+}
+
+[data-theme="dark"] .shadow-history-legend span + span::before,
+[data-theme="dark"] .shadow-history-weighted {
+  background: #a78bfa;
+  stroke: #a78bfa;
+}
+
+[data-theme="dark"] [data-shadow-history-status][data-status="stable"] {
+  color: #4ade80;
+}
+
+[data-theme="dark"] [data-shadow-history-status][data-status="watch"] {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] [data-shadow-history-status][data-status="alert"] {
+  color: #f87171;
+}
+
+@media (max-width: 900px) {
+  .shadow-history-body .consensus-history-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .shadow-history-body {
+    padding: 14px;
+  }
+
+  .shadow-history-body .consensus-history-summary {
+    grid-template-columns: 1fr;
+  }
+}
