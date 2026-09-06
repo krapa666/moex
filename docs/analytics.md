@@ -1,6 +1,6 @@
 # Analytics
 
-Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate, forward shadow monitoring, глобальный drift overview, stateful notification history, Production Impact Simulator и Controlled Canary control plane.
+Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate, forward shadow monitoring, глобальный drift overview, stateful notification history, Production Impact Simulator, Controlled Canary control plane и forward Canary Observability.
 
 ## Режим доступа
 
@@ -10,7 +10,7 @@ Analytics использует общий сетевой access scope прило
 - internet-клиент работает read-only и видит нейтральные подписи `Аналитик 1`, `Аналитик 2` и т. д.;
 - если scope определить не удалось, интерфейс безопасно трактует пользователя как guest.
 
-Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift/overview/notification/production-impact/canary-status/active-consensus сводки не содержат source-level имён изначально.
+Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift/overview/notification/production-impact/canary-status/active-consensus/canary-evidence сводки не содержат source-level имён изначально.
 
 ## Текущий consensus
 
@@ -364,6 +364,38 @@ Rollback всегда доступен и просто выключает persis
 
 Подробно: [`consensus-canary.md`](consensus-canary.md).
 
+## Canary observability and evidence
+
+С v0.23.0 тот же monitoring cycle сохраняет фактически применённый Active consensus для configured canary ticker:
+
+```http
+GET /api/analytics/consensus-canary/evidence?days=30
+GET /api/analytics/consensus-canary/evidence/ticker?ticker=SBER&days=30
+GET /api/analytics/consensus-canary/evidence/history?ticker=SBER&days=30
+POST /api/analytics/consensus-canary/evidence/capture   # local
+```
+
+Сохраняются `configured_mode`, `effective_mode`, runtime safety/fallback reason, median/weighted/active target и expected return.
+
+Основные KPI считаются **по времени между snapshot**, а не по количеству записей:
+
+- configured weighted hours;
+- weighted hours;
+- fallback hours;
+- weighted uptime;
+- fallback incidents;
+- recoveries;
+- longest weighted/fallback run;
+- fallback reason counts.
+
+Последняя точка не экстраполируется до `now`, чтобы остановившийся worker не завышал uptime. Переход между `target_year` не переносит duration и не создаёт ложный recovery.
+
+Evidence forward-only: данные до установки v0.23.0 не реконструируются из старых revisions/shadow snapshots.
+
+UI показывает global Canary Observability и per-ticker Canary Evidence timeline. Public read endpoints не содержат source identity; manual capture остаётся local-only.
+
+Подробно: [`canary-evidence.md`](canary-evidence.md).
+
 ## Фактические результаты и MOEX CCI
 
 ```http
@@ -382,8 +414,10 @@ POST /api/analytics/actual-net-profits/sync
 
 - forecast history начинается только с реально сохранённых `forecast_revisions`;
 - forward shadow history начинается с v0.18.0 и не backfill-ится;
+- canary evidence начинается с v0.23.0 и не backfill-ится;
 - global overview universe следует основной таблице;
 - разные target years не смешиваются в одной drift-series;
+- target-year boundary не переносит canary evidence duration и не создаёт recovery;
 - training weight не использует факт без известного `reported_at`;
 - leave-one-out в robustness является evaluation jackknife;
 - exact `analyst_name` остаётся source identity для accuracy/weighting;
@@ -394,4 +428,5 @@ POST /api/analytics/actual-net-profits/sync
 - promotion dossier является engineering policy, а не автоматическим feature flag;
 - canary управляет только Active consensus и не переписывает primary/source rows;
 - canary runtime fail-safe всегда направлен в median;
+- v0.23.0 не содержит автоматического расширения canary;
 - текущий `/watchlist/` не переключается canary-механизмом.

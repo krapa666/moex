@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .arsagera_sync import sync_arsagera_once
+from .canary_evidence import capture_canary_evidence_once
 from .dohod_source import sync_dohod_once
 from .finvista_source import sync_finvista_once
 from .forecast_sources import load_published_sheets_sources, sync_published_sheets_sources_once
@@ -30,8 +31,9 @@ def _env_bool(name: str, default: bool) -> bool:
 def capture_shadow_monitoring_once():
     capture_result = capture_shadow_consensus_once()
     notification_result = process_shadow_drift_transitions_once()
+    evidence_result = capture_canary_evidence_once()
     logger.info(
-        "Shadow monitoring created %d/%d snapshots; state_changes=%d events=%d sent=%d suppressed=%d failed=%d superseded=%d",
+        "Shadow monitoring created %d/%d snapshots; state_changes=%d events=%d sent=%d suppressed=%d failed=%d superseded=%d; canary_evidence=%d/%d expired=%d",
         capture_result.snapshots_created,
         capture_result.tickers_total,
         notification_result.state_changes,
@@ -40,6 +42,9 @@ def capture_shadow_monitoring_once():
         notification_result.suppressed,
         notification_result.failed,
         notification_result.superseded,
+        evidence_result.snapshots_created,
+        evidence_result.configured_tickers,
+        evidence_result.deleted_expired,
     )
     return capture_result
 
@@ -194,7 +199,7 @@ async def main() -> None:
                 result.deleted_expired,
             )
         except Exception:
-            logger.exception("Initial shadow consensus history/notification cycle failed")
+            logger.exception("Initial shadow consensus history/notification/evidence cycle failed")
 
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()

@@ -59,7 +59,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - глобальный shadow drift overview по universe основной таблицы;
 - stateful email-уведомления о значимых drift-переходах и историю их доставки;
 - Production Impact Simulator и Promotion Decision Dashboard;
-- Controlled Canary control plane и карточку фактически применяемого Active consensus.
+- Controlled Canary control plane и карточку фактически применяемого Active consensus;
+- forward-only Canary Observability: time-weighted uptime, fallback/recovery и per-ticker timeline фактически применённого режима.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
@@ -79,6 +80,8 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 С v0.22.0 добавлен **Controlled Canary Promotion**. Canary выключен по умолчанию, хранит allowlist максимум из 5 тикеров и включается только вручную из local scope. Enable требует `READY_FOR_MANUAL_PROMOTION`, реальной истории весов минимум по двум источникам, live divergence/concentration ниже WATCH и forward drift `STABLE`. Во время работы те же guards проверяются повторно: при нарушении конкретный ticker автоматически падает обратно в median. Rollback всегда доступен и не требует восстановления прогнозных данных.
 
+С v0.23.0 **Canary Observability & Evidence** сохраняет forward-only историю фактически применённого `MEDIAN / WEIGHTED CANARY / MEDIAN FALLBACK`. Uptime считается по реальному времени между snapshot, fallback incident — только при входе в fallback, recovery — только при возврате в weighted внутри того же target year и непрерывного canary режима. История до v0.23.0 намеренно не реконструируется.
+
 **Median остаётся fail-safe default. Weighted может влиять только на Active consensus для явно выбранных canary ticker. Текущий Watchlist, source rows, `stock_rows`, persisted expected return/ranking и volume monitor не переключаются на weighted.**
 
 Подробнее:
@@ -90,6 +93,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - [`docs/shadow-notifications.md`](docs/shadow-notifications.md)
 - [`docs/production-impact.md`](docs/production-impact.md)
 - [`docs/consensus-canary.md`](docs/consensus-canary.md)
+- [`docs/canary-evidence.md`](docs/canary-evidence.md)
 
 ### Фактические годовые результаты
 
@@ -106,7 +110,7 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 ### Watchlist
 
-Страница `/watchlist/` собирает рассчитанные оценки основной таблицы №1 в отдельный обзор для быстрого поиска наиболее интересных бумаг. Она использует `forecast_price_year1` / `upside_percent_year1` primary row и не является median-consensus portfolio. Analytics отдельно показывает гипотетическую median-vs-weighted sensitivity по той же формуле Watchlist score, но v0.22.0 не меняет сам Watchlist даже при включённом canary.
+Страница `/watchlist/` собирает рассчитанные оценки основной таблицы №1 в отдельный обзор для быстрого поиска наиболее интересных бумаг. Она использует `forecast_price_year1` / `upside_percent_year1` primary row и не является median-consensus portfolio. Analytics отдельно показывает гипотетическую median-vs-weighted sensitivity по той же формуле Watchlist score, но canary/evidence releases не меняют сам Watchlist даже при включённом canary.
 
 ### Монитор объёмов
 
@@ -149,7 +153,7 @@ Frontend и backend публикуются Compose только на loopback:
 
 Не публикуйте эти порты напрямую в интернет. Внешний доступ должен идти через хостовый Nginx на `80/443`.
 
-Shadow notification status/event, production-impact, canary status и active-consensus endpoints публично возвращают только безопасные aggregate/operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Canary configure/rollback/audit, observation-level backtest и test-email endpoints являются local-only.
+Shadow notification status/event, production-impact, canary status, active-consensus и canary-evidence endpoints публично возвращают только безопасные aggregate/operational metadata. Recipient, SMTP credentials, SMTP error text, analyst names, source-level forecasts и source-level weights наружу не выдаются. Canary configure/rollback/audit, manual canary-evidence capture, observation-level backtest и test-email endpoints являются local-only.
 
 ## Архитектура
 
@@ -163,7 +167,7 @@ Docker Compose
    ├─ backend          FastAPI + SQLAlchemy + Alembic
    ├─ arsagera-worker  Arsagera + DOHOD + optional fin-vista + Published Sheets
    │                   + optional MOEX CCI actual-result sync
-   │                   + shadow history/drift state/notification cycle
+   │                   + shadow history/drift/notification + canary evidence cycle
    ├─ volume-worker    MOEX TQBR volume scheduler/collector
    ├─ db               PostgreSQL 16
    └─ pgbackup         scheduled PostgreSQL backups
@@ -270,6 +274,8 @@ SHADOW_HISTORY_RUN_ON_STARTUP=true
 SHADOW_HISTORY_RETENTION_DAYS=730
 ```
 
+Canary evidence использует тот же monitoring cycle и retention `SHADOW_HISTORY_RETENTION_DAYS`; отдельной обязательной конфигурации для него нет.
+
 Shadow emails по умолчанию выключены. Они используют существующие SMTP credentials/transport parameters, но **не требуют** включать volume-mailing через `VOLUME_SMTP_ENABLED`:
 
 ```dotenv
@@ -339,6 +345,10 @@ Canary не требует новых `.env` параметров: состоя�
 - `POST /api/analytics/consensus-canary/rollback` — local
 - `GET /api/analytics/consensus-canary/events` — local
 - `GET /api/analytics/active-consensus?ticker=SBER`
+- `GET /api/analytics/consensus-canary/evidence?days=30`
+- `GET /api/analytics/consensus-canary/evidence/ticker?ticker=SBER&days=30`
+- `GET /api/analytics/consensus-canary/evidence/history?ticker=SBER&days=30`
+- `POST /api/analytics/consensus-canary/evidence/capture` — local
 - `GET /api/analytics/actual-net-profits`
 - `PUT/DELETE /api/analytics/actual-net-profits/{ticker}/{fiscal_year}` — local
 - `GET /api/analytics/actual-net-profits/sync-status`
@@ -354,7 +364,7 @@ Canary не требует новых `.env` параметров: состоя�
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют local scope. Observation-level backtest и canary audit local-only. Shadow/readiness/history/drift/overview/notification status/event, production-impact, canary status и active-consensus endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
+Все изменяющие endpoints требуют local scope. Observation-level backtest и canary audit local-only. Shadow/readiness/history/drift/overview/notification status/event, production-impact, canary status, active-consensus и canary-evidence read endpoints содержат только безопасные агрегаты/operational metadata и доступны read-only internet mode.
 
 ## Миграции
 
@@ -364,7 +374,7 @@ Backend-контейнер перед стартом выполняет:
 alembic upgrade head
 ```
 
-Текущий schema head — `0023_consensus_canary`.
+Текущий schema head — `0024_canary_evidence`.
 
 v0.20.0 добавил:
 
@@ -373,10 +383,14 @@ v0.20.0 добавил:
 
 v0.21.0 не менял schema.
 
-v0.22.0 добавляет:
+v0.22.0 добавил:
 
 - `consensus_canary_settings` — singleton enabled/allowlist state;
 - `consensus_canary_events` — append-only audit trail enable/disable/reconfigure/rollback.
+
+v0.23.0 добавляет:
+
+- `canary_evidence_snapshots` — forward-only history фактически применённого Active consensus и runtime fallback state.
 
 Последние ключевые изменения схемы также включают `actual_net_profits`, `source_key`, `forecast_source_runs`, `forecast_revisions` и `shadow_consensus_snapshots`.
 
@@ -416,6 +430,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/shadow-notifications.md`](docs/shadow-notifications.md) — state machine, cooldown, retry, SMTP и runbook уведомлений;
 - [`docs/production-impact.md`](docs/production-impact.md) — impact simulator, portfolio stability и promotion policy;
 - [`docs/consensus-canary.md`](docs/consensus-canary.md) — controlled canary policy, Active consensus, safety guards и rollback runbook;
+- [`docs/canary-evidence.md`](docs/canary-evidence.md) — forward canary history, time-weighted uptime, fallback/recovery и evidence runbook;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
