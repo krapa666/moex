@@ -33,4 +33,5 @@ async def sync_arsagera_once(
         client=client or ArsageraClient(),
         concurrency=effective_concurrency,
         create_table_if_missing=False,
+        source_key="arsagera",
     )

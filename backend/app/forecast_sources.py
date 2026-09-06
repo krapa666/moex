@@ -198,5 +198,6 @@ async def sync_published_sheets_sources_once(
             client=config.build_client(),
             concurrency=effective_concurrency,
             create_table_if_missing=True,
+            source_key="published-sheets",
         )
     return results
