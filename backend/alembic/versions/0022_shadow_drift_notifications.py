@@ -24,13 +24,32 @@ def upgrade() -> None:
         sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("changed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("last_notified_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("incident_notified", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "incident_notified",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("ticker"),
     )
-    op.create_index("ix_shadow_drift_states_ticker", "shadow_drift_states", ["ticker"], unique=True)
+    op.create_index(
+        "ix_shadow_drift_states_ticker",
+        "shadow_drift_states",
+        ["ticker"],
+        unique=True,
+    )
     op.create_index(
         "ix_shadow_drift_states_observed_at",
         "shadow_drift_states",
@@ -51,11 +70,21 @@ def upgrade() -> None:
         sa.Column("reasons", sa.JSON(), nullable=True),
         sa.Column("delivery_status", sa.String(length=24), nullable=False),
         sa.Column("delivery_reason", sa.String(length=64), nullable=True),
-        sa.Column("delivery_attempts", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "delivery_attempts",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
+        ),
         sa.Column("last_attempt_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("notified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -113,6 +142,9 @@ def downgrade() -> None:
     )
     op.drop_table("shadow_drift_notification_events")
 
-    op.drop_index("ix_shadow_drift_states_observed_at", table_name="shadow_drift_states")
+    op.drop_index(
+        "ix_shadow_drift_states_observed_at",
+        table_name="shadow_drift_states",
+    )
     op.drop_index("ix_shadow_drift_states_ticker", table_name="shadow_drift_states")
     op.drop_table("shadow_drift_states")
