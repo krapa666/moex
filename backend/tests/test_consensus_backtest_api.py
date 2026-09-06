@@ -26,6 +26,7 @@ def test_consensus_backtest_routes_are_registered() -> None:
     paths = {route.path for route in app.routes}
     assert "/api/analytics/consensus-backtest" in paths
     assert "/api/analytics/consensus-backtest/observations" in paths
+    assert "/api/analytics/consensus-backtest/robustness" in paths
 
 
 def test_detailed_backtest_observations_require_local_scope() -> None:
