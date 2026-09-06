@@ -262,7 +262,7 @@ SHADOW_HISTORY_RUN_ON_STARTUP=true
 SHADOW_HISTORY_RETENTION_DAYS=730
 ```
 
-Shadow emails по умолчанию выключены. Для их включения используется существующий SMTP transport volume monitor:
+Shadow emails по умолчанию выключены. Они используют существующие SMTP credentials/transport parameters, но **не требуют** включать volume-mailing через `VOLUME_SMTP_ENABLED`:
 
 ```dotenv
 SHADOW_NOTIFICATIONS_ENABLED=true
@@ -271,7 +271,6 @@ SHADOW_NOTIFICATION_COOLDOWN_HOURS=24
 SHADOW_NOTIFICATION_HISTORY_DAYS=30
 SHADOW_NOTIFICATION_MAX_ATTEMPTS=5
 
-VOLUME_SMTP_ENABLED=true
 VOLUME_SMTP_HOST=<smtp-host>
 VOLUME_SMTP_PORT=587
 VOLUME_SMTP_USERNAME=<smtp-user>
@@ -282,7 +281,7 @@ VOLUME_SMTP_SSL=false
 VOLUME_PUBLIC_BASE_URL=https://moex.junnylab.ru
 ```
 
-Если `SHADOW_NOTIFICATION_EMAIL` пуст, используется `VOLUME_NOTIFICATION_EMAIL`.
+Если `SHADOW_NOTIFICATION_EMAIL` пуст, используется `VOLUME_NOTIFICATION_EMAIL`. `VOLUME_SMTP_ENABLED` можно оставить `false`, если volume email не нужен.
 
 Реальные SMTP/CCI/PostgreSQL credentials и адреса получателей нельзя коммитить в Git. `.env.example` содержит только имена параметров и безопасные пустые/демонстрационные значения.
 
