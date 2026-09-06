@@ -5,8 +5,12 @@ from app.consensus_backtest import (
     _available_training_samples,
     _source_weights,
     aggregate_consensus_backtest,
+    build_consensus_backtest_observations,
 )
-from app.forecast_accuracy import AccuracySample
+from app.forecast_accuracy import AccuracySample, ActualNetProfit
+from app.models import Base, ForecastRevision
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 
 def _sample(
@@ -30,6 +34,25 @@ def _sample(
         absolute_error_billion_rub=abs(forecast - actual),
         smape_percent=smape,
         sign_correct=(forecast >= 0) == (actual >= 0),
+    )
+
+
+def _revision(
+    *,
+    source: str,
+    table_id: int,
+    ticker: str,
+    year: int,
+    forecast: float,
+) -> ForecastRevision:
+    return ForecastRevision(
+        table_id=table_id,
+        ticker=ticker,
+        analyst_name=source,
+        forecast_start_year=year,
+        event_type="updated",
+        net_profit_year_map={str(year): forecast},
+        created_at=datetime(year - 1, 12, 1, tzinfo=timezone.utc),
     )
 
 
@@ -184,3 +207,70 @@ def test_backtest_methods_use_same_observation_set_and_report_delta_vs_median() 
     assert by_method["median"].median_smape_delta_vs_median_pp == 0.0
     assert by_method["weighted"].median_smape_delta_vs_median_pp > 0
     assert by_method["weighted"].mean_smape_delta_vs_median_pp > 0
+
+
+def test_integrated_backtest_trains_2025_weights_only_on_published_2023_fact() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        db.add_all(
+            [
+                ActualNetProfit(
+                    ticker="AAA",
+                    fiscal_year=2023,
+                    net_profit_billion_rub=100.0,
+                    source_name="Issuer",
+                    reported_at=datetime(2024, 3, 1, tzinfo=timezone.utc),
+                ),
+                ActualNetProfit(
+                    ticker="AAA",
+                    fiscal_year=2025,
+                    net_profit_billion_rub=200.0,
+                    source_name="Issuer",
+                    reported_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+                ),
+                _revision(
+                    source="Accurate",
+                    table_id=1,
+                    ticker="AAA",
+                    year=2023,
+                    forecast=100.0,
+                ),
+                _revision(
+                    source="Weak",
+                    table_id=2,
+                    ticker="AAA",
+                    year=2023,
+                    forecast=50.0,
+                ),
+                _revision(
+                    source="Accurate",
+                    table_id=1,
+                    ticker="AAA",
+                    year=2025,
+                    forecast=190.0,
+                ),
+                _revision(
+                    source="Weak",
+                    table_id=2,
+                    ticker="AAA",
+                    year=2025,
+                    forecast=280.0,
+                ),
+            ]
+        )
+        db.commit()
+
+        observations = build_consensus_backtest_observations(
+            db,
+            snapshot="pre_year",
+            shrinkage_samples=0,
+        )
+
+    target = next(item for item in observations if item.fiscal_year == 2025)
+    assert target.training_samples == 2
+    assert target.sources_with_training_history == 2
+    assert target.source_training_samples == {"Accurate": 1, "Weak": 1}
+    assert target.source_weights["Accurate"] > target.source_weights["Weak"]
+    assert target.weighted_forecast_billion_rub < target.mean_forecast_billion_rub
