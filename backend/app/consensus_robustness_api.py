@@ -8,6 +8,7 @@ from .consensus_backtest import (
     ConsensusBacktestRobustnessResult,
     build_consensus_backtest_robustness,
 )
+from .consensus_readiness import ConsensusReadinessResult, evaluate_consensus_readiness
 from .database import get_db
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -55,6 +56,37 @@ class ConsensusBacktestParameterCaseRead(BaseModel):
     weighted_mean_delta_pp: float
 
 
+class ConsensusReadinessGateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    label: str
+    passed: bool
+    actual: str
+    requirement: str
+
+
+class ConsensusReadinessRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    snapshot: AccuracySnapshot
+    ready: bool
+    gates_passed: int
+    gates_total: int
+    observations: int
+    tickers: int
+    years: int
+    weighted_median_delta_pp: float | None
+    weighted_mean_delta_pp: float | None
+    ticker_slice_positive_ratio: float
+    year_slice_positive_ratio: float
+    ticker_jackknife_preserved_ratio: float
+    year_jackknife_preserved_ratio: float
+    parameter_positive_ratio: float
+    worst_parameter_median_delta_pp: float | None
+    gates: list[ConsensusReadinessGateRead]
+
+
 class ConsensusBacktestRobustnessRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -82,6 +114,7 @@ class ConsensusBacktestRobustnessRead(BaseModel):
     jackknife_year: list[ConsensusBacktestJackknifeRead]
     jackknife_ticker: list[ConsensusBacktestJackknifeRead]
     parameter_sweep: list[ConsensusBacktestParameterCaseRead]
+    readiness: ConsensusReadinessRead
 
 
 @router.get(
@@ -92,9 +125,11 @@ def get_consensus_backtest_robustness(
     snapshot: AccuracySnapshot = Query(default="pre_year"),
     min_sources: int = Query(default=2, ge=2, le=10),
     db: Session = Depends(get_db),
-) -> ConsensusBacktestRobustnessResult:
-    return build_consensus_backtest_robustness(
+) -> dict[str, object]:
+    robustness: ConsensusBacktestRobustnessResult = build_consensus_backtest_robustness(
         db,
         snapshot=snapshot,
         min_sources=min_sources,
     )
+    readiness: ConsensusReadinessResult = evaluate_consensus_readiness(robustness)
+    return {**robustness.__dict__, "readiness": readiness}

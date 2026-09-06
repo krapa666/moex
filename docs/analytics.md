@@ -1,6 +1,6 @@
 # Analytics
 
-Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли и robustness-проверку weighted-метода.
+Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus и readiness gate.
 
 ## Режим доступа
 
@@ -10,7 +10,7 @@ Analytics использует общий сетевой access scope прило
 - internet-клиент работает read-only и видит нейтральные подписи `Аналитик 1`, `Аналитик 2` и т. д.;
 - если scope определить не удалось, интерфейс безопасно трактует пользователя как guest.
 
-Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness сводки не содержат source-level имён изначально.
+Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness сводки не содержат source-level имён изначально.
 
 ## Текущий consensus
 
@@ -202,11 +202,76 @@ relative_score_cap = 1.5, 2, 3
 
 Слабые ticker-срезы сортируются первыми. В коде нет бинарного `robust=true`: пользователю показываются сами диагностические данные.
 
-Один snapshot selector управляет source accuracy, основным backtest и robustness, поэтому сравниваемые показатели относятся к одной временной отсечке.
+С v0.17.0 тот же response дополнительно содержит `readiness`, поэтому robustness и readiness UI строятся одним тяжёлым backend-прогоном, без повторного 27-case sweep.
 
-**Production consensus target price в v0.16.0 не меняется.** Backtest и robustness остаются evidence layer для будущего решения.
+Один snapshot selector управляет source accuracy, основным backtest, robustness и readiness, поэтому сравниваемые показатели относятся к одной временной отсечке.
 
-Подробная методология: [`consensus-backtest.md`](consensus-backtest.md).
+## Shadow weighted consensus
+
+С v0.17.0 после выбора тикера рядом с production consensus появляется отдельный **Shadow weighted consensus**.
+
+API:
+
+```http
+GET /api/analytics/shadow-consensus?ticker=SBER
+```
+
+Shadow engine использует тот же target year, что и production consensus: `forecast_start_year` основной таблицы.
+
+Historical snapshot для весов выбирается по текущей фазе target year:
+
+- будущий target year → `pre_year`;
+- текущий год до 1 июля → `pre_year`;
+- текущий год с 1 июля → `mid_year`;
+- уже прошедший target year → `year_end`.
+
+Historical sample может участвовать в current weight только если его fiscal year старше target year и канонический факт имеет `reported_at` раньше текущего момента.
+
+Показываются:
+
+- production median target;
+- shadow weighted target;
+- delta между ними;
+- market gap обоих вариантов;
+- median/weighted net profit;
+- диапазон текущих весов без раскрытия source identity;
+- число training samples и выбранный historical snapshot.
+
+Если historical training history нет, веса становятся равными и shadow weighted совпадает с арифметическим средним.
+
+Shadow response не содержит source names, source-level forecasts или source-level weights и безопасен для internet/read-only режима.
+
+## Readiness к production weighting
+
+Readiness является explicit engineering policy, а не автоматическим feature flag и не тестом статистической значимости.
+
+Публичный API:
+
+```http
+GET /api/analytics/consensus-readiness?snapshot=pre_year
+```
+
+Те же данные также вложены в `readiness` основного robustness response.
+
+Readiness проверяет 11 gates:
+
+- минимум 30 observations;
+- минимум 10 tickers;
+- минимум 3 fiscal years;
+- median-sMAPE improvement минимум `+1.0 pp`;
+- положительный mean-sMAPE improvement;
+- минимум 60% положительных ticker slices;
+- минимум 66.7% положительных year slices;
+- минимум 80% положительных leave-one-ticker-out cases;
+- минимум 80% положительных leave-one-year-out cases;
+- минимум 80% положительных parameter cases;
+- худшая parameter-grid median delta должна оставаться `> 0 pp`.
+
+Все gates должны пройти одновременно.
+
+Статус `SHADOW` означает, что хотя бы один gate ещё не выполнен. `READY` означает только, что текущая evidence-policy выполнена; production consensus всё равно остаётся медианным до отдельного review и отдельного release.
+
+Подробная методология: [`shadow-consensus.md`](shadow-consensus.md).
 
 ## Фактические результаты и MOEX CCI
 
@@ -243,4 +308,7 @@ Manual fact получает `source_key=manual` и защищён от посл
 - training weight не использует факт без известного `reported_at`;
 - текущий canonical ledger не хранит полную историю рестейтментов, поэтому backtest в спорных временных случаях ведёт себя консервативно;
 - leave-one-out в robustness является evaluation jackknife и не переобучает веса после исключения сегмента;
+- shadow consensus рассчитывается on-demand и пока не сохраняется как отдельная временная серия;
+- exact `analyst_name` остаётся идентичностью source accuracy/weighting;
+- `READY` не меняет production mode автоматически;
 - accuracy-weighted production consensus пока намеренно отключён.

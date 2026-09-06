@@ -237,11 +237,17 @@
         `/api/analytics/consensus-backtest/robustness?snapshot=${encodeURIComponent(snapshot)}`,
       );
       render(result || {});
+      window.dispatchEvent(new CustomEvent('moex-consensus-readiness', {
+        detail: result?.readiness || null,
+      }));
     } catch (error) {
       empty.hidden = false;
       content.hidden = true;
       empty.textContent = error.message;
       status.textContent = 'Ошибка';
+      window.dispatchEvent(new CustomEvent('moex-consensus-readiness', {
+        detail: { error: error.message },
+      }));
     }
   }
 

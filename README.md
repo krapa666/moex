@@ -52,7 +52,9 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 - изменения прогнозов за текущий день;
 - рейтинг точности источников по фактической годовой ЧП;
 - out-of-sample backtest способов агрегирования прогнозов ЧП;
-- robustness-анализ weighted backtest по годам, тикерам, leave-one-out и параметрам.
+- robustness-анализ weighted backtest по годам, тикерам, leave-one-out и параметрам;
+- текущий shadow weighted consensus рядом с production median;
+- readiness gate для будущего решения о production weighting.
 
 Историческая точность строится на фиксированных срезах `pre_year`, `mid_year`, `year_end` и использует sMAPE, абсолютную ошибку, bias и точность знака результата.
 
@@ -64,15 +66,18 @@ ForecastPrice(Y) = NetProfit(Y) × P/E / Shares
 
 Для обучения веса допускаются только более ранние факты с известным `reported_at`, опубликованные до целевой backtest-отсечки. Детальные source weights доступны только local scope.
 
-С v0.16.0 robustness layer отдельно показывает, сохраняется ли преимущество weighted-метода по финансовым годам и тикерам, после исключения одного года/тикера и на фиксированной сетке из 27 разумных комбинаций `shrinkage / error floor / weight cap`. В коде нет искусственного флага `robust=true`: интерфейс показывает фактическое покрытие и диапазон результата.
+С v0.16.0 robustness layer отдельно показывает, сохраняется ли преимущество weighted-метода по финансовым годам и тикерам, после исключения одного года/тикера и на фиксированной сетке из 27 разумных комбинаций `shrinkage / error floor / weight cap`.
 
-**Production consensus target price остаётся прежним; evidence layer пока не переключает его на weighted-режим.**
+С v0.17.0 приложение рассчитывает текущий **shadow weighted consensus** для выбранного тикера. Historical snapshot для весов выбирается по фазе текущего целевого года, а факты могут обучать веса только если были опубликованы раньше текущего момента. Shadow output не раскрывает source names/weights и безопасен для internet mode. Рядом с robustness показывается explicit readiness policy из 11 критериев. `READY` сам по себе ничего не переключает.
+
+**Production consensus target price остаётся медианным; shadow/readiness layer не меняет fair value, Watchlist, expected return или ranking.**
 
 Подробнее:
 
 - [`docs/analytics.md`](docs/analytics.md)
 - [`docs/source-accuracy.md`](docs/source-accuracy.md)
 - [`docs/consensus-backtest.md`](docs/consensus-backtest.md)
+- [`docs/shadow-consensus.md`](docs/shadow-consensus.md)
 
 ### Фактические годовые результаты
 
@@ -269,8 +274,10 @@ MOEX_CCI_ACTUALS_YEARS_BACK=5
 - `GET /api/analytics/source-accuracy`
 - `GET /api/analytics/source-accuracy/samples`
 - `GET /api/analytics/consensus-backtest`
-- `GET /api/analytics/consensus-backtest/robustness`
+- `GET /api/analytics/consensus-backtest/robustness` — включает readiness summary
 - `GET /api/analytics/consensus-backtest/observations` — local
+- `GET /api/analytics/shadow-consensus?ticker=SBER`
+- `GET /api/analytics/consensus-readiness`
 - `GET /api/analytics/actual-net-profits`
 - `PUT/DELETE /api/analytics/actual-net-profits/{ticker}/{fiscal_year}` — local
 - `GET /api/analytics/actual-net-profits/sync-status`
@@ -286,7 +293,7 @@ MOEX_CCI_ACTUALS_YEARS_BACK=5
 - `POST /api/volume/notifications/test` — local
 - `POST /api/volume/collect` — local
 
-Все изменяющие endpoints требуют локальный scope. Observation-level backtest дополнительно является local-only, потому что содержит реальные имена/веса источников.
+Все изменяющие endpoints требуют локальный scope. Observation-level backtest дополнительно является local-only, потому что содержит реальные имена/веса источников. Shadow/readiness endpoints содержат только агрегаты и безопасны для internet/read-only режима.
 
 ## Миграции
 
@@ -296,7 +303,7 @@ Backend-контейнер перед стартом выполняет:
 alembic upgrade head
 ```
 
-Текущий schema head — `0020_actual_source_key`. v0.16.0 не добавляет миграций.
+Текущий schema head — `0020_actual_source_key`. v0.17.0 не добавляет миграций.
 
 Последние ключевые изменения схемы включают:
 
@@ -339,6 +346,7 @@ GitHub Actions проверяет Ruff, pytest, frontend JavaScript, shell/Nginx
 - [`docs/analytics.md`](docs/analytics.md) — consensus и история Analytics;
 - [`docs/source-accuracy.md`](docs/source-accuracy.md) — методология оценки точности;
 - [`docs/consensus-backtest.md`](docs/consensus-backtest.md) — no-lookahead backtest и robustness-анализ consensus ЧП;
+- [`docs/shadow-consensus.md`](docs/shadow-consensus.md) — текущий shadow weighted consensus и readiness policy;
 - [`docs/actual-result-sources.md`](docs/actual-result-sources.md) — канонические факты и MOEX CCI;
 - [`docs/release-process.md`](docs/release-process.md) — versioning и публикация релизов.
 
