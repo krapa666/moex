@@ -47,6 +47,7 @@
   }
 
   function modeLabel(item) {
+    if (!item?.current_configured_mode) return 'НЕ НАБЛЮДАЛОСЬ';
     if (item.current_configured_mode === 'weighted_canary' && item.current_effective_mode === 'median') {
       return 'MEDIAN FALLBACK';
     }
@@ -55,6 +56,7 @@
   }
 
   function modeKey(item) {
+    if (!item?.current_configured_mode) return 'unknown';
     if (item.current_configured_mode === 'weighted_canary' && item.current_effective_mode === 'median') {
       return 'fallback';
     }
@@ -137,6 +139,7 @@
         <article><span>Weighted uptime</span><strong>${escapeHtml(formatPercent(result.weighted_uptime_percent))}</strong></article>
         <article><span>Weighted сейчас</span><strong>${escapeHtml(String(result.current_weighted_tickers ?? 0))}</strong></article>
         <article><span>Fallback сейчас</span><strong>${escapeHtml(String(result.current_fallback_tickers ?? 0))}</strong></article>
+        <article><span>Не наблюдалось</span><strong>${escapeHtml(String(result.current_unknown_tickers ?? 0))}</strong></article>
         <article><span>Fallback incidents</span><strong>${escapeHtml(String(result.fallback_incidents ?? 0))}</strong></article>
         <article><span>Recoveries</span><strong>${escapeHtml(String(result.recoveries ?? 0))}</strong></article>
         <article><span>Median history span</span><strong>${escapeHtml(formatHours(result.median_history_span_hours))}</strong></article>
@@ -186,7 +189,7 @@
     if (!report?.snapshots) {
       panel.innerHTML = `
         <header class="analytics-panel-heading"><div><span class="analytics-panel-kicker">Canary timeline</span><h2>Canary evidence · ${escapeHtml(report?.ticker || '')}</h2></div></header>
-        <p class="canary-evidence-empty">По тикеру ещё нет forward canary snapshots.</p>
+        <p class="canary-evidence-empty">По тикеру ещё нет forward canary snapshots. Текущее состояние здесь не предполагается и не маркируется как median.</p>
       `;
       return;
     }
