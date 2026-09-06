@@ -77,9 +77,11 @@ async function mockApi(page) {
       return route.fulfill({ json: { observations: 0, tickers: 0, years: 0, methods: [] } });
     }
     if (url.pathname === '/api/analytics/consensus-backtest/robustness') {
+      const snapshot = url.searchParams.get('snapshot') || 'pre_year';
+      readinessSnapshots.push(snapshot);
       return route.fulfill({
         json: {
-          snapshot: url.searchParams.get('snapshot') || 'pre_year',
+          snapshot,
           observations: 0,
           tickers: 0,
           years: 0,
@@ -88,13 +90,9 @@ async function mockApi(page) {
           jackknife_year: [],
           jackknife_ticker: [],
           parameter_sweep: [],
+          readiness: readiness(snapshot),
         },
       });
-    }
-    if (url.pathname === '/api/analytics/consensus-readiness') {
-      const snapshot = url.searchParams.get('snapshot') || 'pre_year';
-      readinessSnapshots.push(snapshot);
-      return route.fulfill({ json: readiness(snapshot) });
     }
     if (url.pathname === '/api/analytics/shadow-consensus') return route.fulfill({ json: shadow });
     if (url.pathname === '/api/analytics/actual-net-profits') return route.fulfill({ json: [] });
@@ -116,7 +114,7 @@ test('analytics shows shadow weighted consensus without changing production pane
   await expect(panel).toContainText('Shadow weighted');
   await expect(panel).toContainText('365 ₽');
   await expect(panel).toContainText('+4,3 %');
-  await expect(panel).toContainText('14 training');
+  await expect(panel).toContainText('Training samples: 14');
   await expect(panel).toContainText('Shadow-only');
   await expect(panel).not.toContainText('Арсагера');
   await expect(panel).not.toContainText('fin-vista');
