@@ -200,17 +200,17 @@ def _validate_enable_policy(db: Session, tickers: list[str]) -> str:
         item.ticker: item
         for item in build_shadow_consensus_batch(db, tickers=tickers)
     }
-    blocked = sorted(
-        f"{ticker}={reason}"
-        for ticker in tickers
-        for reason in [_live_shadow_guard_reason(shadow_by_ticker[ticker])]
-        if ticker in shadow_by_ticker and reason is not None
-    )
     missing = sorted(ticker for ticker in tickers if ticker not in shadow_by_ticker)
-    if missing:
-        blocked.extend(f"{ticker}=shadow_unavailable" for ticker in missing)
+    blocked = [f"{ticker}=shadow_unavailable" for ticker in missing]
+    for ticker in tickers:
+        shadow = shadow_by_ticker.get(ticker)
+        if shadow is None:
+            continue
+        reason = _live_shadow_guard_reason(shadow)
+        if reason is not None:
+            blocked.append(f"{ticker}={reason}")
     if blocked:
-        raise CanaryPolicyError("Canary live guard не пройден: " + ", ".join(blocked))
+        raise CanaryPolicyError("Canary live guard не пройден: " + ", ".join(sorted(blocked)))
 
     overview = build_shadow_drift_overview(db, days=CANARY_HISTORY_DAYS)
     status_by_ticker = {item.ticker: item.status for item in overview.items}
@@ -354,14 +354,17 @@ def _baseline_consensus(
         profit = _row_profit_for_year(row, table, target_year)
         pe = _finite(row.pe_avg_5y)
         shares = _finite(row.shares_billion)
+        valid_target = False
         if profit is not None and pe is not None and shares is not None and shares > 0:
             target = profit * pe / shares
             if math.isfinite(target):
                 targets.append(float(target))
                 sources.add(table.id)
-        expected_return = _row_return_for_year(row, table, target_year)
-        if expected_return is not None:
-            returns.append(expected_return)
+                valid_target = True
+        if valid_target:
+            expected_return = _row_return_for_year(row, table, target_year)
+            if expected_return is not None:
+                returns.append(expected_return)
         current_price = _finite(row.current_price)
         if current_price is not None and current_price > 0:
             current_prices.append(current_price)
