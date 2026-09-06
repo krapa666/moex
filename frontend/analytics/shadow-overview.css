@@ -227,6 +227,10 @@
   gap: 8px;
 }
 
+.shadow-notification-actions [hidden] {
+  display: none !important;
+}
+
 [data-shadow-notification-status] {
   display: inline-flex;
   align-items: center;
