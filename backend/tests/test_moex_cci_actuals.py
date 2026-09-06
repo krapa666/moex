@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 
 import pytest
-
 from app.moex_cci_actuals import (
     _annual_fiscal_year,
     _owner_profit_value,
