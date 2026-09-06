@@ -1,6 +1,6 @@
 # Analytics
 
-Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus и readiness gate.
+Страница `/analytics/` объединяет текущий consensus, историю прогнозных ревизий, динамику consensus, оценку исторической точности источников, backtest способов агрегирования прогнозов чистой прибыли, robustness-проверку weighted-метода, текущий shadow weighted consensus, readiness gate и forward shadow monitoring.
 
 ## Режим доступа
 
@@ -10,7 +10,7 @@ Analytics использует общий сетевой access scope прило
 - internet-клиент работает read-only и видит нейтральные подписи `Аналитик 1`, `Аналитик 2` и т. д.;
 - если scope определить не удалось, интерфейс безопасно трактует пользователя как guest.
 
-Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness сводки не содержат source-level имён изначально.
+Маскирование имён применяется к selector, текущему consensus, истории, графикам и рейтингу точности. Публичные backtest/robustness/shadow/readiness/history/drift сводки не содержат source-level имён изначально.
 
 ## Текущий consensus
 
@@ -190,17 +190,7 @@ error_floor_percent = 2.5, 5, 10
 relative_score_cap = 1.5, 2, 3
 ```
 
-Интерфейс показывает:
-
-- общий weighted delta;
-- число положительных тикерных и годовых срезов;
-- сколько leave-one-out случаев сохраняют положительную delta;
-- сколько из 27 наборов параметров сохраняют преимущество;
-- минимальную и максимальную median-delta по сетке;
-- таблицы по годам и тикерам;
-- разворачиваемую таблицу parameter sensitivity.
-
-Слабые ticker-срезы сортируются первыми. В коде нет бинарного `robust=true`: пользователю показываются сами диагностические данные.
+Интерфейс показывает общий weighted delta, положительные ticker/year slices, leave-one-out preservation, параметрическую чувствительность и диапазон результата.
 
 С v0.17.0 тот же response дополнительно содержит `readiness`, поэтому robustness и readiness UI строятся одним тяжёлым backend-прогоном, без повторного 27-case sweep.
 
@@ -227,19 +217,62 @@ Historical snapshot для весов выбирается по текущей �
 
 Historical sample может участвовать в current weight только если его fiscal year старше target year и канонический факт имеет `reported_at` раньше текущего момента.
 
-Показываются:
-
-- production median target;
-- shadow weighted target;
-- delta между ними;
-- market gap обоих вариантов;
-- median/weighted net profit;
-- диапазон текущих весов без раскрытия source identity;
-- число training samples и выбранный historical snapshot.
-
 Если historical training history нет, веса становятся равными и shadow weighted совпадает с арифметическим средним.
 
 Shadow response не содержит source names, source-level forecasts или source-level weights и безопасен для internet/read-only режима.
+
+## Forward shadow history и drift
+
+С v0.18.0 `arsagera-worker` сохраняет текущий shadow state по всем доступным тикерам основной таблицы. Для эффективности historical training context строится один раз на batch capture, а не отдельно для каждой бумаги.
+
+Публичная история:
+
+```http
+GET /api/analytics/shadow-consensus/history?ticker=SBER&days=90
+```
+
+Публичный drift summary:
+
+```http
+GET /api/analytics/shadow-consensus/drift?ticker=SBER&days=30
+```
+
+Ручной capture является изменяющей операцией и требует local scope:
+
+```http
+POST /api/analytics/shadow-consensus/capture
+```
+
+По умолчанию worker снимает initial snapshot после startup sync и далее каждые 6 часов. Retention — 730 дней. Эти параметры можно переопределить через `SHADOW_HISTORY_*`, но существующий `.env` менять не обязательно.
+
+History хранит только aggregate median/weighted values и диапазон веса без source identity. Реальные analyst names, source-level forecasts и source-level weights не сохраняются.
+
+История является **forward-only**: старые `forecast_revisions` не backfill-ятся в shadow snapshots, потому что достоверная реконструкция тогдашних weights/source set создала бы риск hindsight bias.
+
+### Drift status
+
+Drift является operational policy, а не статистическим тестом и не торговым сигналом.
+
+До классификации нужны минимум 3 snapshot и минимум 24 часа истории одного `target_year`.
+
+Статусы:
+
+- `insufficient` — history пока недостаточно;
+- `stable` — threshold-признаков нет;
+- `watch` — достигнут WATCH threshold;
+- `alert` — достигнут ALERT threshold.
+
+Контролируются:
+
+- абсолютное расхождение weighted target с median baseline;
+- изменение этого расхождения относительно предыдущего snapshot;
+- концентрация max weight относительно равного веса;
+- разница движения weighted и median внутри monitoring window;
+- смена training snapshot (`pre_year/mid_year/year_end`).
+
+Точные thresholds и rationale описаны в [`shadow-consensus.md`](shadow-consensus.md).
+
+Analytics показывает forward chart `median vs weighted`, последние snapshots, длительность monitoring history и причины текущего drift status. Разные `target_year` на одном тренде не смешиваются.
 
 ## Readiness к production weighting
 
@@ -253,19 +286,7 @@ GET /api/analytics/consensus-readiness?snapshot=pre_year
 
 Те же данные также вложены в `readiness` основного robustness response.
 
-Readiness проверяет 11 gates:
-
-- минимум 30 observations;
-- минимум 10 tickers;
-- минимум 3 fiscal years;
-- median-sMAPE improvement минимум `+1.0 pp`;
-- положительный mean-sMAPE improvement;
-- минимум 60% положительных ticker slices;
-- минимум 66.7% положительных year slices;
-- минимум 80% положительных leave-one-ticker-out cases;
-- минимум 80% положительных leave-one-year-out cases;
-- минимум 80% положительных parameter cases;
-- худшая parameter-grid median delta должна оставаться `> 0 pp`.
+Readiness проверяет 11 gates: покрытие observations/tickers/years, median/mean improvement, ticker/year slices, оба leave-one-out, parameter sweep и худший parameter case.
 
 Все gates должны пройти одновременно.
 
@@ -289,26 +310,20 @@ POST /api/analytics/actual-net-profits/sync
 
 `PUT`, `DELETE` и ручной `POST .../sync` требуют local scope.
 
-В локальном интерфейсе:
-
-- доступна форма ручного факта;
-- показывается безопасный статус MOEX CCI (`enabled/configured` без credentials);
-- кнопка sync активна только если CCI включён и настроен.
-
-Manual fact получает `source_key=manual` и защищён от последующей автоматической перезаписи.
+В локальном интерфейсе доступна форма ручного факта и безопасный статус MOEX CCI. Manual fact получает `source_key=manual` и защищён от последующей автоматической перезаписи.
 
 Подробнее: [`actual-result-sources.md`](actual-result-sources.md).
 
 ## Ограничения
 
-- история начинается только с реально сохранённых `forecast_revisions`;
-- более старые состояния до появления механизма ревизий задним числом не реконструируются;
-- разные прогнозные годы не смешиваются в одной consensus-точке;
+- история прогнозов начинается только с реально сохранённых `forecast_revisions`;
+- forward shadow history начинается только после установки v0.18.0 и не backfill-ится;
+- разные прогнозные годы не смешиваются в одной consensus/drift точке;
 - источник с малой выборкой остаётся видимым, но не получает надёжного rank;
 - training weight не использует факт без известного `reported_at`;
 - текущий canonical ledger не хранит полную историю рестейтментов, поэтому backtest в спорных временных случаях ведёт себя консервативно;
 - leave-one-out в robustness является evaluation jackknife и не переобучает веса после исключения сегмента;
-- shadow consensus рассчитывается on-demand и пока не сохраняется как отдельная временная серия;
 - exact `analyst_name` остаётся идентичностью source accuracy/weighting;
+- drift thresholds являются operational policy, не статистическим тестом;
 - `READY` не меняет production mode автоматически;
 - accuracy-weighted production consensus пока намеренно отключён.
