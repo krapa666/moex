@@ -235,7 +235,7 @@ Published Sheets #2
 ...
 ```
 
-`source_id` для них содержит короткий hash вместо analyst name.
+Публичный `source_id` для них использует только порядковый номер (`published-sheets:1`, `published-sheets:2`, …) и не содержит analyst name или его hash.
 
 ## Local-only details API
 
