@@ -250,6 +250,7 @@ def _build_consensus_backtest_observations_from_context(
     for sample in samples:
         grouped.setdefault((sample.ticker, sample.fiscal_year), []).append(sample)
 
+    training_by_year: dict[int, list[AccuracySample]] = {}
     observations: list[ConsensusBacktestObservation] = []
     for (ticker, fiscal_year), target_samples in sorted(grouped.items(), key=lambda item: item[0]):
         by_source: dict[str, AccuracySample] = {}
@@ -266,12 +267,14 @@ def _build_consensus_backtest_observations_from_context(
             continue
 
         cutoff = snapshot_cutoff(fiscal_year, snapshot)
-        available_training = _available_training_samples(
-            samples,
-            target_fiscal_year=fiscal_year,
-            target_cutoff=cutoff,
-            reported_at_by_key=reported_at_by_key,
-        )
+        if fiscal_year not in training_by_year:
+            training_by_year[fiscal_year] = _available_training_samples(
+                samples,
+                target_fiscal_year=fiscal_year,
+                target_cutoff=cutoff,
+                reported_at_by_key=reported_at_by_key,
+            )
+        available_training = training_by_year[fiscal_year]
         weights, training_counts = _source_weights(
             source_names,
             available_training,
@@ -424,21 +427,22 @@ def _median_and_weighted(
     return by_method["median"], by_method["weighted"]
 
 
+def _dimension_key(observation: ConsensusBacktestObservation, dimension: str) -> str:
+    if dimension == "year":
+        return str(observation.fiscal_year)
+    if dimension == "ticker":
+        return observation.ticker
+    raise ValueError("unsupported robustness dimension")
+
+
 def _slice_backtest(
     observations: list[ConsensusBacktestObservation],
     *,
     dimension: str,
 ) -> list[ConsensusBacktestSlice]:
-    if dimension == "year":
-        key_of = lambda item: str(item.fiscal_year)
-    elif dimension == "ticker":
-        key_of = lambda item: item.ticker
-    else:
-        raise ValueError("unsupported robustness dimension")
-
     grouped: dict[str, list[ConsensusBacktestObservation]] = {}
     for observation in observations:
-        grouped.setdefault(key_of(observation), []).append(observation)
+        grouped.setdefault(_dimension_key(observation, dimension), []).append(observation)
 
     rows: list[ConsensusBacktestSlice] = []
     for key, group in grouped.items():
@@ -463,7 +467,9 @@ def _slice_backtest(
         )
     if dimension == "year":
         return sorted(rows, key=lambda row: int(row.key))
-    return sorted(rows, key=lambda row: row.key)
+    if dimension == "ticker":
+        return sorted(rows, key=lambda row: row.key)
+    raise ValueError("unsupported robustness dimension")
 
 
 def _jackknife_backtest(
@@ -471,18 +477,14 @@ def _jackknife_backtest(
     *,
     dimension: str,
 ) -> list[ConsensusBacktestJackknife]:
-    if dimension == "year":
-        key_of = lambda item: str(item.fiscal_year)
-        keys = sorted({key_of(item) for item in observations}, key=int)
-    elif dimension == "ticker":
-        key_of = lambda item: item.ticker
-        keys = sorted({key_of(item) for item in observations})
-    else:
-        raise ValueError("unsupported robustness dimension")
+    keys = {_dimension_key(item, dimension) for item in observations}
+    ordered_keys = sorted(keys, key=int) if dimension == "year" else sorted(keys)
 
     rows: list[ConsensusBacktestJackknife] = []
-    for key in keys:
-        remaining = [item for item in observations if key_of(item) != key]
+    for key in ordered_keys:
+        remaining = [
+            item for item in observations if _dimension_key(item, dimension) != key
+        ]
         pair = _median_and_weighted(remaining)
         if pair is None:
             continue
