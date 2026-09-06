@@ -50,6 +50,37 @@ const revisions = [
   },
 ];
 
+const yearShiftRevisions = [
+  {
+    id: 5,
+    stock_row_id: 30,
+    table_id: 1,
+    ticker: 'LKOH',
+    analyst_name: 'Основной',
+    forecast_start_year: 2027,
+    event_type: 'updated',
+    changed_by: 'local-network',
+    current_price: 6100,
+    forecast_price_year1: 7000,
+    forecast_price_year2: null,
+    created_at: '2026-09-05T12:00:00Z',
+  },
+  {
+    id: 4,
+    stock_row_id: 30,
+    table_id: 1,
+    ticker: 'LKOH',
+    analyst_name: 'Основной',
+    forecast_start_year: 2026,
+    event_type: 'created',
+    changed_by: 'local-network',
+    current_price: 6100,
+    forecast_price_year1: 6500,
+    forecast_price_year2: null,
+    created_at: '2026-09-04T12:00:00Z',
+  },
+];
+
 async function mockAnalyticsApi(page, { isAdmin = true } = {}) {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -59,18 +90,19 @@ async function mockAnalyticsApi(page, { isAdmin = true } = {}) {
     if (url.pathname === '/api/tables') return route.fulfill({ json: tables });
     if (url.pathname === '/api/ticker-comparison') return route.fulfill({ json: [] });
     if (url.pathname === '/api/analytics/forecast-revisions') {
-      if (url.searchParams.get('ticker') !== 'SBER') return route.fulfill({ json: [] });
+      const ticker = url.searchParams.get('ticker');
+      const source = ticker === 'SBER' ? revisions : ticker === 'LKOH' ? yearShiftRevisions : [];
       const tableId = url.searchParams.get('table_id');
       const rows = tableId
-        ? revisions.filter((revision) => String(revision.table_id) === tableId)
-        : revisions;
+        ? source.filter((revision) => String(revision.table_id) === tableId)
+        : source;
       return route.fulfill({ json: rows });
     }
     return route.fulfill({ status: 404, json: { detail: `Unexpected ${url.pathname}` } });
   });
 }
 
-test('reconstructs median target and spread from saved revisions', async ({ page }) => {
+test('reconstructs median target, spread, and latest same-year movement from saved revisions', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=SBER');
 
@@ -78,7 +110,9 @@ test('reconstructs median target and spread from saved revisions', async ({ page
   await expect(panel).toBeVisible();
   await expect(panel.locator('[data-consensus-history-kpi="points"]')).toHaveText('3');
   await expect(panel.locator('[data-consensus-history-kpi="median"]')).toHaveText('298,75 ₽');
+  await expect(panel.locator('[data-consensus-history-kpi="median-delta"]')).toHaveText('↑ +10 ₽ · +3,5 %');
   await expect(panel.locator('[data-consensus-history-kpi="spread"]')).toHaveText('34,3 %');
+  await expect(panel.locator('[data-consensus-history-kpi="spread-delta"]')).toHaveText('↑ +5,7 п.п.');
   await expect(panel.locator('[data-consensus-history-kpi="targets"]')).toHaveText('2');
   await expect(panel.locator('[data-consensus-history-median-point]')).toHaveCount(3);
   await expect(panel.locator('[data-consensus-history-spread-point]')).toHaveCount(2);
@@ -95,6 +129,19 @@ test('reconstructs median target and spread from saved revisions', async ({ page
   );
 });
 
+test('does not compare movement across a forecast-year boundary', async ({ page }) => {
+  await mockAnalyticsApi(page);
+  await page.goto('/analytics/?ticker=LKOH');
+
+  const panel = page.locator('[data-consensus-history-panel]');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('[data-consensus-history-kpi="points"]')).toHaveText('2');
+  await expect(panel.locator('[data-consensus-history-kpi="median"]')).toHaveText('7 000 ₽');
+  await expect(panel.locator('[data-consensus-history-kpi="median-delta"]')).toHaveText('—');
+  await expect(panel.locator('[data-consensus-history-kpi="spread-delta"]')).toHaveText('—');
+  await expect(panel.locator('[data-consensus-history-status]')).toHaveText('2027 · точек: 2');
+});
+
 test('analyst filter does not narrow historical consensus reconstruction', async ({ page }) => {
   await mockAnalyticsApi(page);
   await page.goto('/analytics/?ticker=SBER');
@@ -106,6 +153,7 @@ test('analyst filter does not narrow historical consensus reconstruction', async
   await expect(page.locator('[data-analytics-revision]')).toHaveCount(1);
   await expect(panel.locator('[data-consensus-history-kpi="points"]')).toHaveText('3');
   await expect(panel.locator('[data-consensus-history-kpi="median"]')).toHaveText('298,75 ₽');
+  await expect(panel.locator('[data-consensus-history-kpi="median-delta"]')).toHaveText('↑ +10 ₽ · +3,5 %');
   await expect(panel.locator('[data-consensus-history-median-point]')).toHaveCount(3);
 });
 
@@ -116,6 +164,7 @@ test('historical consensus does not expose analyst names to guests', async ({ pa
   const panel = page.locator('[data-consensus-history-panel]');
   await expect(panel).toBeVisible();
   await expect(panel.locator('[data-consensus-history-kpi="points"]')).toHaveText('3');
+  await expect(panel.locator('[data-consensus-history-kpi="median-delta"]')).toHaveText('↑ +10 ₽ · +3,5 %');
   await expect(panel).not.toContainText('Основной');
   await expect(panel).not.toContainText('Консервативный');
 });
@@ -127,6 +176,7 @@ test('historical consensus stays inside the mobile viewport', async ({ page }) =
 
   await expect(page.locator('[data-consensus-history-panel]')).toBeVisible();
   await expect(page.locator('[data-consensus-history-median-point]')).toHaveCount(3);
+  await expect(page.locator('[data-consensus-history-kpi="spread-delta"]')).toHaveText('↑ +5,7 п.п.');
 
   const layout = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
